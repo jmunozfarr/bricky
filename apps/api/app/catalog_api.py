@@ -73,7 +73,7 @@ class ColorResponse(BaseModel):
 SessionDependency = Callable[[], Iterator[Session]]
 
 
-def _render_asset_url(relative_path: str) -> str:
+def render_asset_url(relative_path: str) -> str:
     path = PurePosixPath(relative_path)
     if (
         path.is_absolute()
@@ -88,7 +88,7 @@ def _render_asset_url(relative_path: str) -> str:
 
 def _card(part: Part) -> PartCardResponse:
     try:
-        asset_url = _render_asset_url(part.relative_path)
+        asset_url = render_asset_url(part.relative_path)
     except ValueError as error:
         raise HTTPException(status_code=500, detail="Indexed part has an invalid path") from error
     return PartCardResponse(

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.catalog_api import create_catalog_router
 from app.database import SessionFactory
+from app.inventory_api import create_inventory_router
 from app.services.ldraw_library import get_library_status
 
 
@@ -82,6 +83,7 @@ def create_app(
     application.include_router(
         create_catalog_router(resolved_library_root, catalog_session)
     )
+    application.include_router(create_inventory_router(catalog_session))
 
     application.mount(
         "/api/ldraw",

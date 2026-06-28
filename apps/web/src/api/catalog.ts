@@ -37,6 +37,16 @@ export interface Category {
   count: number;
 }
 
+export interface LDrawColor {
+  code: number;
+  name: string;
+  valueHex: string;
+  edgeHex: string | null;
+  alpha: number;
+  luminance: number | null;
+  finish: string | null;
+}
+
 export interface PartsQuery {
   query: string;
   category: string;
@@ -81,4 +91,8 @@ export function getCategories(signal?: AbortSignal): Promise<Category[]> {
 
 export function getPart(partId: string, signal?: AbortSignal): Promise<PartDetail> {
   return fetchJson<PartDetail>(`/api/parts/${encodeURIComponent(partId)}`, signal);
+}
+
+export function getColors(signal?: AbortSignal): Promise<LDrawColor[]> {
+  return fetchJson<LDrawColor[]>("/api/colors", signal);
 }

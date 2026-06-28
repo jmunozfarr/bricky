@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { CatalogStatus, getCatalogStatus } from "../api/catalog";
 import { fetchJson } from "../api/client";
+import { getInventorySummary, InventorySummary } from "../api/inventory";
 import { useLibraryStatus } from "../components/ldraw/useLibraryStatus";
+import { subscribeInventoryChanged } from "../inventory/events";
 
 interface HealthResponse {
   status: "ok";
@@ -17,6 +20,7 @@ type AsyncState<T> =
 export default function OverviewPage() {
   const [health, setHealth] = useState<AsyncState<HealthResponse>>({ kind: "loading" });
   const [catalog, setCatalog] = useState<AsyncState<CatalogStatus>>({ kind: "loading" });
+  const [inventory, setInventory] = useState<AsyncState<InventorySummary>>({ kind: "loading" });
   const library = useLibraryStatus();
 
   useEffect(() => {
@@ -44,13 +48,45 @@ export default function OverviewPage() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    let controller = new AbortController();
+    const load = () => {
+      controller.abort();
+      controller = new AbortController();
+      void getInventorySummary(controller.signal)
+        .then((data) => setInventory({ kind: "ready", data }))
+        .catch((error: unknown) => {
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            setInventory({ kind: "error", message: error instanceof Error ? error.message : "Unknown inventory error" });
+          }
+        });
+    };
+    load();
+    const unsubscribe = subscribeInventoryChanged(load);
+    return () => {
+      controller.abort();
+      unsubscribe();
+    };
+  }, []);
+
   return (
     <section className="page-panel" aria-labelledby="overview-title">
       <div className="page-heading">
-        <p className="eyebrow">Checkpoint 4</p>
+        <p className="eyebrow">Checkpoint 5</p>
         <h2 id="overview-title">Local workspace status</h2>
         <p>Runtime services, official library, and catalog indexing remain local.</p>
       </div>
+      <Link className="overview-inventory-link" to="/inventory">
+        <span>Personal inventory</span>
+        <strong>
+          {inventory.kind === "ready"
+            ? `${inventory.data.totalQuantity.toLocaleString()} pieces · ${inventory.data.uniqueItems.toLocaleString()} items`
+            : inventory.kind === "loading"
+              ? "Loading…"
+              : "Unavailable"}
+        </strong>
+        <span>Open inventory →</span>
+      </Link>
       <div className="overview-grid">
         <StatusCard label="Frontend" value="Online" tone="ok" />
         <StatusCard

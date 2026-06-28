@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
@@ -6,18 +6,14 @@ import {
   CatalogStatus,
   getCatalogStatus,
   getCategories,
-  getPart,
   nextPage,
-  PartDetail,
   PartsPage,
   previousPage,
   searchParts,
 } from "../api/catalog";
 import { getCatalogAvailability } from "../catalog/catalogState";
+import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
 
-const OfficialPartViewer = lazy(
-  () => import("../components/ldraw/OfficialPartViewer"),
-);
 const LIBRARY_COMMAND =
   "docker compose run --rm api python -m app.cli.ldraw_library install";
 const REBUILD_COMMAND =
@@ -106,7 +102,7 @@ export default function CatalogPage() {
   }
   if (selectedPartId) {
     return (
-      <PartInspector
+      <CatalogPartDetail
         partId={selectedPartId}
         onBack={() => updateParam("part", "")}
       />
@@ -192,40 +188,6 @@ export default function CatalogPage() {
           </div>
         </>
       )}
-    </section>
-  );
-}
-
-function PartInspector({ partId, onBack }: { partId: string; onBack: () => void }) {
-  const [detail, setDetail] = useState<AsyncState<PartDetail>>({ kind: "loading" });
-  useEffect(() => {
-    const controller = new AbortController();
-    void getPart(partId, controller.signal)
-      .then((data) => setDetail({ kind: "ready", data }))
-      .catch((error: unknown) => setRequestError(error, setDetail));
-    return () => controller.abort();
-  }, [partId]);
-  if (detail.kind === "loading") return <div className="page-message">Loading part…</div>;
-  if (detail.kind === "error") return <ErrorPanel message={detail.message} />;
-  return (
-    <section className="part-inspector">
-      <button type="button" className="back-button" onClick={onBack}>
-        ← Back to results
-      </button>
-      <dl className="part-metadata">
-        <div><dt>Part ID</dt><dd>{detail.data.partId}</dd></div>
-        <div><dt>Category</dt><dd>{detail.data.category}</dd></div>
-        <div><dt>Author</dt><dd>{detail.data.author ?? "Unknown"}</dd></div>
-        <div><dt>Classification</dt><dd>{detail.data.orgClassification ?? "Not specified"}</dd></div>
-        <div><dt>License</dt><dd>{detail.data.license ?? "See upstream file"}</dd></div>
-      </dl>
-      <Suspense fallback={<div className="page-message">Loading 3D viewer…</div>}>
-        <OfficialPartViewer
-          partId={detail.data.partId}
-          name={detail.data.name}
-          assetUrl={detail.data.renderAssetUrl}
-        />
-      </Suspense>
     </section>
   );
 }

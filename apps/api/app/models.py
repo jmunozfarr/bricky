@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -58,3 +69,46 @@ class CatalogIndexState(Base):
     part_count: Mapped[int] = mapped_column(Integer)
     color_count: Mapped[int] = mapped_column(Integer)
     indexer_version: Mapped[str] = mapped_column(String(32))
+
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class InventoryItem(Base):
+    __tablename__ = "inventory_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "part_id",
+            "color_code",
+            name="uq_inventory_workspace_part_color",
+        ),
+        CheckConstraint("quantity > 0", name="ck_inventory_quantity_positive"),
+        Index("ix_inventory_workspace_part", "workspace_id", "part_id"),
+        Index("ix_inventory_workspace_color", "workspace_id", "color_code"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workspace_id: Mapped[int] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    part_id: Mapped[str] = mapped_column(String(64), index=True)
+    color_code: Mapped[int] = mapped_column(Integer, index=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

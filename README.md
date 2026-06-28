@@ -2,7 +2,7 @@
 
 Bricky is a deliberately small, local application. It runs a React, TypeScript, and Vite frontend, a Python 3.13 FastAPI backend, and PostgreSQL 18. Docker and Docker Compose are the only host requirements; do not install project runtimes or dependencies directly on the host.
 
-Checkpoint 2 adds browser-side LDraw rendering and building-step navigation. Checkpoint 3 adds an explicit local bootstrap for the official LDraw Parts Library and rendering of official parts. Checkpoint 4 adds an explicitly rebuilt PostgreSQL metadata index, paginated catalog APIs, and a searchable catalog UI. Library installation and database indexing remain separate operations.
+Checkpoint 2 adds browser-side LDraw rendering and building-step navigation. Checkpoint 3 adds the official LDraw Parts Library. Checkpoint 4 adds the PostgreSQL catalog index and search UI. Checkpoint 5 adds persistent quantities for one hidden, no-login local workspace. Library installation, catalog indexing, and inventory mutations remain explicit operations.
 
 ## Requirements
 
@@ -127,6 +127,36 @@ The index stores only searchable metadata, colors, relative asset paths, and one
 
 After replacing or force-reinstalling the library, rerun the catalog rebuild command. Rebuilds parse headers without modifying upstream files and replace catalog data in one database transaction. Indexing never runs automatically during API startup or from the browser.
 
+## Personal inventory
+
+Bricky resolves one deterministic internal workspace named `Local workspace` (`local-default`). There is no login, user identity, onboarding flow, or workspace picker. Every inventory request is scoped to this workspace by the API; browser requests cannot select a workspace ID.
+
+Inventory is stored in PostgreSQL rather than browser storage so quantities have one durable source of truth shared by the overview, catalog detail, and inventory screens. Browser local storage is not the source of truth.
+
+Apply the latest migration, including the workspace and inventory tables, with:
+
+```sh
+docker compose run --rm api alembic upgrade head
+```
+
+The inventory API provides:
+
+- `GET /api/inventory/summary`
+- `GET /api/inventory/items` with search, category, color, and pagination filters
+- `GET /api/inventory/items/{part_id}` for owned color variants
+- `PUT /api/inventory/items/{part_id}/{color_code}` to replace a quantity
+- `DELETE /api/inventory/items/{part_id}/{color_code}` for idempotent removal
+
+Inventory rows reference stable LDraw part IDs and color codes without destructive foreign keys to the rebuildable catalog tables. Writes validate against the current catalog, while reads preserve and display an inventory row even if catalog metadata temporarily disappears. Replacing or rebuilding the LDraw catalog does not intentionally delete personal inventory.
+
+Deleting the PostgreSQL Docker volume deletes personal inventory permanently:
+
+```sh
+docker compose down --volumes
+```
+
+Current limitations: one local workspace, positive quantities only, no history, reserved quantities, storage locations, sets, wishlists, import/export, scanning, or offline synchronization.
+
 ## LDraw attribution and licensing
 
 This software uses the [LDraw Parts Library](https://www.ldraw.org/). LDraw is a community-run project and is not sponsored, endorsed, or authorized by the LEGO Group. Bricky is not affiliated with LDraw.org or the LEGO Group.
@@ -137,6 +167,7 @@ Library files retain their original headers, author credits, `CAreadme.txt`, and
 
 - Overview: <http://127.0.0.1:5173/>
 - Searchable catalog: <http://127.0.0.1:5173/catalog>
+- Personal inventory: <http://127.0.0.1:5173/inventory>
 - Synthetic step viewer: <http://127.0.0.1:5173/viewer-demo>
 - API health: <http://127.0.0.1:8000/api/health>
 - Proxied API health: <http://127.0.0.1:5173/api/health>
