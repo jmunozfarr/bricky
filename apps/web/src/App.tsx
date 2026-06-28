@@ -11,6 +11,8 @@ const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const CatalogPage = lazy(() => import("./pages/CatalogPage"));
 const InventoryPage = lazy(() => import("./pages/InventoryPage"));
 const ViewerDemoPage = lazy(() => import("./pages/ViewerDemoPage"));
+const ModelsPage = lazy(() => import("./pages/ModelsPage"));
+const ModelDetailPage = lazy(() => import("./pages/ModelDetailPage"));
 
 export function App() {
   return (
@@ -27,6 +29,7 @@ export function App() {
             </NavLink>
             <NavLink to="/catalog">Catalog</NavLink>
             <NavLink to="/inventory">Inventory</NavLink>
+            <NavLink to="/models">Models</NavLink>
             <NavLink to="/viewer-demo">Viewer demo</NavLink>
           </nav>
         </header>
@@ -37,6 +40,8 @@ export function App() {
               <Route path="/" element={<OverviewPage />} />
               <Route path="/catalog" element={<CatalogPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
+              <Route path="/models" element={<ModelsPage />} />
+              <Route path="/models/:modelId" element={<ModelDetailPage />} />
               <Route path="/viewer-demo" element={<ViewerDemoPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

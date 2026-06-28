@@ -2,7 +2,7 @@
 
 Bricky is a deliberately small, local application. It runs a React, TypeScript, and Vite frontend, a Python 3.13 FastAPI backend, and PostgreSQL 18. Docker and Docker Compose are the only host requirements; do not install project runtimes or dependencies directly on the host.
 
-Checkpoint 2 adds browser-side LDraw rendering and building-step navigation. Checkpoint 3 adds the official LDraw Parts Library. Checkpoint 4 adds the PostgreSQL catalog index and search UI. Checkpoint 5 adds persistent quantities for one hidden, no-login local workspace. Library installation, catalog indexing, and inventory mutations remain explicit operations.
+Checkpoint 2 adds browser-side LDraw rendering and building-step navigation. Checkpoint 3 adds the official LDraw Parts Library. Checkpoint 4 adds the PostgreSQL catalog index and search UI. Checkpoint 5 adds persistent quantities for one hidden, no-login local workspace. Checkpoint 6 adds local LDR/MPD import, recursive bill-of-materials parsing, and model viewing. Library installation and catalog indexing remain explicit operations.
 
 ## Requirements
 
@@ -20,6 +20,22 @@ cp .env.example .env
 ```
 
 The template configures the PostgreSQL database, user, and development password. Change these values locally if needed. Do not commit `.env`.
+
+On Linux, the API container runs with `LOCAL_UID` and `LOCAL_GID` so files written through the `data/models` bind mount belong to the host developer rather than root. The template defaults both values to `1000`. If your account uses different IDs, obtain them and either export them before Compose commands or place the numeric results in `.env`:
+
+```sh
+export LOCAL_UID="$(id -u)"
+export LOCAL_GID="$(id -g)"
+```
+
+After upgrading an existing checkout, repair previously imported model ownership once without deleting any models:
+
+```sh
+docker compose run --rm --no-deps --user root api \
+  sh -c 'chown -R "$LOCAL_UID:$LOCAL_GID" /data/models'
+```
+
+This command changes ownership only; it does not make the directory world-writable or modify model contents. The PostgreSQL container continues to use its image-defined user.
 
 ## Run locally
 
@@ -157,6 +173,24 @@ docker compose down --volumes
 
 Current limitations: one local workspace, positive quantities only, no history, reserved quantities, storage locations, sets, wishlists, import/export, scanning, or offline synchronization.
 
+## Imported LDraw models
+
+The Models page at <http://127.0.0.1:5173/models> accepts `.ldr` and `.mpd` files up to 25 MiB by default. Configure the server limit with `MODEL_MAX_UPLOAD_BYTES`. Uploaded originals are stored below `data/models/originals`, mounted only into the API container, and preserved byte-for-byte. Storage paths are application-generated; neither paths nor workspace IDs are accepted from browser requests.
+
+LDR is normally a single model file. MPD packages a main model and embedded submodels in one source, so MPD is recommended whenever a model depends on submodels. External sibling `.ldr` files and ZIP projects are not resolved in this checkpoint.
+
+The importer recursively resolves embedded MPD submodels, multiplies repeated submodel quantities, applies LDraw color-16 inheritance, and records indexed official parts as physical BOM items. Official part geometry remains in the separately installed LDraw library and is not copied into PostgreSQL. Primitives, official subparts, geometry lines, and color 24 are not physical BOM entries. Unknown colors and unresolved references are retained as structured warnings where possible. The stored declared-step count describes separators in the top-level source; runtime Three.js step metadata controls interactive navigation.
+
+Import statuses are:
+
+- `ready`: parsed without warnings.
+- `ready_with_warnings`: renderable/importable source with unresolved or non-fatal diagnostics.
+- `failed`: reserved for a persisted fatal result; structurally unusable uploads are currently rejected with HTTP 422 and are not stored.
+
+Model API endpoints are `POST /api/models`, paginated `GET /api/models`, `GET /api/models/{model_id}`, `GET /api/models/{model_id}/source`, and `DELETE /api/models/{model_id}`. Deleting a model removes its managed original, BOM, and issues, but never changes personal inventory or official library data. Duplicate source bytes in the local workspace return HTTP 409 with the existing model ID.
+
+Deleting `data/models` removes imported source files and leaves any corresponding database metadata unable to render. Delete models through the UI or API to remove both metadata and managed files consistently. Current limitations include no editing, generated steps, `.io` files, sibling-file projects, custom-part inventory, thumbnails, or inventory-coverage calculations.
+
 ## LDraw attribution and licensing
 
 This software uses the [LDraw Parts Library](https://www.ldraw.org/). LDraw is a community-run project and is not sponsored, endorsed, or authorized by the LEGO Group. Bricky is not affiliated with LDraw.org or the LEGO Group.
@@ -168,10 +202,11 @@ Library files retain their original headers, author credits, `CAreadme.txt`, and
 - Overview: <http://127.0.0.1:5173/>
 - Searchable catalog: <http://127.0.0.1:5173/catalog>
 - Personal inventory: <http://127.0.0.1:5173/inventory>
+- Imported models: <http://127.0.0.1:5173/models>
 - Synthetic step viewer: <http://127.0.0.1:5173/viewer-demo>
 - API health: <http://127.0.0.1:8000/api/health>
 - Proxied API health: <http://127.0.0.1:5173/api/health>
 
 PostgreSQL is accessible only to other Compose services and is not published to the host. A healthy API response is `{"status":"ok","database":"ok"}` and is backed by a real `SELECT 1` query.
 
-Current catalog scope is official parts metadata and colors only. Search is deterministic, case-insensitive substring matching without fuzzy-search extensions. Subparts and primitives are indexed only as skip metrics and are not shown as catalog results. Thumbnails, inventories, uploads, persistence, and automatic updates remain outside this checkpoint.
+Catalog search is deterministic, case-insensitive substring matching without fuzzy-search extensions. Imported models preserve their source and derived BOM locally; editing, thumbnails, external sibling files, and automatic updates remain outside the current scope.

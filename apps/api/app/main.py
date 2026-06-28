@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.catalog_api import create_catalog_router
 from app.database import SessionFactory
 from app.inventory_api import create_inventory_router
+from app.models_api import create_models_router
+from app.services.model_import import DEFAULT_MAX_UPLOAD_BYTES
 from app.services.ldraw_library import get_library_status
 
 
@@ -41,12 +43,20 @@ class OptionalLibraryStaticFiles(StaticFiles):
 def create_app(
     library_root: Path | None = None,
     session_factory: sessionmaker[Session] | None = None,
+    model_storage_root: Path | None = None,
+    model_max_upload_bytes: int | None = None,
 ) -> FastAPI:
     resolved_library_root = library_root or Path(
         os.environ.get("LDRAW_LIBRARY_ROOT", "/data/ldraw/official")
     )
     application = FastAPI(title="Bricky API")
     active_session_factory = session_factory or SessionFactory
+    resolved_model_storage_root = model_storage_root or Path(
+        os.environ.get("MODEL_STORAGE_ROOT", "/data/models")
+    )
+    resolved_model_max_upload_bytes = model_max_upload_bytes or int(
+        os.environ.get("MODEL_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))
+    )
 
     def catalog_session() -> Iterator[Session]:
         with active_session_factory() as session:
@@ -84,6 +94,14 @@ def create_app(
         create_catalog_router(resolved_library_root, catalog_session)
     )
     application.include_router(create_inventory_router(catalog_session))
+    application.include_router(
+        create_models_router(
+            catalog_session,
+            active_session_factory,
+            resolved_model_storage_root,
+            resolved_model_max_upload_bytes,
+        )
+    )
 
     application.mount(
         "/api/ldraw",

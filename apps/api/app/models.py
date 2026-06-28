@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import uuid
 
 from sqlalchemy import (
     Boolean,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    Uuid,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -112,3 +114,72 @@ class InventoryItem(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class ImportedModel(Base):
+    __tablename__ = "imported_models"
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "source_sha256", name="uq_models_workspace_source_sha256"
+        ),
+        Index("ix_models_workspace_created", "workspace_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    public_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), default=uuid.uuid4, unique=True, index=True
+    )
+    workspace_id: Mapped[int] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(256))
+    original_filename: Mapped[str] = mapped_column(String(255))
+    safe_filename: Mapped[str] = mapped_column(String(255))
+    source_format: Mapped[str] = mapped_column(String(8))
+    relative_storage_path: Mapped[str] = mapped_column(String(512))
+    source_sha256: Mapped[str] = mapped_column(String(64))
+    import_status: Mapped[str] = mapped_column(String(32), index=True)
+    declared_step_count: Mapped[int] = mapped_column(Integer)
+    total_part_quantity: Mapped[int] = mapped_column(Integer)
+    unique_part_color_count: Mapped[int] = mapped_column(Integer)
+    unresolved_reference_count: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ModelBomItem(Base):
+    __tablename__ = "model_bom_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "model_id", "part_id", "color_code", name="uq_model_bom_part_color"
+        ),
+        CheckConstraint("quantity > 0", name="ck_model_bom_quantity_positive"),
+        Index("ix_model_bom_model_part", "model_id", "part_id"),
+        Index("ix_model_bom_model_color", "model_id", "color_code"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_id: Mapped[int] = mapped_column(
+        ForeignKey("imported_models.id", ondelete="CASCADE"), index=True
+    )
+    part_id: Mapped[str] = mapped_column(String(64), index=True)
+    color_code: Mapped[int] = mapped_column(Integer, index=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+
+
+class ModelImportIssue(Base):
+    __tablename__ = "model_import_issues"
+    __table_args__ = (Index("ix_model_issues_model_severity", "model_id", "severity"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_id: Mapped[int] = mapped_column(
+        ForeignKey("imported_models.id", ondelete="CASCADE"), index=True
+    )
+    severity: Mapped[str] = mapped_column(String(16))
+    code: Mapped[str] = mapped_column(String(64))
+    message: Mapped[str] = mapped_column(String(512))
+    referenced_filename: Mapped[str | None] = mapped_column(String(255))

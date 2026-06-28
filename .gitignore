@@ -29,6 +29,9 @@ data/*
 !data/ldraw/
 data/ldraw/*
 !data/ldraw/.gitkeep
+!data/models/
+data/models/*
+!data/models/.gitkeep
 *.log
 
 # Editor and operating-system files

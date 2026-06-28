@@ -22,6 +22,16 @@ export function officialModelSource(partId: string, assetUrl: string): LDrawMode
   };
 }
 
+export function importedModelSource(modelId: string, sourceUrl: string): LDrawModelSource {
+  return {
+    kind: "official",
+    key: `imported-${modelId}`,
+    url: sourceUrl,
+    materialsUrl: "/api/ldraw/LDConfig.ldr",
+    partsLibraryPath: "/api/ldraw/",
+  };
+}
+
 interface LDrawViewerProps {
   source: LDrawModelSource;
   eyebrow: string;
