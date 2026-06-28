@@ -25,7 +25,10 @@ __pycache__/
 
 # Local runtime data
 .data/
-data/
+data/*
+!data/ldraw/
+data/ldraw/*
+!data/ldraw/.gitkeep
 *.log
 
 # Editor and operating-system files

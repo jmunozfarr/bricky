@@ -17,13 +17,53 @@ export type LDrawLoadState =
   | { kind: "ready"; model: Group }
   | { kind: "error"; message: string };
 
-function parseLDraw(text: string): Promise<Group> {
+export type LDrawModelSource =
+  | { kind: "synthetic"; key: string; url: string }
+  | {
+      kind: "official";
+      key: string;
+      url: string;
+      materialsUrl: string;
+      partsLibraryPath: string;
+    };
+
+function createLoader(): LDrawLoader {
+  const loader = new LDrawLoader();
+  loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);
+  return loader;
+}
+
+function parseLDraw(loader: LDrawLoader, text: string): Promise<Group> {
   return new Promise((resolve, reject) => {
-    const loader = new LDrawLoader();
-    loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);
     loader.addDefaultMaterials();
     loader.parse(text, resolve, reject);
   });
+}
+
+async function loadModelSource(
+  source: LDrawModelSource,
+  signal: AbortSignal,
+): Promise<Group> {
+  const loader = createLoader();
+  if (source.kind === "synthetic") {
+    const response = await fetch(source.url, { signal });
+    if (!response.ok) {
+      throw new Error(`Model request returned HTTP ${response.status}`);
+    }
+    return parseLDraw(loader, await response.text());
+  }
+
+  loader.setPartsLibraryPath(source.partsLibraryPath);
+  await loader.preloadMaterials(source.materialsUrl);
+
+  const redMaterial = loader.getMaterial("4");
+  if (redMaterial !== null) {
+    const materialData = redMaterial.userData as Record<string, unknown>;
+    materialData.code = "16";
+    loader.addMaterial(redMaterial);
+  }
+
+  return loader.loadAsync(source.url);
 }
 
 function disposeModel(model: Group): void {
@@ -48,7 +88,7 @@ function disposeModel(model: Group): void {
   materials.forEach((material) => material.dispose());
 }
 
-export function useLDrawModel(url: string): LDrawLoadState {
+export function useLDrawModel(source: LDrawModelSource): LDrawLoadState {
   const [state, setState] = useState<LDrawLoadState>({ kind: "loading" });
 
   useEffect(() => {
@@ -60,12 +100,7 @@ export function useLDrawModel(url: string): LDrawLoadState {
 
     async function loadModel() {
       try {
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) {
-          throw new Error(`Model request returned HTTP ${response.status}`);
-        }
-
-        const model = await parseLDraw(await response.text());
+        const model = await loadModelSource(source, controller.signal);
         model.rotation.x = Math.PI;
 
         if (!active) {
@@ -94,7 +129,7 @@ export function useLDrawModel(url: string): LDrawLoadState {
         disposeModel(ownedModel);
       }
     };
-  }, [url]);
+  }, [source]);
 
   return state;
 }
