@@ -1,11 +1,15 @@
 import os
 from pathlib import Path
+from collections.abc import Iterator
 
 import psycopg
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.staticfiles import StaticFiles
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.catalog_api import create_catalog_router
+from app.database import SessionFactory
 from app.services.ldraw_library import get_library_status
 
 
@@ -33,11 +37,19 @@ class OptionalLibraryStaticFiles(StaticFiles):
         """Allow the API to start and return 404 while the library is absent."""
 
 
-def create_app(library_root: Path | None = None) -> FastAPI:
+def create_app(
+    library_root: Path | None = None,
+    session_factory: sessionmaker[Session] | None = None,
+) -> FastAPI:
     resolved_library_root = library_root or Path(
         os.environ.get("LDRAW_LIBRARY_ROOT", "/data/ldraw/official")
     )
     application = FastAPI(title="Bricky API")
+    active_session_factory = session_factory or SessionFactory
+
+    def catalog_session() -> Iterator[Session]:
+        with active_session_factory() as session:
+            yield session
 
     @application.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
@@ -66,6 +78,10 @@ def create_app(library_root: Path | None = None) -> FastAPI:
             ),
             archive_sha256=status.archive_sha256,
         )
+
+    application.include_router(
+        create_catalog_router(resolved_library_root, catalog_session)
+    )
 
     application.mount(
         "/api/ldraw",

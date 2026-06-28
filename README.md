@@ -2,7 +2,7 @@
 
 Bricky is a deliberately small, local application. It runs a React, TypeScript, and Vite frontend, a Python 3.13 FastAPI backend, and PostgreSQL 18. Docker and Docker Compose are the only host requirements; do not install project runtimes or dependencies directly on the host.
 
-Checkpoint 2 adds a browser-side LDraw viewer spike. Three.js `LDrawLoader` parses a local model, React Three Fiber renders it, and the interface provides orbit controls, camera reset, and building-step navigation. Checkpoint 3 adds an explicit local bootstrap for the official LDraw Parts Library, safe API file serving, and rendering of the official `3001.dat` brick.
+Checkpoint 2 adds browser-side LDraw rendering and building-step navigation. Checkpoint 3 adds an explicit local bootstrap for the official LDraw Parts Library and rendering of official parts. Checkpoint 4 adds an explicitly rebuilt PostgreSQL metadata index, paginated catalog APIs, and a searchable catalog UI. Library installation and database indexing remain separate operations.
 
 ## Requirements
 
@@ -38,6 +38,16 @@ docker compose down --volumes      # Stop and remove all named volumes
 ```
 
 Re-run `docker compose up --build -d` after changing dependency files or Dockerfiles. Source changes reload automatically through bind mounts.
+
+For a new checkout, use this complete setup sequence:
+
+```sh
+cp .env.example .env
+docker compose up --build -d
+docker compose run --rm api alembic upgrade head
+docker compose run --rm api python -m app.cli.ldraw_library install
+docker compose exec api python -m app.cli.ldraw_catalog rebuild
+```
 
 ## Frontend checks
 
@@ -93,6 +103,30 @@ Deleting `data/ldraw` removes the local library. Keep `data/ldraw/.gitkeep` when
 
 The API exposes installation metadata at `/api/library/status` and serves only installed library files below `/api/ldraw/`.
 
+## Parts catalog index
+
+Apply database migrations explicitly after starting the stack:
+
+```sh
+docker compose run --rm api alembic upgrade head
+```
+
+Installing files does not index them. Build or replace the PostgreSQL catalog with:
+
+```sh
+docker compose exec api python -m app.cli.ldraw_catalog rebuild
+```
+
+Inspect the installed and indexed fingerprints, counts, timestamp, and stale state:
+
+```sh
+docker compose exec api python -m app.cli.ldraw_catalog status
+```
+
+The index stores only searchable metadata, colors, relative asset paths, and one fingerprint record—never geometry or absolute filesystem paths. Replacing the official library changes its archive SHA-256. The API compares that installed fingerprint with the indexed fingerprint and marks the catalog stale until `rebuild` is run again.
+
+After replacing or force-reinstalling the library, rerun the catalog rebuild command. Rebuilds parse headers without modifying upstream files and replace catalog data in one database transaction. Indexing never runs automatically during API startup or from the browser.
+
 ## LDraw attribution and licensing
 
 This software uses the [LDraw Parts Library](https://www.ldraw.org/). LDraw is a community-run project and is not sponsored, endorsed, or authorized by the LEGO Group. Bricky is not affiliated with LDraw.org or the LEGO Group.
@@ -101,8 +135,12 @@ Library files retain their original headers, author credits, `CAreadme.txt`, and
 
 ## Local URLs
 
-- Frontend: <http://127.0.0.1:5173>
+- Overview: <http://127.0.0.1:5173/>
+- Searchable catalog: <http://127.0.0.1:5173/catalog>
+- Synthetic step viewer: <http://127.0.0.1:5173/viewer-demo>
 - API health: <http://127.0.0.1:8000/api/health>
 - Proxied API health: <http://127.0.0.1:5173/api/health>
 
 PostgreSQL is accessible only to other Compose services and is not published to the host. A healthy API response is `{"status":"ok","database":"ok"}` and is backed by a real `SELECT 1` query.
+
+Current catalog scope is official parts metadata and colors only. Search is deterministic, case-insensitive substring matching without fuzzy-search extensions. Subparts and primitives are indexed only as skip metrics and are not shown as catalog results. Thumbnails, inventories, uploads, persistence, and automatic updates remain outside this checkpoint.
