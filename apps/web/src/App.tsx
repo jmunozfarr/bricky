@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { LDrawViewer } from "./components/ldraw/LDrawViewer";
+
 type ServiceState =
   | { kind: "loading" }
   | { kind: "online" }
@@ -63,13 +65,14 @@ export function App() {
   }, []);
 
   return (
-    <main className="shell">
-      <section className="card" aria-labelledby="page-title">
-        <p className="eyebrow">Checkpoint 1</p>
-        <h1 id="page-title">Bricky</h1>
-        <p className="subtitle">Local LEGO workspace</p>
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <h1 id="page-title">Bricky</h1>
+          <p className="subtitle">Local LEGO workspace</p>
+        </div>
 
-        <div className="status-list" aria-live="polite">
+        <div className="status-list" aria-label="Application status" aria-live="polite">
           <StatusRow label="Frontend" state="online" />
           {serviceState.kind === "loading" && (
             <StatusRow label="API and PostgreSQL" state="checking" />
@@ -88,8 +91,12 @@ export function App() {
             </div>
           )}
         </div>
-      </section>
-    </main>
+      </header>
+
+      <main aria-labelledby="page-title">
+        <LDrawViewer />
+      </main>
+    </div>
   );
 }
 
