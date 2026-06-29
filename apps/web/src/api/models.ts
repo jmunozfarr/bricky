@@ -1,6 +1,19 @@
 import { fetchJson, fetchNoContent } from "./client";
 
 export type ModelImportStatus = "ready" | "ready_with_warnings" | "failed";
+export type CoverageStatus = "complete" | "partial" | "missing";
+
+export interface CoverageSummary {
+  totalRequiredQuantity: number;
+  totalAvailableQuantity: number;
+  totalMissingQuantity: number;
+  uniqueItemCount: number;
+  completeItemCount: number;
+  partialItemCount: number;
+  missingItemCount: number;
+  pieceCoveragePercentage: number;
+  fullyBuildable: boolean;
+}
 
 export interface ModelSummary {
   modelId: string;
@@ -13,6 +26,7 @@ export interface ModelSummary {
   uniquePartColorCount: number;
   unresolvedReferenceCount: number;
   createdAt: string;
+  coverage: CoverageSummary | null;
 }
 
 export interface ModelBomItem {
@@ -50,6 +64,41 @@ export interface ModelsPage {
   totalPages: number;
 }
 
+export interface ModelCoverageItem {
+  partId: string;
+  partName: string;
+  category: string;
+  colorCode: number;
+  colorName: string;
+  colorHex: string | null;
+  requiredQuantity: number;
+  ownedQuantity: number;
+  availableQuantity: number;
+  missingQuantity: number;
+  coveragePercentage: number;
+  status: CoverageStatus;
+  catalogAvailable: boolean;
+  renderAssetUrl: string | null;
+}
+
+export interface ModelCoverage {
+  modelId: string;
+  summary: CoverageSummary;
+  items: ModelCoverageItem[];
+}
+
+export interface ModelsReadinessSummary {
+  totalModels: number;
+  fullyBuildableModels: number;
+  incompleteModels: number;
+  totalMissingQuantity: number;
+}
+
+export interface CoverageQuery {
+  status?: CoverageStatus;
+  query?: string;
+}
+
 export interface ModelsQuery {
   query: string;
   status: string;
@@ -68,6 +117,32 @@ export function serializeModelsQuery(input: ModelsQuery): string {
 
 export function listModels(input: ModelsQuery, signal?: AbortSignal): Promise<ModelsPage> {
   return fetchJson<ModelsPage>(`/api/models?${serializeModelsQuery(input)}`, signal);
+}
+
+export function serializeCoverageQuery(input: CoverageQuery): string {
+  const params = new URLSearchParams();
+  if (input.status) params.set("status", input.status);
+  if (input.query?.trim()) params.set("query", input.query.trim());
+  return params.toString();
+}
+
+export function getModelCoverage(
+  modelId: string,
+  input: CoverageQuery = {},
+  signal?: AbortSignal,
+): Promise<ModelCoverage> {
+  const query = serializeCoverageQuery(input);
+  const suffix = query ? `?${query}` : "";
+  return fetchJson<ModelCoverage>(
+    `/api/models/${encodeURIComponent(modelId)}/coverage${suffix}`,
+    signal,
+  );
+}
+
+export function getModelsReadinessSummary(
+  signal?: AbortSignal,
+): Promise<ModelsReadinessSummary> {
+  return fetchJson<ModelsReadinessSummary>("/api/models/readiness-summary", signal);
 }
 
 export function getModel(modelId: string, signal?: AbortSignal): Promise<ModelDetail> {

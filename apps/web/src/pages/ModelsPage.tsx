@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { listModels, ModelsPage as ModelsPageData, uploadModel } from "../api/models";
 import {
   formatFileSize,
+  formatCoveragePercentage,
   modelStatusLabel,
   modelUploadError,
   validateModelUpload,
@@ -114,6 +115,10 @@ export default function ModelsPage() {
             <div className="inventory-card-heading"><span className={`model-status model-status--${model.importStatus}`}>{modelStatusLabel(model.importStatus)}</span><span>{model.sourceFormat.toUpperCase()}</span></div>
             <h3>{model.name}</h3><p>{model.originalFilename}</p>
             <dl><div><dt>Steps</dt><dd>{model.declaredStepCount}</dd></div><div><dt>Parts</dt><dd>{model.totalPartQuantity}</dd></div><div><dt>Variants</dt><dd>{model.uniquePartColorCount}</dd></div><div><dt>Warnings</dt><dd>{model.unresolvedReferenceCount}</dd></div></dl>
+            {model.coverage && <div className="model-card-readiness">
+              <strong>{formatCoveragePercentage(model.coverage.pieceCoveragePercentage)} covered</strong>
+              <span>{model.coverage.fullyBuildable ? "Fully buildable" : `${model.coverage.totalMissingQuantity.toLocaleString()} pieces missing`}</span>
+            </div>}
             <small>{new Date(model.createdAt).toLocaleString()}</small>
             <Link className="button-link" to={`/models/${model.modelId}?return=${encodeURIComponent(returnSearch)}`}>Inspect model</Link>
           </article>)}</div>}

@@ -2,7 +2,7 @@
 
 Bricky is a deliberately small, local application. It runs a React, TypeScript, and Vite frontend, a Python 3.13 FastAPI backend, and PostgreSQL 18. Docker and Docker Compose are the only host requirements; do not install project runtimes or dependencies directly on the host.
 
-Checkpoint 2 adds browser-side LDraw rendering and building-step navigation. Checkpoint 3 adds the official LDraw Parts Library. Checkpoint 4 adds the PostgreSQL catalog index and search UI. Checkpoint 5 adds persistent quantities for one hidden, no-login local workspace. Checkpoint 6 adds local LDR/MPD import, recursive bill-of-materials parsing, and model viewing. Library installation and catalog indexing remain explicit operations.
+Checkpoint 2 adds browser-side LDraw rendering and building-step navigation. Checkpoint 3 adds the official LDraw Parts Library. Checkpoint 4 adds the PostgreSQL catalog index and search UI. Checkpoint 5 adds persistent quantities for one hidden, no-login local workspace. Checkpoint 6 adds local LDR/MPD import, recursive bill-of-materials parsing, and model viewing. Checkpoint 7 adds live inventory coverage, build readiness, and a derived missing-parts wishlist for each imported model. Library installation and catalog indexing remain explicit operations.
 
 ## Requirements
 
@@ -189,7 +189,25 @@ Import statuses are:
 
 Model API endpoints are `POST /api/models`, paginated `GET /api/models`, `GET /api/models/{model_id}`, `GET /api/models/{model_id}/source`, and `DELETE /api/models/{model_id}`. Deleting a model removes its managed original, BOM, and issues, but never changes personal inventory or official library data. Duplicate source bytes in the local workspace return HTTP 409 with the existing model ID.
 
-Deleting `data/models` removes imported source files and leaves any corresponding database metadata unable to render. Delete models through the UI or API to remove both metadata and managed files consistently. Current limitations include no editing, generated steps, `.io` files, sibling-file projects, custom-part inventory, thumbnails, or inventory-coverage calculations.
+Deleting `data/models` removes imported source files and leaves any corresponding database metadata unable to render. Delete models through the UI or API to remove both metadata and managed files consistently. Current limitations include no editing, generated steps, `.io` files, sibling-file projects, custom-part inventory, or thumbnails.
+
+## Model inventory coverage and missing parts
+
+Each imported model is compared dynamically with the current `local-default` inventory. Matching uses the normalized LDraw part ID and exact numeric physical color code. A quantity owned in another color, or a similar or aliased part, does not count. Missing catalog names or color metadata do not stop an exact natural-key match.
+
+Coverage distinguishes unique BOM rows from physical piece quantities. For each part/color row, available quantity is the smaller of required and owned quantity, and missing quantity never drops below zero. The primary readiness percentage is based on physical pieces: total available quantity divided by total required quantity. Percentages are rounded half-up to two decimal places. An empty BOM is treated as 100% covered and fully buildable.
+
+The model detail page exposes all coverage rows and a “Missing parts” view. This wishlist is a query result derived from current BOM and inventory data; it is not stored in a separate table and cannot become stale independently. Inventory edits refresh readiness and remove completed rows from the missing-parts view without reimporting the model.
+
+Inventory is not reserved or allocated between models. Every model is evaluated independently against the full current inventory, so totals across models are explicitly per-model comparisons and must not be interpreted as a globally buildable combination.
+
+Coverage endpoints are:
+
+- `GET /api/models/{model_id}/coverage`, optionally filtered with `status=complete|partial|missing` and `query=<part ID or name>`.
+- `GET /api/models/readiness-summary` for bounded overview aggregation.
+- `GET /api/models` includes a current coverage summary for each model on the requested page without frontend per-model requests.
+
+Current coverage limitations include no substitutions, alternate-color matching, reservations, allocations, inventory consumption, multiple model copies, persisted or manually edited wishlists, prices, stores, or purchase links.
 
 ## LDraw attribution and licensing
 

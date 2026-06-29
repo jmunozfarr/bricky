@@ -1,8 +1,25 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import { deleteModel, getModel, ModelDetail } from "../api/models";
-import { filterModelBom, modelStatusLabel } from "../models/helpers";
+import {
+  CoverageStatus,
+  deleteModel,
+  getModel,
+  getModelCoverage,
+  ModelCoverage,
+  ModelCoverageItem,
+  ModelDetail,
+} from "../api/models";
+import { CompactInventoryEditor } from "../components/inventory/CompactInventoryEditor";
+import { subscribeInventoryChanged } from "../inventory/events";
+import {
+  coverageEmptyMessage,
+  coverageProgressValue,
+  coverageStatusLabel,
+  filterCoverageItems,
+  formatCoveragePercentage,
+  modelStatusLabel,
+} from "../models/helpers";
 
 const ImportedModelViewer = lazy(() => import("../components/ldraw/ImportedModelViewer"));
 
@@ -11,12 +28,23 @@ type DetailState =
   | { kind: "ready"; data: ModelDetail }
   | { kind: "error"; message: string };
 
+type CoverageState =
+  | { kind: "loading" }
+  | { kind: "ready"; data: ModelCoverage }
+  | { kind: "error"; message: string };
+
+type CoverageView = "all" | "wishlist";
+
 export default function ModelDetailPage() {
   const { modelId = "" } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [state, setState] = useState<DetailState>({ kind: "loading" });
-  const [bomQuery, setBomQuery] = useState("");
+  const [coverage, setCoverage] = useState<CoverageState>({ kind: "loading" });
+  const [coverageRevision, setCoverageRevision] = useState(0);
+  const [coverageView, setCoverageView] = useState<CoverageView>("all");
+  const [coverageStatus, setCoverageStatus] = useState<CoverageStatus | "all">("all");
+  const [coverageQuery, setCoverageQuery] = useState("");
   const [deleting, setDeleting] = useState(false);
   const returnTarget = `/models${params.get("return") ? `?${params.get("return")}` : ""}`;
 
@@ -27,11 +55,35 @@ export default function ModelDetailPage() {
       .then((data) => setState({ kind: "ready", data }))
       .catch((error: unknown) => {
         if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setState({ kind: "error", message: error instanceof Error ? error.message : "Unable to load model." });
+          setState({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Unable to load model.",
+          });
         }
       });
     return () => controller.abort();
   }, [modelId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setCoverage({ kind: "loading" });
+    void getModelCoverage(modelId, {}, controller.signal)
+      .then((data) => setCoverage({ kind: "ready", data }))
+      .catch((error: unknown) => {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setCoverage({
+            kind: "error",
+            message: error instanceof Error ? error.message : "Unable to load coverage.",
+          });
+        }
+      });
+    return () => controller.abort();
+  }, [coverageRevision, modelId]);
+
+  useEffect(
+    () => subscribeInventoryChanged(() => setCoverageRevision((current) => current + 1)),
+    [],
+  );
 
   async function remove() {
     if (!window.confirm("Delete this imported model and its preserved source file?")) return;
@@ -40,30 +92,241 @@ export default function ModelDetailPage() {
       await deleteModel(modelId);
       navigate(returnTarget);
     } catch (error: unknown) {
-      setState({ kind: "error", message: error instanceof Error ? error.message : "Delete failed." });
+      setState({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Delete failed.",
+      });
       setDeleting(false);
     }
   }
 
-  if (state.kind === "loading") return <div className="page-message">Loading model…</div>;
-  if (state.kind === "error") return <div className="error" role="alert"><strong>Model request failed.</strong><span>{state.message}</span></div>;
-  const model = state.data;
-  const bom = filterModelBom(model.bom, bomQuery);
+  const visibleCoverage = useMemo(
+    () =>
+      coverage.kind === "ready"
+        ? filterCoverageItems(
+            coverage.data.items,
+            coverageQuery,
+            coverageStatus,
+            coverageView === "wishlist",
+          )
+        : [],
+    [coverage, coverageQuery, coverageStatus, coverageView],
+  );
 
-  return <div className="model-detail">
-    <div className="detail-actions"><Link className="button-link" to={returnTarget}>Back to models</Link><button className="danger-button" disabled={deleting} onClick={() => void remove()}>{deleting ? "Deleting…" : "Delete model"}</button></div>
-    <section className="page-panel">
-      <div className="page-heading catalog-heading"><div><p className="eyebrow">Imported {model.sourceFormat.toUpperCase()}</p><h2>{model.name}</h2></div><span className={`model-status model-status--${model.importStatus}`}>{modelStatusLabel(model.importStatus)}</span></div>
-      <dl className="part-metadata"><Meta label="Original filename" value={model.originalFilename} /><Meta label="Top-level source steps" value={model.declaredStepCount} /><Meta label="Physical parts" value={model.totalPartQuantity} /><Meta label="Part/color variants" value={model.uniquePartColorCount} /><Meta label="Unresolved references" value={model.unresolvedReferenceCount} /><Meta label="Source SHA-256" value={model.sourceSha256} /></dl>
+  if (state.kind === "loading") return <div className="page-message">Loading model…</div>;
+  if (state.kind === "error") {
+    return (
+      <div className="error" role="alert">
+        <strong>Model request failed.</strong><span>{state.message}</span>
+      </div>
+    );
+  }
+  const model = state.data;
+
+  return (
+    <div className="model-detail">
+      <div className="detail-actions">
+        <Link className="button-link" to={returnTarget}>Back to models</Link>
+        <button className="danger-button" disabled={deleting} onClick={() => void remove()}>
+          {deleting ? "Deleting…" : "Delete model"}
+        </button>
+      </div>
+      <section className="page-panel">
+        <div className="page-heading catalog-heading">
+          <div><p className="eyebrow">Imported {model.sourceFormat.toUpperCase()}</p><h2>{model.name}</h2></div>
+          <span className={`model-status model-status--${model.importStatus}`}>{modelStatusLabel(model.importStatus)}</span>
+        </div>
+        <dl className="part-metadata">
+          <Meta label="Original filename" value={model.originalFilename} />
+          <Meta label="Top-level source steps" value={model.declaredStepCount} />
+          <Meta label="Physical pieces" value={model.totalPartQuantity} />
+          <Meta label="Unique part/color rows" value={model.uniquePartColorCount} />
+          <Meta label="Unresolved references" value={model.unresolvedReferenceCount} />
+          <Meta label="Source SHA-256" value={model.sourceSha256} />
+        </dl>
+      </section>
+
+      <Suspense fallback={<div className="page-message">Loading 3D viewer…</div>}>
+        <ImportedModelViewer modelId={model.modelId} sourceUrl={model.sourceUrl} title={model.name} />
+      </Suspense>
+
+      {coverage.kind === "loading" && <div className="page-message">Calculating build readiness…</div>}
+      {coverage.kind === "error" && (
+        <div className="error" role="alert">
+          <strong>Coverage request failed.</strong><span>{coverage.message}</span>
+        </div>
+      )}
+      {coverage.kind === "ready" && (
+        <>
+          <BuildReadiness coverage={coverage.data} />
+          <section className="page-panel coverage-panel" aria-labelledby="coverage-title">
+            <div className="page-heading catalog-heading">
+              <div>
+                <p className="eyebrow">Exact part and color matching</p>
+                <h2 id="coverage-title">
+                  {coverageView === "all" ? "Model coverage" : "Missing parts"}
+                </h2>
+              </div>
+              <p>{visibleCoverage.length.toLocaleString()} unique rows shown</p>
+            </div>
+
+            <div className="segmented-control" aria-label="Coverage view">
+              <button
+                type="button"
+                aria-pressed={coverageView === "all"}
+                onClick={() => { setCoverageView("all"); setCoverageStatus("all"); }}
+              >
+                All parts
+              </button>
+              <button
+                type="button"
+                aria-pressed={coverageView === "wishlist"}
+                onClick={() => { setCoverageView("wishlist"); setCoverageStatus("all"); }}
+              >
+                Missing parts
+              </button>
+            </div>
+
+            <div className="coverage-filters">
+              <label>
+                <span>Search part ID or name</span>
+                <input
+                  type="search"
+                  value={coverageQuery}
+                  onChange={(event) => setCoverageQuery(event.currentTarget.value)}
+                />
+              </label>
+              <label>
+                <span>Coverage status</span>
+                <select
+                  value={coverageStatus}
+                  onChange={(event) => setCoverageStatus(event.currentTarget.value as CoverageStatus | "all")}
+                >
+                  <option value="all">All</option>
+                  <option value="missing">Missing</option>
+                  <option value="partial">Partial</option>
+                  <option value="complete">Complete</option>
+                </select>
+              </label>
+            </div>
+
+            {visibleCoverage.length === 0 ? (
+              <div className="empty-state" role="status">
+                {coverageEmptyMessage(
+                  coverageView === "wishlist",
+                  Boolean(coverageQuery.trim() || coverageStatus !== "all"),
+                )}
+              </div>
+            ) : (
+              <CoverageTable items={visibleCoverage} />
+            )}
+          </section>
+        </>
+      )}
+
+      {model.issues.length > 0 && (
+        <section className="page-panel">
+          <div className="page-heading"><p className="eyebrow">Import diagnostics</p><h2>Warnings</h2></div>
+          <ul className="issue-list">
+            {model.issues.map((issue, index) => (
+              <li key={`${issue.code}-${index}`}>
+                <strong>{issue.code.replaceAll("_", " ")}</strong>
+                <span>{issue.message}{issue.referencedFilename ? ` — ${issue.referencedFilename}` : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function BuildReadiness({ coverage }: { coverage: ModelCoverage }) {
+  const summary = coverage.summary;
+  const progress = coverageProgressValue(summary.pieceCoveragePercentage);
+  return (
+    <section className="page-panel readiness-panel" aria-labelledby="readiness-title">
+      <div className="readiness-heading">
+        <div>
+          <p className="eyebrow">Build readiness</p>
+          <h2 id="readiness-title">{formatCoveragePercentage(summary.pieceCoveragePercentage)} covered</h2>
+        </div>
+        <span className={`build-state build-state--${summary.fullyBuildable ? "complete" : "incomplete"}`}>
+          {summary.fullyBuildable ? "Fully buildable" : "Incomplete"}
+        </span>
+      </div>
+      <div
+        className="coverage-progress"
+        role="progressbar"
+        aria-label={`${formatCoveragePercentage(progress)} of required physical pieces available`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+      >
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <p className="coverage-progress-text">
+        {summary.totalAvailableQuantity.toLocaleString()} available of {summary.totalRequiredQuantity.toLocaleString()} required physical pieces; {summary.totalMissingQuantity.toLocaleString()} missing.
+      </p>
+      <dl className="readiness-counts">
+        <Meta label="Unique BOM rows" value={summary.uniqueItemCount} />
+        <Meta label="Complete rows" value={summary.completeItemCount} />
+        <Meta label="Partial rows" value={summary.partialItemCount} />
+        <Meta label="Missing rows" value={summary.missingItemCount} />
+      </dl>
     </section>
-    <Suspense fallback={<div className="page-message">Loading 3D viewer…</div>}><ImportedModelViewer modelId={model.modelId} sourceUrl={model.sourceUrl} title={model.name} /></Suspense>
-    <section className="page-panel">
-      <div className="page-heading catalog-heading"><div><p className="eyebrow">Bill of materials</p><h2>Physical parts</h2></div><p>{model.totalPartQuantity} total</p></div>
-      <label className="bom-search"><span>Search BOM</span><input type="search" value={bomQuery} onChange={(event) => setBomQuery(event.currentTarget.value)} placeholder="Part, name, or color" /></label>
-      {bom.length === 0 ? <div className="empty-state">No BOM items match this search.</div> : <div className="table-scroll"><table className="bom-table"><thead><tr><th>Part</th><th>Name</th><th>Color</th><th>Quantity</th><th>Catalog</th></tr></thead><tbody>{bom.map((item) => <tr key={`${item.partId}-${item.colorCode}`}><td><span className="part-id">{item.partId}</span></td><td>{item.partName}</td><td><span className="inventory-color">{item.colorHex && <span className="color-swatch" style={{ backgroundColor: item.colorHex }} />}{item.colorName} ({item.colorCode})</span></td><td>{item.quantity}</td><td>{item.catalogAvailable ? <Link to={`/catalog?part=${encodeURIComponent(item.partId)}`}>Inspect official part</Link> : "Unavailable"}</td></tr>)}</tbody></table></div>}
-    </section>
-    {model.issues.length > 0 && <section className="page-panel"><div className="page-heading"><p className="eyebrow">Import diagnostics</p><h2>Warnings</h2></div><ul className="issue-list">{model.issues.map((issue, index) => <li key={`${issue.code}-${index}`}><strong>{issue.code.replaceAll("_", " ")}</strong><span>{issue.message}{issue.referencedFilename ? ` — ${issue.referencedFilename}` : ""}</span></li>)}</ul></section>}
-  </div>;
+  );
+}
+
+function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
+  return (
+    <div className="table-scroll">
+      <table className="bom-table coverage-table">
+        <thead>
+          <tr>
+            <th>Part</th><th>Name</th><th>Exact color</th><th>Required</th><th>Owned</th><th>Missing</th><th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item) => (
+            <tr className={`coverage-row coverage-row--${item.status}`} key={`${item.partId}-${item.colorCode}`}>
+              <td><span className="part-id">{item.partId}</span></td>
+              <td>{item.partName}{!item.catalogAvailable && <small className="metadata-warning">Catalog metadata unavailable</small>}</td>
+              <td>
+                <span className="inventory-color">
+                  {item.colorHex && <span className="color-swatch" style={{ backgroundColor: item.colorHex }} aria-hidden="true" />}
+                  {item.colorName} ({item.colorCode})
+                </span>
+              </td>
+              <td>{item.requiredQuantity}</td>
+              <td>{item.ownedQuantity}</td>
+              <td><strong>{item.missingQuantity}</strong></td>
+              <td>
+                <span className={`coverage-status coverage-status--${item.status}`} aria-label={`Coverage status: ${coverageStatusLabel(item.status)}`}>
+                  {coverageStatusLabel(item.status)}
+                </span>
+              </td>
+              <td>
+                <div className="coverage-actions">
+                  {item.catalogAvailable ? (
+                    <Link to={`/catalog?part=${encodeURIComponent(item.partId)}`}>Inspect official part</Link>
+                  ) : (
+                    <span>Official part unavailable</span>
+                  )}
+                  <CompactInventoryEditor
+                    partId={item.partId}
+                    colorCode={item.colorCode}
+                    ownedQuantity={item.ownedQuantity}
+                    catalogAvailable={item.catalogAvailable && item.colorHex !== null}
+                  />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function Meta({ label, value }: { label: string; value: string | number }) {

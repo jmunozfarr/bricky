@@ -1,5 +1,10 @@
 import { ApiError } from "../api/client";
-import type { ModelBomItem, ModelImportStatus } from "../api/models";
+import type {
+  CoverageStatus,
+  ModelBomItem,
+  ModelCoverageItem,
+  ModelImportStatus,
+} from "../api/models";
 
 export const MODEL_UPLOAD_LIMIT_BYTES = 25 * 1024 * 1024;
 
@@ -44,4 +49,45 @@ export function filterModelBom(items: ModelBomItem[], query: string): ModelBomIt
       item.partName.toLowerCase().includes(normalized) ||
       item.colorName.toLowerCase().includes(normalized),
   );
+}
+
+export function formatCoveragePercentage(value: number): string {
+  const bounded = coverageProgressValue(value);
+  return `${Number(bounded.toFixed(2))}%`;
+}
+
+export function coverageProgressValue(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
+export function coverageStatusLabel(status: CoverageStatus): string {
+  if (status === "complete") return "Complete";
+  if (status === "partial") return "Partially covered";
+  return "Missing";
+}
+
+export function filterCoverageItems(
+  items: ModelCoverageItem[],
+  query: string,
+  status: CoverageStatus | "all",
+  missingOnly: boolean,
+): ModelCoverageItem[] {
+  const normalized = query.trim().toLowerCase();
+  return items.filter((item) => {
+    if (missingOnly && item.missingQuantity === 0) return false;
+    if (status !== "all" && item.status !== status) return false;
+    return (
+      !normalized ||
+      item.partId.toLowerCase().includes(normalized) ||
+      item.partName.toLowerCase().includes(normalized)
+    );
+  });
+}
+
+export function coverageEmptyMessage(missingOnly: boolean, hasFilters: boolean): string {
+  if (missingOnly && !hasFilters) {
+    return "You have all the pieces required for this model.";
+  }
+  return "No model parts match these filters.";
 }

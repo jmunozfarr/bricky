@@ -4,6 +4,10 @@ import { Link } from "react-router-dom";
 import { CatalogStatus, getCatalogStatus } from "../api/catalog";
 import { fetchJson } from "../api/client";
 import { getInventorySummary, InventorySummary } from "../api/inventory";
+import {
+  getModelsReadinessSummary,
+  ModelsReadinessSummary,
+} from "../api/models";
 import { useLibraryStatus } from "../components/ldraw/useLibraryStatus";
 import { subscribeInventoryChanged } from "../inventory/events";
 
@@ -21,6 +25,7 @@ export default function OverviewPage() {
   const [health, setHealth] = useState<AsyncState<HealthResponse>>({ kind: "loading" });
   const [catalog, setCatalog] = useState<AsyncState<CatalogStatus>>({ kind: "loading" });
   const [inventory, setInventory] = useState<AsyncState<InventorySummary>>({ kind: "loading" });
+  const [models, setModels] = useState<AsyncState<ModelsReadinessSummary>>({ kind: "loading" });
   const library = useLibraryStatus();
 
   useEffect(() => {
@@ -60,6 +65,13 @@ export default function OverviewPage() {
             setInventory({ kind: "error", message: error instanceof Error ? error.message : "Unknown inventory error" });
           }
         });
+      void getModelsReadinessSummary(controller.signal)
+        .then((data) => setModels({ kind: "ready", data }))
+        .catch((error: unknown) => {
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            setModels({ kind: "error", message: error instanceof Error ? error.message : "Unknown model readiness error" });
+          }
+        });
     };
     load();
     const unsubscribe = subscribeInventoryChanged(load);
@@ -72,7 +84,7 @@ export default function OverviewPage() {
   return (
     <section className="page-panel" aria-labelledby="overview-title">
       <div className="page-heading">
-        <p className="eyebrow">Checkpoint 5</p>
+        <p className="eyebrow">Checkpoint 7</p>
         <h2 id="overview-title">Local workspace status</h2>
         <p>Runtime services, official library, and catalog indexing remain local.</p>
       </div>
@@ -86,6 +98,21 @@ export default function OverviewPage() {
               : "Unavailable"}
         </strong>
         <span>Open inventory →</span>
+      </Link>
+      <Link className="overview-inventory-link" to="/models">
+        <span>Imported model readiness</span>
+        <strong>
+          {models.kind === "ready"
+            ? `${models.data.fullyBuildableModels.toLocaleString()} of ${models.data.totalModels.toLocaleString()} models fully buildable`
+            : models.kind === "loading"
+              ? "Loading…"
+              : "Unavailable"}
+        </strong>
+        <span>
+          {models.kind === "ready"
+            ? `${models.data.totalMissingQuantity.toLocaleString()} missing pieces across per-model comparisons →`
+            : "Open models →"}
+        </span>
       </Link>
       <div className="overview-grid">
         <StatusCard label="Frontend" value="Online" tone="ok" />

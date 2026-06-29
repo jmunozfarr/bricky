@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/client";
 import {
   formatFileSize,
+  coverageEmptyMessage,
+  coverageProgressValue,
+  coverageStatusLabel,
   filterModelBom,
+  filterCoverageItems,
+  formatCoveragePercentage,
   modelStatusLabel,
   modelUploadError,
   validateModelUpload,
@@ -51,5 +56,68 @@ describe("model presentation helpers", () => {
   it("maps duplicate and oversized API errors", () => {
     expect(modelUploadError(new ApiError(409, "Duplicate", null))).toMatch("existing");
     expect(modelUploadError(new ApiError(413, "Large", null))).toMatch("upload-size");
+  });
+});
+
+describe("model coverage presentation", () => {
+  const rows = [
+    {
+      partId: "3001",
+      partName: "Brick 2 x 4",
+      category: "Brick",
+      colorCode: 4,
+      colorName: "Red",
+      colorHex: "#C91A09",
+      requiredQuantity: 4,
+      ownedQuantity: 2,
+      availableQuantity: 2,
+      missingQuantity: 2,
+      coveragePercentage: 50,
+      status: "partial" as const,
+      catalogAvailable: true,
+      renderAssetUrl: "/api/ldraw/parts/3001.dat",
+    },
+    {
+      partId: "3002",
+      partName: "Brick 2 x 3",
+      category: "Brick",
+      colorCode: 1,
+      colorName: "Blue",
+      colorHex: "#0055BF",
+      requiredQuantity: 1,
+      ownedQuantity: 1,
+      availableQuantity: 1,
+      missingQuantity: 0,
+      coveragePercentage: 100,
+      status: "complete" as const,
+      catalogAvailable: true,
+      renderAssetUrl: "/api/ldraw/parts/3002.dat",
+    },
+  ];
+
+  it("formats percentages and clamps progress values", () => {
+    expect(formatCoveragePercentage(65.567)).toBe("65.57%");
+    expect(coverageProgressValue(-2)).toBe(0);
+    expect(coverageProgressValue(120)).toBe(100);
+    expect(coverageProgressValue(Number.NaN)).toBe(0);
+  });
+
+  it("provides explicit accessible status labels", () => {
+    expect(coverageStatusLabel("complete")).toBe("Complete");
+    expect(coverageStatusLabel("partial")).toBe("Partially covered");
+    expect(coverageStatusLabel("missing")).toBe("Missing");
+  });
+
+  it("derives wishlist and status/search filters", () => {
+    expect(filterCoverageItems(rows, "", "all", true)).toEqual([rows[0]]);
+    expect(filterCoverageItems(rows, "2 x 3", "complete", false)).toEqual([rows[1]]);
+    expect(filterCoverageItems(rows, "plate", "all", false)).toEqual([]);
+  });
+
+  it("uses the explicit complete-wishlist success state", () => {
+    expect(coverageEmptyMessage(true, false)).toBe(
+      "You have all the pieces required for this model.",
+    );
+    expect(coverageEmptyMessage(true, true)).toBe("No model parts match these filters.");
   });
 });

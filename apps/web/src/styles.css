@@ -932,6 +932,213 @@ h1 {
   color: #4b5563;
 }
 
+.model-card-readiness {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem;
+  border-radius: 0.55rem;
+  background: #eef2f7;
+}
+
+.model-card-readiness span {
+  color: #596275;
+  font-size: 0.8rem;
+}
+
+.readiness-panel {
+  border: 2px solid #d6dbe3;
+}
+
+.readiness-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.readiness-heading h2 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+}
+
+.build-state,
+.coverage-status {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.build-state--complete,
+.coverage-status--complete {
+  color: #166534;
+  background: #ecfdf3;
+}
+
+.build-state--incomplete,
+.coverage-status--missing {
+  color: #991b1b;
+  background: #fef2f2;
+}
+
+.coverage-status--partial {
+  color: #854d0e;
+  background: #fffbeb;
+}
+
+.coverage-progress {
+  height: 0.9rem;
+  margin-top: 1.25rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.coverage-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #15803d;
+}
+
+.coverage-progress-text {
+  margin: 0.65rem 0 1rem;
+  color: #4b5563;
+}
+
+.readiness-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(7rem, 1fr));
+  gap: 0.7rem;
+  margin: 0;
+}
+
+.readiness-counts div {
+  padding: 0.7rem;
+  border: 1px solid #e2e5e9;
+  border-radius: 0.55rem;
+  background: #f9fafb;
+}
+
+.readiness-counts dt {
+  color: #697386;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.readiness-counts dd {
+  margin: 0.25rem 0 0;
+  font-size: 1.25rem;
+  font-weight: 750;
+}
+
+.segmented-control {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  padding: 0.25rem;
+  border-radius: 0.65rem;
+  background: #eef0f3;
+}
+
+.segmented-control button {
+  border-color: transparent;
+  background: transparent;
+}
+
+.segmented-control button[aria-pressed="true"] {
+  border-color: #cbd0d8;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.coverage-filters {
+  display: grid;
+  grid-template-columns: minmax(14rem, 2fr) minmax(10rem, 1fr);
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.coverage-filters label {
+  display: grid;
+  gap: 0.35rem;
+  color: #596275;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.coverage-filters input,
+.coverage-filters select {
+  min-height: 2.6rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #cbd0d8;
+  border-radius: 0.5rem;
+  background: #ffffff;
+}
+
+.coverage-table {
+  min-width: 72rem;
+}
+
+.coverage-row td:first-child {
+  border-left: 0.3rem solid transparent;
+}
+
+.coverage-row--missing td:first-child {
+  border-left-color: #b91c1c;
+}
+
+.coverage-row--partial td:first-child {
+  border-left-color: #d97706;
+}
+
+.coverage-row--complete td:first-child {
+  border-left-color: #15803d;
+}
+
+.metadata-warning {
+  display: block;
+  margin-top: 0.25rem;
+  color: #854d0e;
+}
+
+.coverage-actions,
+.compact-inventory-editor {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.coverage-actions {
+  min-width: 13rem;
+}
+
+.compact-inventory-editor {
+  padding-top: 0.4rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.compact-editor-label,
+.compact-inventory-editor small {
+  color: #697386;
+  font-size: 0.72rem;
+}
+
+.compact-editor-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.compact-editor-actions button {
+  flex: 1;
+  padding: 0.4rem;
+  font-size: 0.75rem;
+}
+
 @media (max-width: 56rem) {
   .app-header {
     align-items: flex-start;
@@ -945,6 +1152,11 @@ h1 {
 
   .catalog-filters {
     grid-template-columns: 1fr;
+  }
+
+  .coverage-filters,
+  .readiness-counts {
+    grid-template-columns: 1fr 1fr;
   }
 
   .model-upload {
@@ -1034,5 +1246,14 @@ h1 {
   .detail-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .readiness-heading {
+    flex-direction: column;
+  }
+
+  .coverage-filters,
+  .readiness-counts {
+    grid-template-columns: 1fr;
   }
 }
