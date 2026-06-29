@@ -98,6 +98,7 @@ def create_app(
         create_models_router(
             catalog_session,
             active_session_factory,
+            resolved_library_root,
             resolved_model_storage_root,
             resolved_model_max_upload_bytes,
         )

@@ -324,6 +324,7 @@ def _coverage_item_response(
 def create_models_router(
     session_dependency: SessionDependency,
     session_factory: sessionmaker[Session],
+    library_root: Path,
     storage_root: Path,
     maximum_upload_bytes: int,
 ) -> APIRouter:
@@ -338,6 +339,7 @@ def create_models_router(
             outcome = import_model(
                 session_factory,
                 storage_root,
+                library_root,
                 file.file,
                 file.filename,
                 name,

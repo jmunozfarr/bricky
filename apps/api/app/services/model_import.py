@@ -6,6 +6,7 @@ import re
 import shutil
 import tempfile
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
@@ -22,7 +23,18 @@ from app.models import (
     Part,
     Workspace,
 )
-from app.services.ldraw_model_parser import ModelParseError, ParsedModel, parse_ldraw_model
+from app.services.ldraw_aliases import (
+    AliasResolutionStatus,
+    LDrawMovedAliasResolver,
+    OfficialPartRecord,
+)
+from app.services.ldraw_model_parser import (
+    BomEntry,
+    ModelParseError,
+    ParsedModel,
+    ParseIssue,
+    parse_ldraw_model,
+)
 from app.services.local_workspace import LOCAL_WORKSPACE_SLUG, resolve_local_workspace
 
 
@@ -109,9 +121,74 @@ def _find_duplicate(
     )
 
 
+def _canonicalize_moved_aliases(
+    parsed: ParsedModel, resolver: LDrawMovedAliasResolver
+) -> ParsedModel:
+    resolutions = resolver.resolve_many({item.part_id for item in parsed.bom})
+    quantities: Counter[tuple[str, int]] = Counter()
+    issues = list(parsed.issues)
+    issue_details: dict[AliasResolutionStatus, tuple[str, str]] = {
+        "cycle": (
+            "moved_alias_cycle",
+            "Moved-part alias cycle prevented canonical resolution; the original part ID was retained",
+        ),
+        "missing_target": (
+            "moved_alias_missing_target",
+            "Moved-part alias target is unavailable; the original part ID was retained",
+        ),
+        "malformed": (
+            "moved_alias_malformed",
+            "Moved-part alias metadata or target reference is malformed; the original part ID was retained",
+        ),
+        "depth_exceeded": (
+            "moved_alias_depth_exceeded",
+            "Moved-part alias chain exceeded the safe depth limit; the original part ID was retained",
+        ),
+    }
+    warned_part_ids: set[str] = set()
+
+    for item in parsed.bom:
+        resolution = resolutions[item.part_id]
+        persisted_part_id = (
+            resolution.canonical_part_id
+            if resolution.status == "resolved"
+            else item.part_id
+        )
+        quantities[(persisted_part_id, item.color_code)] += item.quantity
+        if (
+            resolution.status in issue_details
+            and resolution.original_part_id.lower() not in warned_part_ids
+        ):
+            warned_part_ids.add(resolution.original_part_id.lower())
+            code, message = issue_details[resolution.status]
+            issues.append(
+                ParseIssue(
+                    severity="warning",
+                    code=code,
+                    message=message,
+                    referenced_filename=f"{resolution.original_part_id}.dat"[:255],
+                )
+            )
+
+    bom = tuple(
+        BomEntry(part_id=part_id, color_code=color_code, quantity=quantity)
+        for (part_id, color_code), quantity in sorted(
+            quantities.items(), key=lambda item: (item[0][0].lower(), item[0][1])
+        )
+    )
+    return ParsedModel(
+        bom=bom,
+        issues=tuple(issues),
+        declared_step_count=parsed.declared_step_count,
+        main_file_name=parsed.main_file_name,
+        encoding=parsed.encoding,
+    )
+
+
 def import_model(
     session_factory: sessionmaker[Session],
     storage_root: Path,
+    library_root: Path,
     source: BinaryIO,
     original_filename: str | None,
     requested_name: str | None,
@@ -135,9 +212,19 @@ def import_model(
             duplicate = _find_duplicate(session, source_sha256)
             if duplicate is not None:
                 raise DuplicateModelError(duplicate.public_id)
-            official_parts = set(
-                session.scalars(select(Part.part_id).where(Part.is_subpart.is_(False)))
-            )
+            part_records = [
+                OfficialPartRecord(
+                    part_id=part_id,
+                    description=description,
+                    relative_path=relative_path,
+                )
+                for part_id, description, relative_path in session.execute(
+                    select(Part.part_id, Part.name, Part.relative_path).where(
+                        Part.is_subpart.is_(False)
+                    )
+                )
+            ]
+            official_parts = {part.part_id for part in part_records}
             known_colors = set(session.scalars(select(LDrawColor.code)))
 
         source_bytes = temp_source.read_bytes()
@@ -146,6 +233,10 @@ def import_model(
                 source_bytes,
                 official_part_ids=official_parts,
                 known_color_codes=known_colors,
+            )
+            parsed = _canonicalize_moved_aliases(
+                parsed,
+                LDrawMovedAliasResolver(library_root, part_records),
             )
         except ModelParseError as error:
             raise ModelImportError(str(error)) from error
@@ -162,6 +253,10 @@ def import_model(
             "unresolved_reference",
             "unsupported_custom_part",
             "malformed_type1_reference",
+            "moved_alias_cycle",
+            "moved_alias_missing_target",
+            "moved_alias_malformed",
+            "moved_alias_depth_exceeded",
         }
         try:
             with session_factory.begin() as session:

@@ -181,6 +181,10 @@ LDR is normally a single model file. MPD packages a main model and embedded subm
 
 The importer recursively resolves embedded MPD submodels, multiplies repeated submodel quantities, applies LDraw color-16 inheritance, and records indexed official parts as physical BOM items. Official part geometry remains in the separately installed LDraw library and is not copied into PostgreSQL. Primitives, official subparts, geometry lines, and color 24 are not physical BOM entries. Unknown colors and unresolved references are retained as structured warnings where possible. The stored declared-step count describes separators in the top-level source; runtime Three.js step metadata controls interactive navigation.
 
+Some official LDraw files are compatibility aliases whose description is `~Moved to <part-id>` and whose only geometry reference points to the canonical replacement. New imports validate both signals, follow moved-alias chains, and store the final canonical part ID in the derived BOM. References to an alias and its canonical replacement therefore merge when their physical color also matches. This is limited to authoritative official `Moved to` files; it is not general substitution, shortcut expansion, similar-part matching, or alternate-color matching. Alias failures retain the original BOM ID with a structured warning.
+
+Canonicalization never changes the uploaded source bytes, original filename, or source SHA-256. Models imported before this behavior keep their existing derived BOM until they are explicitly deleted and reimported; Bricky does not rewrite existing models during startup.
+
 Import statuses are:
 
 - `ready`: parsed without warnings.
