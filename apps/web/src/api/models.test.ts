@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { serializeCoverageQuery, serializeModelsQuery } from "./models";
+import { getInstructionGraph, serializeCoverageQuery, serializeModelsQuery } from "./models";
 
 describe("models query serialization", () => {
   it("encodes filters and clamps the page", () => {
@@ -23,5 +23,24 @@ describe("coverage query serialization", () => {
 
   it("omits empty filters", () => {
     expect(serializeCoverageQuery({ query: "  " })).toBe("");
+  });
+});
+
+describe("instruction graph API", () => {
+  it("encodes the model identifier in the diagnostic endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ modelId: "model/id" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await getInstructionGraph("model/id");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/models/model%2Fid/instruction-graph",
+      { signal: undefined },
+    );
+    fetchMock.mockRestore();
   });
 });

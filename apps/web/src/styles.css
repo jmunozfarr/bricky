@@ -572,6 +572,46 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.instruction-graph-panel summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.instruction-graph-panel summary > span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.instruction-graph-content {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.instruction-tree {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 28rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.instruction-tree li {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, auto) 1fr;
+  gap: 0.65rem;
+  align-items: baseline;
+  padding: 0.45rem 0.6rem;
+  border-left: 2px solid #cbd5e1;
+  font-size: 0.82rem;
+}
+
+.instruction-tree span {
+  color: #697386;
+}
+
 .detail-actions {
   display: flex;
   justify-content: space-between;

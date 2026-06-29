@@ -4,8 +4,10 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   CoverageStatus,
   deleteModel,
+  getInstructionGraph,
   getModel,
   getModelCoverage,
+  InstructionGraph,
   ModelCoverage,
   ModelCoverageItem,
   ModelDetail,
@@ -150,6 +152,8 @@ export default function ModelDetailPage() {
         <ImportedModelViewer modelId={model.modelId} sourceUrl={model.sourceUrl} title={model.name} />
       </Suspense>
 
+      <InstructionGraphPanel modelId={model.modelId} />
+
       {coverage.kind === "loading" && <div className="page-message">Calculating build readiness…</div>}
       {coverage.kind === "error" && (
         <div className="error" role="alert">
@@ -238,6 +242,88 @@ export default function ModelDetailPage() {
         </section>
       )}
     </div>
+  );
+}
+
+type InstructionGraphState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "ready"; data: InstructionGraph }
+  | { kind: "error"; message: string };
+
+function InstructionGraphPanel({ modelId }: { modelId: string }) {
+  const [state, setState] = useState<InstructionGraphState>({ kind: "idle" });
+
+  function load() {
+    if (state.kind !== "idle") return;
+    setState({ kind: "loading" });
+    void getInstructionGraph(modelId)
+      .then((data) => setState({ kind: "ready", data }))
+      .catch((error: unknown) =>
+        setState({
+          kind: "error",
+          message: error instanceof Error ? error.message : "Unable to load instruction graph.",
+        }),
+      );
+  }
+
+  const visibleOccurrenceLimit = 500;
+  return (
+    <details
+      className="page-panel instruction-graph-panel"
+      onToggle={(event) => {
+        if (event.currentTarget.open) load();
+      }}
+    >
+      <summary>
+        <span><span className="eyebrow">Developer diagnostic</span>Instruction hierarchy</span>
+      </summary>
+      {state.kind === "loading" && <div className="page-message">Parsing instruction graph…</div>}
+      {state.kind === "error" && <div className="error" role="alert">{state.message}</div>}
+      {state.kind === "ready" && (
+        <div className="instruction-graph-content">
+          <dl className="part-metadata">
+            <Meta label="Model definitions" value={state.data.modelDefinitionCount} />
+            <Meta label="Expanded occurrences" value={state.data.expandedOccurrenceCount} />
+            <Meta label="Instruction nodes" value={state.data.instructionNodeCount} />
+            <Meta label="Maximum depth" value={state.data.maximumNestingDepth} />
+            <Meta label="Truncated" value={state.data.truncated ? "Yes" : "No"} />
+          </dl>
+          {state.data.issues.length > 0 && (
+            <ul className="issue-list">
+              {state.data.issues.map((issue, index) => (
+                <li key={`${issue.code}-${index}`}>
+                  <strong>{issue.code.replaceAll("_", " ")}</strong>
+                  <span>{issue.message}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <ol className="instruction-tree">
+            {state.data.occurrences.slice(0, visibleOccurrenceLimit).map((occurrence) => (
+              <li
+                key={occurrence.occurrenceId}
+                style={{ marginLeft: `${Math.min(occurrence.depth, 12) * 1.25}rem` }}
+              >
+                <code>{occurrence.occurrenceId}</code>
+                <strong>{occurrence.sourceSubmodelName}</strong>
+                <span>
+                  depth {occurrence.depth}
+                  {occurrence.attachmentStep !== null ? ` · parent step ${occurrence.attachmentStep}` : " · root"}
+                  {occurrence.effectiveColor !== null ? ` · color ${occurrence.effectiveColor}` : ""}
+                  {` · position ${occurrence.localTransform.translation.join(", ")}`}
+                </span>
+              </li>
+            ))}
+          </ol>
+          {state.data.expandedOccurrenceCount > visibleOccurrenceLimit && (
+            <p className="metadata-warning">
+              Showing the first {visibleOccurrenceLimit.toLocaleString()} occurrences in deterministic traversal order.
+            </p>
+          )}
+        </div>
+      )}
+    </details>
   );
 }
 

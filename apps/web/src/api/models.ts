@@ -56,6 +56,83 @@ export interface ModelDetail extends ModelSummary {
   issues: ModelImportIssue[];
 }
 
+export interface InstructionTransform {
+  translation: [number, number, number];
+  matrix: [number, number, number, number, number, number, number, number, number];
+}
+
+export interface InstructionGraphOccurrence {
+  occurrenceId: string;
+  parentOccurrenceId: string | null;
+  sourceSubmodelName: string;
+  localTransform: InstructionTransform;
+  effectiveColor: number | null;
+  attachmentStep: number | null;
+  depth: number;
+  traversalOrder: number;
+  childOccurrenceIds: string[];
+}
+
+export interface LocalInstructionNode {
+  nodeIndex: number;
+  kind: "part_reference" | "submodel_reference";
+  sourceFilename: string;
+  colorCode: number;
+  localTransform: InstructionTransform;
+}
+
+export interface LocalStepDefinition {
+  step: number;
+  nodes: LocalInstructionNode[];
+}
+
+export interface InstructionModelDefinition {
+  sourceSubmodelName: string;
+  localSteps: LocalStepDefinition[];
+}
+
+export interface ExpandedInstructionNode {
+  instructionNodeId: string;
+  occurrenceId: string;
+  localStep: number;
+  nodeIndex: number;
+  kind: "part_reference" | "submodel_attachment";
+  sourceFilename: string;
+  effectiveColor: number | null;
+  localTransform: InstructionTransform;
+  childOccurrenceId: string | null;
+}
+
+export interface InstructionGraphIssue {
+  severity: string;
+  code: string;
+  message: string;
+  sourceSubmodelName: string | null;
+  sourceFilename: string | null;
+  occurrenceId: string | null;
+  configuredLimit: number | null;
+}
+
+export interface InstructionGraph {
+  modelId: string;
+  rootOccurrenceId: string;
+  modelDefinitions: InstructionModelDefinition[];
+  occurrences: InstructionGraphOccurrence[];
+  instructionNodes: ExpandedInstructionNode[];
+  maximumNestingDepth: number;
+  traversalOrder: string[];
+  modelDefinitionCount: number;
+  expandedOccurrenceCount: number;
+  instructionNodeCount: number;
+  issues: InstructionGraphIssue[];
+  truncated: boolean;
+  limits: {
+    maximumNestingDepth: number;
+    maximumExpandedOccurrences: number;
+    maximumInstructionNodes: number;
+  };
+}
+
 export interface ModelsPage {
   items: ModelSummary[];
   page: number;
@@ -147,6 +224,16 @@ export function getModelsReadinessSummary(
 
 export function getModel(modelId: string, signal?: AbortSignal): Promise<ModelDetail> {
   return fetchJson<ModelDetail>(`/api/models/${encodeURIComponent(modelId)}`, signal);
+}
+
+export function getInstructionGraph(
+  modelId: string,
+  signal?: AbortSignal,
+): Promise<InstructionGraph> {
+  return fetchJson<InstructionGraph>(
+    `/api/models/${encodeURIComponent(modelId)}/instruction-graph`,
+    signal,
+  );
 }
 
 export function uploadModel(file: File, name: string): Promise<ModelSummary> {

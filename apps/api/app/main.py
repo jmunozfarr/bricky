@@ -1,6 +1,6 @@
+from collections.abc import Iterator
 import os
 from pathlib import Path
-from collections.abc import Iterator
 
 import psycopg
 from fastapi import FastAPI
@@ -12,8 +12,14 @@ from app.catalog_api import create_catalog_router
 from app.database import SessionFactory
 from app.inventory_api import create_inventory_router
 from app.models_api import create_models_router
-from app.services.model_import import DEFAULT_MAX_UPLOAD_BYTES
+from app.services.instruction_graph import (
+    DEFAULT_MAX_EXPANDED_OCCURRENCES,
+    DEFAULT_MAX_INSTRUCTION_NODES,
+    DEFAULT_MAX_NESTING_DEPTH,
+    InstructionGraphLimits,
+)
 from app.services.ldraw_library import get_library_status
+from app.services.model_import import DEFAULT_MAX_UPLOAD_BYTES
 
 
 class HealthResponse(BaseModel):
@@ -45,6 +51,7 @@ def create_app(
     session_factory: sessionmaker[Session] | None = None,
     model_storage_root: Path | None = None,
     model_max_upload_bytes: int | None = None,
+    instruction_graph_limits: InstructionGraphLimits | None = None,
 ) -> FastAPI:
     resolved_library_root = library_root or Path(
         os.environ.get("LDRAW_LIBRARY_ROOT", "/data/ldraw/official")
@@ -56,6 +63,25 @@ def create_app(
     )
     resolved_model_max_upload_bytes = model_max_upload_bytes or int(
         os.environ.get("MODEL_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))
+    )
+    resolved_instruction_graph_limits = instruction_graph_limits or InstructionGraphLimits(
+        max_nesting_depth=int(
+            os.environ.get(
+                "INSTRUCTION_GRAPH_MAX_NESTING_DEPTH", str(DEFAULT_MAX_NESTING_DEPTH)
+            )
+        ),
+        max_expanded_occurrences=int(
+            os.environ.get(
+                "INSTRUCTION_GRAPH_MAX_EXPANDED_OCCURRENCES",
+                str(DEFAULT_MAX_EXPANDED_OCCURRENCES),
+            )
+        ),
+        max_instruction_nodes=int(
+            os.environ.get(
+                "INSTRUCTION_GRAPH_MAX_INSTRUCTION_NODES",
+                str(DEFAULT_MAX_INSTRUCTION_NODES),
+            )
+        ),
     )
 
     def catalog_session() -> Iterator[Session]:
@@ -101,6 +127,7 @@ def create_app(
             resolved_library_root,
             resolved_model_storage_root,
             resolved_model_max_upload_bytes,
+            resolved_instruction_graph_limits,
         )
     )
 

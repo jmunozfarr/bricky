@@ -1,0 +1,11 @@
+0 FILE main.ldr
+1 2 0 0 0 1 0 0 0 1 0 0 0 1 level-one.ldr
+0 FILE level-one.ldr
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat
+0 STEP
+1 16 10 0 0 0 -1 0 1 0 0 0 0 1 level-two.ldr
+0 FILE level-two.ldr
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 3002.dat
+0 STEP
+1 4 0 8 0 1 0 0 0 1 0 0 0 1 3020.dat
+0 NOFILE

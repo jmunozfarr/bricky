@@ -1,0 +1,7 @@
+0 FILE main.ldr
+1 4 0 0 0 1 0 0 0 1 0 0 0 1 sub.ldr
+0 FILE sub.ldr
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat
+0 STEP
+1 16 0 8 0 1 0 0 0 1 0 0 0 1 3002.dat
+0 NOFILE

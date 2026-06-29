@@ -35,6 +35,12 @@ from app.models import (
     ModelImportIssue,
     Part,
 )
+from app.services.instruction_graph import (
+    InstructionGraph,
+    InstructionGraphLimits,
+    parse_instruction_graph,
+)
+from app.services.ldraw_model_parser import ModelParseError
 from app.services.local_workspace import resolve_local_workspace
 from app.services.model_coverage import (
     CoverageItem,
@@ -165,6 +171,192 @@ class ModelsReadinessResponse(BaseModel):
     fully_buildable_models: int = Field(alias="fullyBuildableModels")
     incomplete_models: int = Field(alias="incompleteModels")
     total_missing_quantity: int = Field(alias="totalMissingQuantity")
+
+
+class InstructionTransformResponse(BaseModel):
+    translation: tuple[float, float, float]
+    matrix: tuple[float, float, float, float, float, float, float, float, float]
+
+
+class LocalInstructionNodeResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    node_index: int = Field(alias="nodeIndex")
+    kind: Literal["part_reference", "submodel_reference"]
+    source_filename: str = Field(alias="sourceFilename")
+    color_code: int = Field(alias="colorCode")
+    local_transform: InstructionTransformResponse = Field(alias="localTransform")
+
+
+class LocalStepDefinitionResponse(BaseModel):
+    step: int
+    nodes: list[LocalInstructionNodeResponse]
+
+
+class ModelDefinitionResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    source_submodel_name: str = Field(alias="sourceSubmodelName")
+    local_steps: list[LocalStepDefinitionResponse] = Field(alias="localSteps")
+
+
+class ModelOccurrenceResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    occurrence_id: str = Field(alias="occurrenceId")
+    parent_occurrence_id: str | None = Field(alias="parentOccurrenceId")
+    source_submodel_name: str = Field(alias="sourceSubmodelName")
+    local_transform: InstructionTransformResponse = Field(alias="localTransform")
+    effective_color: int | None = Field(alias="effectiveColor")
+    attachment_step: int | None = Field(alias="attachmentStep")
+    depth: int
+    traversal_order: int = Field(alias="traversalOrder")
+    child_occurrence_ids: list[str] = Field(alias="childOccurrenceIds")
+
+
+class ExpandedInstructionNodeResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    instruction_node_id: str = Field(alias="instructionNodeId")
+    occurrence_id: str = Field(alias="occurrenceId")
+    local_step: int = Field(alias="localStep")
+    node_index: int = Field(alias="nodeIndex")
+    kind: Literal["part_reference", "submodel_attachment"]
+    source_filename: str = Field(alias="sourceFilename")
+    effective_color: int | None = Field(alias="effectiveColor")
+    local_transform: InstructionTransformResponse = Field(alias="localTransform")
+    child_occurrence_id: str | None = Field(alias="childOccurrenceId")
+
+
+class InstructionGraphIssueResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    severity: str
+    code: str
+    message: str
+    source_submodel_name: str | None = Field(alias="sourceSubmodelName")
+    source_filename: str | None = Field(alias="sourceFilename")
+    occurrence_id: str | None = Field(alias="occurrenceId")
+    configured_limit: int | None = Field(alias="configuredLimit")
+
+
+class InstructionGraphLimitsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    maximum_nesting_depth: int = Field(alias="maximumNestingDepth")
+    maximum_expanded_occurrences: int = Field(alias="maximumExpandedOccurrences")
+    maximum_instruction_nodes: int = Field(alias="maximumInstructionNodes")
+
+
+class InstructionGraphResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: uuid.UUID = Field(alias="modelId")
+    root_occurrence_id: str = Field(alias="rootOccurrenceId")
+    model_definitions: list[ModelDefinitionResponse] = Field(alias="modelDefinitions")
+    occurrences: list[ModelOccurrenceResponse]
+    instruction_nodes: list[ExpandedInstructionNodeResponse] = Field(alias="instructionNodes")
+    maximum_nesting_depth: int = Field(alias="maximumNestingDepth")
+    traversal_order: list[str] = Field(alias="traversalOrder")
+    model_definition_count: int = Field(alias="modelDefinitionCount")
+    expanded_occurrence_count: int = Field(alias="expandedOccurrenceCount")
+    instruction_node_count: int = Field(alias="instructionNodeCount")
+    issues: list[InstructionGraphIssueResponse]
+    truncated: bool
+    limits: InstructionGraphLimitsResponse
+
+
+def _instruction_graph_response(
+    model_id: uuid.UUID,
+    graph: InstructionGraph,
+    limits: InstructionGraphLimits,
+) -> InstructionGraphResponse:
+    return InstructionGraphResponse(
+        model_id=model_id,
+        root_occurrence_id=graph.root_occurrence_id,
+        model_definitions=[
+            ModelDefinitionResponse(
+                source_submodel_name=definition.source_submodel_name,
+                local_steps=[
+                    LocalStepDefinitionResponse(
+                        step=step.step,
+                        nodes=[
+                            LocalInstructionNodeResponse(
+                                node_index=node.node_index,
+                                kind=node.kind,
+                                source_filename=node.source_filename,
+                                color_code=node.color_code,
+                                local_transform=InstructionTransformResponse(
+                                    translation=node.local_transform.translation,
+                                    matrix=node.local_transform.matrix,
+                                ),
+                            )
+                            for node in step.nodes
+                        ],
+                    )
+                    for step in definition.local_steps
+                ],
+            )
+            for definition in graph.model_definitions
+        ],
+        occurrences=[
+            ModelOccurrenceResponse(
+                occurrence_id=occurrence.occurrence_id,
+                parent_occurrence_id=occurrence.parent_occurrence_id,
+                source_submodel_name=occurrence.source_submodel_name,
+                local_transform=InstructionTransformResponse(
+                    translation=occurrence.local_transform.translation,
+                    matrix=occurrence.local_transform.matrix,
+                ),
+                effective_color=occurrence.effective_color,
+                attachment_step=occurrence.attachment_step,
+                depth=occurrence.depth,
+                traversal_order=occurrence.traversal_order,
+                child_occurrence_ids=list(occurrence.child_occurrence_ids),
+            )
+            for occurrence in graph.occurrences
+        ],
+        instruction_nodes=[
+            ExpandedInstructionNodeResponse(
+                instruction_node_id=node.instruction_node_id,
+                occurrence_id=node.occurrence_id,
+                local_step=node.local_step,
+                node_index=node.node_index,
+                kind=node.kind,
+                source_filename=node.source_filename,
+                effective_color=node.effective_color,
+                local_transform=InstructionTransformResponse(
+                    translation=node.local_transform.translation,
+                    matrix=node.local_transform.matrix,
+                ),
+                child_occurrence_id=node.child_occurrence_id,
+            )
+            for node in graph.instruction_nodes
+        ],
+        maximum_nesting_depth=graph.maximum_nesting_depth,
+        traversal_order=list(graph.traversal_order),
+        model_definition_count=len(graph.model_definitions),
+        expanded_occurrence_count=len(graph.occurrences),
+        instruction_node_count=len(graph.instruction_nodes),
+        issues=[
+            InstructionGraphIssueResponse(
+                severity=issue.severity,
+                code=issue.code,
+                message=issue.message,
+                source_submodel_name=issue.source_submodel_name,
+                source_filename=issue.source_filename,
+                occurrence_id=issue.occurrence_id,
+                configured_limit=issue.configured_limit,
+            )
+            for issue in graph.issues
+        ],
+        truncated=graph.truncated,
+        limits=InstructionGraphLimitsResponse(
+            maximum_nesting_depth=limits.max_nesting_depth,
+            maximum_expanded_occurrences=limits.max_expanded_occurrences,
+            maximum_instruction_nodes=limits.max_instruction_nodes,
+        ),
+    )
 
 
 def _coverage_summary(summary: CoverageSummary) -> CoverageSummaryResponse:
@@ -327,8 +519,10 @@ def create_models_router(
     library_root: Path,
     storage_root: Path,
     maximum_upload_bytes: int,
+    instruction_graph_limits: InstructionGraphLimits | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/models")
+    active_graph_limits = instruction_graph_limits or InstructionGraphLimits()
 
     @router.post("", response_model=ModelSummaryResponse, status_code=201)
     def upload_model(
@@ -601,6 +795,31 @@ def create_models_router(
             media_type="text/plain; charset=utf-8",
             headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}"},
         )
+
+    @router.get(
+        "/{model_id}/instruction-graph", response_model=InstructionGraphResponse
+    )
+    def model_instruction_graph(
+        model_id: uuid.UUID, session: Session = Depends(session_dependency)
+    ) -> InstructionGraphResponse:
+        model = find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        source_path = _managed_source_path(storage_root, model)
+        session.commit()
+        if source_path is None or not source_path.is_file():
+            raise HTTPException(status_code=404, detail="Model source not found")
+        try:
+            graph = parse_instruction_graph(
+                source_path.read_bytes(),
+                source_name=model.original_filename,
+                limits=active_graph_limits,
+            )
+        except ModelParseError as error:
+            raise HTTPException(
+                status_code=422, detail=f"Instruction graph unavailable: {error}"
+            ) from error
+        return _instruction_graph_response(model.public_id, graph, active_graph_limits)
 
     @router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_model(

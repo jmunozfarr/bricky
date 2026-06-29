@@ -16,6 +16,7 @@ from app.models import (
     Workspace,
 )
 from app.services.local_workspace import resolve_local_workspace
+from app.services.instruction_graph import InstructionGraphLimits
 
 
 IDENTITY = "0 0 0 1 0 0 0 1 0 0 0 1"
@@ -52,7 +53,10 @@ def seed_catalog(factory: sessionmaker[Session]) -> None:
 
 
 def client_for(
-    factory: sessionmaker[Session], storage: Path, maximum: int = 1024 * 1024
+    factory: sessionmaker[Session],
+    storage: Path,
+    maximum: int = 1024 * 1024,
+    graph_limits: InstructionGraphLimits | None = None,
 ) -> TestClient:
     return TestClient(
         create_app(
@@ -60,6 +64,7 @@ def client_for(
             session_factory=factory,
             model_storage_root=storage / "models",
             model_max_upload_bytes=maximum,
+            instruction_graph_limits=graph_limits,
         )
     )
 
@@ -133,6 +138,80 @@ def test_mpd_warning_duplicate_search_and_pagination(
     assert detail["issues"][0]["code"] == "unresolved_reference"
 
 
+def test_instruction_graph_endpoint_expands_distinct_occurrences(
+    catalog_session_factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    seed_catalog(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+    mpd = "\n".join(
+        [
+            "0 FILE main.ldr",
+            f"1 4 {IDENTITY} module.ldr",
+            "0 STEP",
+            f"1 1 20 0 0 0 -1 0 1 0 0 0 0 1 module.ldr",
+            "0 FILE module.ldr",
+            f"1 16 {IDENTITY} 3001.dat",
+        ]
+    ).encode()
+    model_id = upload(client, mpd, "hierarchy.mpd").json()["modelId"]
+
+    response = client.get(f"/api/models/{model_id}/instruction-graph")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["modelId"] == model_id
+    assert body["modelDefinitionCount"] == 2
+    assert body["expandedOccurrenceCount"] == 3
+    assert body["instructionNodeCount"] == 4
+    assert body["traversalOrder"] == ["occ-000001", "occ-000002", "occ-000003"]
+    assert [item["attachmentStep"] for item in body["occurrences"][1:]] == [1, 2]
+    assert body["occurrences"][2]["localTransform"] == {
+        "translation": [20.0, 0.0, 0.0],
+        "matrix": [0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+    }
+    assert body["limits"] == {
+        "maximumNestingDepth": 32,
+        "maximumExpandedOccurrences": 10000,
+        "maximumInstructionNodes": 100000,
+    }
+
+
+def test_instruction_graph_endpoint_returns_limit_issues(
+    catalog_session_factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    seed_catalog(catalog_session_factory)
+    client = client_for(
+        catalog_session_factory,
+        tmp_path,
+        graph_limits=InstructionGraphLimits(max_expanded_occurrences=1),
+    )
+    mpd = "\n".join(
+        [
+            "0 FILE main.ldr",
+            f"1 4 {IDENTITY} module.ldr",
+            "0 FILE module.ldr",
+            f"1 16 {IDENTITY} 3001.dat",
+        ]
+    ).encode()
+    model_id = upload(client, mpd, "limited.mpd").json()["modelId"]
+
+    body = client.get(f"/api/models/{model_id}/instruction-graph").json()
+
+    assert body["truncated"] is True
+    assert body["expandedOccurrenceCount"] == 1
+    assert body["issues"] == [
+        {
+            "severity": "warning",
+            "code": "expanded_occurrence_limit_exceeded",
+            "message": "Submodel expansion stopped at the configured occurrence limit",
+            "sourceSubmodelName": "main.ldr",
+            "sourceFilename": "module.ldr",
+            "occurrenceId": "occ-000001",
+            "configuredLimit": 1,
+        }
+    ]
+
+
 def test_validation_rejections_leave_no_partial_data(
     catalog_session_factory: sessionmaker[Session], tmp_path: Path
 ) -> None:
@@ -179,6 +258,7 @@ def test_source_path_is_not_a_generic_file_reader(
         assert model is not None
         model.relative_storage_path = "../secret.ldr"
     assert client.get(f"/api/models/{model_id}/source").status_code == 404
+    assert client.get(f"/api/models/{model_id}/instruction-graph").status_code == 404
     assert client.get("/api/models/not-a-uuid/source").status_code == 422
 
 
