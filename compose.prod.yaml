@@ -18,7 +18,10 @@ services:
   api:
     build:
       context: ./apps/api
-      target: development
+      target: production
+      args:
+        APP_UID: ${LOCAL_UID:-1000}
+        APP_GID: ${LOCAL_GID:-1000}
     user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -28,17 +31,22 @@ services:
       LDRAW_LIBRARY_URL: ${LDRAW_LIBRARY_URL:-https://library.ldraw.org/library/updates/complete.zip}
       MODEL_STORAGE_ROOT: ${MODEL_STORAGE_ROOT:-/data/models}
       MODEL_MAX_UPLOAD_BYTES: ${MODEL_MAX_UPLOAD_BYTES:-26214400}
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "${API_WORKERS:-2}"
+      - --no-server-header
     volumes:
-      - ./apps/api:/app
       - ${LDRAW_DATA_PATH:-./data/ldraw}:/data/ldraw
       - ${MODEL_DATA_PATH:-./data/models}:/data/models
       - ./data/backups:/data/backups
-    ports:
-      - "127.0.0.1:8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
+    expose:
+      - "8000"
     healthcheck:
       test:
         - CMD
@@ -49,18 +57,25 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   web:
     build:
       context: ./apps/web
-      target: development
-    command: npm run dev -- --host 0.0.0.0
-    volumes:
-      - ./apps/web:/app
-      - web_node_modules:/app/node_modules
+      target: production
+    environment:
+      NGINX_UPLOAD_LIMIT: ${NGINX_UPLOAD_LIMIT:-26m}
     ports:
-      - "127.0.0.1:5173:5173"
+      - "127.0.0.1:${PROD_WEB_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
     depends_on:
       api:
         condition: service_healthy
@@ -68,4 +83,3 @@ services:
 
 volumes:
   db_data:
-  web_node_modules:

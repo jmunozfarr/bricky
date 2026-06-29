@@ -20,7 +20,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -42,9 +43,28 @@ button:hover:not(:disabled) {
 
 button:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
   outline: 3px solid rgb(37 99 235 / 35%);
   outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: 0.5rem;
+  color: #ffffff;
+  background: #172033;
+  font-weight: 700;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
 }
 
 .primary-nav {
@@ -67,6 +87,36 @@ select:focus-visible {
   color: #172033;
   background: #ffffff;
   box-shadow: 0 0 0 1px #dedbd3;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: #172033;
+  text-decoration: none;
+}
+
+.brand img {
+  flex: 0 0 auto;
+  border-radius: 0.75rem;
+  box-shadow: 0 0.45rem 1rem rgb(180 83 9 / 18%);
+}
+
+.brand span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.brand strong {
+  font-size: 1.65rem;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.brand small {
+  color: #697386;
+  font-size: 0.78rem;
 }
 
 .page-panel {
@@ -99,6 +149,12 @@ select:focus-visible {
   padding: 3rem 1rem;
   color: #697386;
   text-align: center;
+}
+
+.page-message {
+  border: 1px dashed #d6dbe3;
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 55%);
 }
 
 .overview-grid {
@@ -738,12 +794,26 @@ h1 {
 .error {
   display: grid;
   gap: 0.2rem;
-  max-width: 22rem;
+  max-width: 100%;
   padding: 0.75rem 0.9rem;
   border: 1px solid #fecaca;
   border-radius: 0.75rem;
   color: #991b1b;
   background: #fef2f2;
+}
+
+.not-found {
+  display: grid;
+  justify-items: start;
+  max-width: 44rem;
+  margin-inline: auto;
+}
+
+.not-found code {
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.3rem;
+  background: #f3f4f6;
+  overflow-wrap: anywhere;
 }
 
 .error span {
@@ -1150,6 +1220,16 @@ h1 {
     justify-content: flex-start;
   }
 
+  .primary-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .primary-nav a {
+    text-align: center;
+  }
+
   .catalog-filters {
     grid-template-columns: 1fr;
   }
@@ -1181,6 +1261,10 @@ h1 {
   .app-shell {
     width: min(100% - 1rem, 76rem);
     padding-top: 1.25rem;
+  }
+
+  .primary-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .viewer-heading {
@@ -1255,5 +1339,16 @@ h1 {
   .coverage-filters,
   .readiness-counts {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

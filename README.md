@@ -1,234 +1,317 @@
 # Bricky
 
-Bricky is a deliberately small, local application. It runs a React, TypeScript, and Vite frontend, a Python 3.13 FastAPI backend, and PostgreSQL 18. Docker and Docker Compose are the only host requirements; do not install project runtimes or dependencies directly on the host.
+Bricky is a local-first LEGO parts workspace that imports LDraw models, preserves their source, derives physical bills of materials, tracks personal inventory, and calculates exact build readiness without cloud services.
 
-Checkpoint 2 adds browser-side LDraw rendering and building-step navigation. Checkpoint 3 adds the official LDraw Parts Library. Checkpoint 4 adds the PostgreSQL catalog index and search UI. Checkpoint 5 adds persistent quantities for one hidden, no-login local workspace. Checkpoint 6 adds local LDR/MPD import, recursive bill-of-materials parsing, and model viewing. Checkpoint 7 adds live inventory coverage, build readiness, and a derived missing-parts wishlist for each imported model. Library installation and catalog indexing remain explicit operations.
+It is deliberately small enough to run on one workstation, but it applies production-oriented boundaries: PostgreSQL owns durable metadata, imported files are immutable, rebuildable catalog data is isolated from personal data, and operational work is explicit.
 
-## Requirements
+## Portfolio preview
 
-- Docker Engine with Docker Compose support
-- Available loopback ports `5173` and `8000`
+Screenshot slots are documented in [`docs/assets/README.md`](docs/assets/README.md). Recommended captures are the catalog viewer, model build-readiness view, missing-parts view, and local service overview. Screenshots are intentionally not fabricated or committed as placeholders.
 
-No SaaS products or external runtime services are required.
+For a concise presentation flow, use [`docs/DEMO.md`](docs/DEMO.md).
 
-## Environment setup
+## Capabilities
 
-Create the local environment file from the safe development template:
+- Install and serve the official LDraw Parts Library locally.
+- Transactionally index searchable part/color metadata in PostgreSQL.
+- Render official parts and imported LDR/MPD models with lazy-loaded Three.js.
+- Navigate authored LDraw building steps.
+- Track exact part/color inventory quantities in one hidden local workspace.
+- Import LDR/MPD sources up to a configurable limit and preserve original bytes.
+- Recursively resolve embedded MPD submodels, repeated quantities, and color inheritance.
+- Canonicalize validated official LDraw `Moved to` aliases during new imports.
+- Compare model BOM rows with current inventory by exact canonical part and physical color.
+- Derive build readiness and missing-parts views without persisted wishlist data.
+- Create and restore checksummed local backups of PostgreSQL and imported originals.
+- Run either a hot-reloading development stack or a production-like Nginx stack.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Browser[Browser]
+    Web[Nginx static web / Vite in development]
+    API[FastAPI]
+    DB[(PostgreSQL 18)]
+    Models[(Imported model files)]
+    LDraw[(Official LDraw library)]
+
+    Browser --> Web
+    Web -->|/api| API
+    API --> DB
+    API --> Models
+    API --> LDraw
+```
+
+Development publishes Vite on `127.0.0.1:5173` and FastAPI on `127.0.0.1:8000`. Production-like mode publishes only Nginx on `127.0.0.1:8080` by default; API and PostgreSQL remain internal Compose services.
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for service boundaries, storage ownership, data classification, import/coverage flows, and the multiuser scaling path.
+
+## Technology choices
+
+| Area | Stack | Reason |
+|---|---|---|
+| Frontend | React 19, strict TypeScript, Vite | Small typed UI with fast local iteration and route-level code splitting. |
+| 3D | Three.js, React Three Fiber | Browser-side LDraw rendering without generated GLB assets. |
+| API | Python 3.13, FastAPI, Pydantic | Explicit typed HTTP contracts and testable service logic. |
+| Persistence | PostgreSQL 18, SQLAlchemy 2, Alembic | Durable relational constraints, transactional rebuild/import behavior, portable dumps. |
+| Packaging | Docker Compose, multi-stage images, Nginx | No host runtimes; reproducible development and production-like operation. |
+| Quality | Pytest, Vitest, TypeScript compiler | Deterministic backend, API, parser, coverage, backup, and frontend helper checks. |
+
+Docker Engine with Docker Compose support is the only host application dependency. Linux shell utilities such as `sh`, `date`, and `sha256sum` are used by operational scripts.
+
+## Environment
+
+Create the local environment file:
 
 ```sh
 cp .env.example .env
 ```
 
-The template configures the PostgreSQL database, user, and development password. Change these values locally if needed. Do not commit `.env`.
+The checked-in values are convenient local-development defaults, not public-deployment credentials. Replace `POSTGRES_PASSWORD` before exposing any environment outside a trusted workstation.
 
-On Linux, the API container runs with `LOCAL_UID` and `LOCAL_GID` so files written through the `data/models` bind mount belong to the host developer rather than root. The template defaults both values to `1000`. If your account uses different IDs, obtain them and either export them before Compose commands or place the numeric results in `.env`:
+On Linux, set `LOCAL_UID` and `LOCAL_GID` to the numeric result of `id -u` and `id -g`. This keeps `data/ldraw`, `data/models`, and `data/backups` readable and removable by the host user without world-writable permissions.
 
-```sh
-export LOCAL_UID="$(id -u)"
-export LOCAL_GID="$(id -g)"
-```
-
-After upgrading an existing checkout, repair previously imported model ownership once without deleting any models:
+If an older checkout created root-owned model files, repair ownership once:
 
 ```sh
 docker compose run --rm --no-deps --user root api \
   sh -c 'chown -R "$LOCAL_UID:$LOCAL_GID" /data/models'
 ```
 
-This command changes ownership only; it does not make the directory world-writable or modify model contents. The PostgreSQL container continues to use its image-defined user.
+## Development setup
 
-## Run locally
-
-Build and start every service:
+Start the hot-reloading stack:
 
 ```sh
-docker compose up --build -d
+docker compose up --build
 ```
 
-Useful lifecycle commands:
+Or start it detached through the convenience script:
 
 ```sh
-docker compose logs -f api web db  # Follow service logs
-docker compose down                # Stop and preserve database data
-docker compose down --volumes      # Stop and remove all named volumes
+./scripts/dev-up.sh
 ```
 
-Re-run `docker compose up --build -d` after changing dependency files or Dockerfiles. Source changes reload automatically through bind mounts.
+Vite and Uvicorn reload from bind-mounted source. Local URLs:
 
-For a new checkout, use this complete setup sequence:
+- Overview: <http://127.0.0.1:5173/>
+- Catalog: <http://127.0.0.1:5173/catalog>
+- Inventory: <http://127.0.0.1:5173/inventory>
+- Models: <http://127.0.0.1:5173/models>
+- Viewer fixture: <http://127.0.0.1:5173/viewer-demo>
+- Direct development API health: <http://127.0.0.1:8000/api/health>
+
+### First-time database and LDraw setup
+
+Migrations, library installation, and catalog indexing are intentionally explicit:
 
 ```sh
-cp .env.example .env
-docker compose up --build -d
 docker compose run --rm api alembic upgrade head
+docker compose run --rm api python -m app.cli.ldraw_library status
 docker compose run --rm api python -m app.cli.ldraw_library install
+docker compose exec api python -m app.cli.ldraw_catalog status
 docker compose exec api python -m app.cli.ldraw_catalog rebuild
 ```
 
-## Frontend checks
-
-Run all frontend checks inside the existing Compose service:
+An existing archive can be installed without network access:
 
 ```sh
+docker compose run --rm api python -m app.cli.ldraw_library install \
+  --archive /data/ldraw/complete.zip
+```
+
+The installer verifies SHA-256, rejects unsafe archives, preserves upstream attribution, and atomically installs under `data/ldraw/official`. Normal application startup never downloads or updates the library.
+
+## Production-like local operation
+
+Production uses [`compose.prod.yaml`](compose.prod.yaml):
+
+```text
+browser -> Nginx :8080 -> FastAPI :8000 -> PostgreSQL :5432
+```
+
+Only `127.0.0.1:${PROD_WEB_PORT}` is published. Nginx serves fingerprinted static assets with immutable caching, uses no-cache behavior for `index.html`, supports React Router fallback, proxies `/api/`, applies basic security headers, and returns a JSON 503 when the API is unavailable.
+
+For a configured database, start the stack with:
+
+```sh
+./scripts/prod-up.sh
+# Equivalent:
+docker compose -f compose.prod.yaml up --build -d
+```
+
+For a new production-like checkout, use this explicit sequence:
+
+```sh
+docker compose -f compose.prod.yaml build
+docker compose -f compose.prod.yaml up -d db
+docker compose -f compose.prod.yaml run --rm api alembic upgrade head
+docker compose -f compose.prod.yaml run --rm api python -m app.cli.ldraw_library status
+docker compose -f compose.prod.yaml run --rm api python -m app.cli.ldraw_library install
+docker compose -f compose.prod.yaml run --rm api python -m app.cli.ldraw_catalog status
+docker compose -f compose.prod.yaml run --rm api python -m app.cli.ldraw_catalog rebuild
+docker compose -f compose.prod.yaml up -d
+```
+
+The API runs without reload and uses `API_WORKERS` (default `2`). Nginx and the API run as non-root users. No entrypoint applies migrations, downloads LDraw, or rebuilds the catalog.
+
+Useful operations:
+
+```sh
+docker compose -f compose.prod.yaml ps
+./scripts/logs.sh --prod
+./scripts/prod-down.sh
+```
+
+Shutdown preserves PostgreSQL and bind-mounted data. Never add `--volumes` unless permanent deletion is intended.
+
+## Backup and restore
+
+Backups are written under ignored `data/backups/`. The default archive contains:
+
+- `bricky-backup/manifest.json` with format version and UTC creation time;
+- `bricky-backup/database.dump`, a portable PostgreSQL custom-format dump;
+- `bricky-backup/models/`, including immutable imported originals;
+- SHA-256 and byte size for every payload.
+
+The default backup excludes `.env`, credentials, generated builds, and the reinstallable official LDraw library.
+
+Create a development or production-like backup:
+
+```sh
+./scripts/backup.sh
+./scripts/backup.sh --prod
+```
+
+The script requires a running database and briefly pauses running API/web services so the database dump and model files cannot diverge through application writes. PostgreSQL provides a transactionally consistent dump; direct out-of-band filesystem/database changes are not coordinated.
+
+Validate an archive without restoring it:
+
+```sh
+docker compose run --rm --no-deps api \
+  python -m app.cli.backup validate /data/backups/bricky-TIMESTAMP.tar.gz
+```
+
+Restore replaces the current PostgreSQL database and all imported model files. Create a current backup first, then use the deliberate confirmation flag:
+
+```sh
+./scripts/restore.sh --force data/backups/bricky-TIMESTAMP.tar.gz
+./scripts/restore.sh --prod --force data/backups/bricky-TIMESTAMP.tar.gz
+```
+
+Restore rejects unknown formats, invalid manifests/checksums, links, traversal paths, archives outside `data/backups`, and calls without `--force`. It applies current migrations after database restore but does not download LDraw. The final status output reports whether the library is missing or catalog rebuilding is required.
+
+For high-confidence testing, restore into a disposable Compose project and alternate `MODEL_DATA_PATH`/`BACKUP_DATA_PATH`, verify inventory/model/source bytes, then remove that project and its volume. Never test destructive restore against the only copy of personal data.
+
+## Tests and quality checks
+
+With `.env` present, the full convenience check starts required development services and runs all checks:
+
+```sh
+./scripts/check.sh
+```
+
+Equivalent commands:
+
+```sh
+docker compose config
+docker compose exec -T api pytest -q
+docker compose exec -T web npm run test
 docker compose exec -T web npm run typecheck
-docker compose exec -T web npm test
 docker compose exec -T web npm run build
 ```
 
-Run API tests inside the API service:
+Tests use synthetic schemas, libraries, archives, and model sources. They do not require or modify the real installed LDraw library or personal runtime data.
 
-```sh
-docker compose exec -T api pytest -q
-```
+## Data model and persistence
 
-## LDraw test fixture
+PostgreSQL is the source of truth for catalog metadata, the hidden `local-default` workspace, inventory, imported model records, BOM rows, import issues, and catalog fingerprints.
 
-The viewer loads [`apps/web/public/models/demo-steps.ldr`](apps/web/public/models/demo-steps.ldr). This small, synthetic MPD fixture contains three embedded, colored geometry stages and requires no external part files. It is a test asset, not an official LEGO model.
+The official catalog is rebuildable. Inventory and model BOM rows use stable natural LDraw identifiers rather than destructive foreign keys to catalog tables, so catalog rebuilds preserve personal state. Imported originals under `data/models` are required for later rendering and source download.
 
-## Official LDraw Parts Library
+Data deletion warnings:
 
-The official library is intentionally absent from Git and Docker images. It is large, changes independently from Bricky, and contains upstream attribution and license files that must remain unmodified. Bricky never downloads or updates it during normal application startup.
+- `docker compose down` preserves database and files.
+- `docker compose down --volumes` permanently deletes PostgreSQL-backed inventory and model metadata.
+- Deleting `data/models` leaves corresponding database records unable to render.
+- Delete models through the UI/API to remove metadata and managed files together.
+- Deleting `data/ldraw` removes the official library; it can be explicitly reinstalled and reindexed.
 
-Install it once from the repository root:
+## LDraw import behavior
 
-```sh
-docker compose run --rm api python -m app.cli.ldraw_library install
-```
+Supported uploads are `.ldr` and `.mpd`, up to 25 MiB by default. LDR normally represents one model. MPD is preferred for projects with embedded submodels because external sibling LDR files and ZIP projects are not resolved.
 
-The command streams the official `complete.zip`, verifies its SHA-256, validates and safely extracts it, then atomically installs it. `LDRAW_LIBRARY_URL` in `.env` can override the download URL. An existing archive mounted under `data/ldraw` can be used without network access:
+The importer:
 
-```sh
-docker compose run --rm api python -m app.cli.ldraw_library install --archive /data/ldraw/complete.zip
-```
+- preserves source bytes, original filename, and SHA-256;
+- recursively traverses embedded MPD submodels;
+- multiplies repeated submodel quantities;
+- applies LDraw color-16 inheritance;
+- excludes primitives, official subparts, geometry lines, and edge color 24 from physical BOM rows;
+- records structured warnings for unresolved or unsupported references;
+- stores top-level declared step separators while the renderer controls interactive step visibility.
 
-Inspect installation status and recorded metadata:
+The synthetic viewer fixture under `apps/web/public/models` requires no official parts and provides deterministic step-navigation validation.
 
-```sh
-docker compose run --rm api python -m app.cli.ldraw_library status
-```
+### Moved aliases
 
-Files are stored at `data/ldraw/official` on the host and mounted at `/data/ldraw/official` in the API container. The Bricky manifest is stored beside that directory. After installation, runtime rendering and API operation are offline and no automatic updates occur.
+Official compatibility files described as `~Moved to <part-id>` are canonicalized for new imports only when their source contains one finite type-1 reference to the same official target. Chains and case differences are supported; cycles, malformed files, unsafe paths, depth overflow, and targets that resolve only to subparts retain the original ID with a warning.
 
-To reinstall atomically, rerun the install command with `--force`. To remove the local copy entirely:
+This is not general substitution, assembly expansion, similar-part matching, or alternate-color matching. Existing imported models are never silently rewritten; delete and reimport them to obtain canonical BOM identifiers.
 
-```sh
-docker compose run --rm api sh -c 'rm -rf /data/ldraw/official /data/ldraw/official.manifest.json'
-```
+## Inventory coverage
 
-Deleting `data/ldraw` removes the local library. Keep `data/ldraw/.gitkeep` when cleaning the directory.
+Coverage compares normalized canonical LDraw part IDs and exact numeric physical color codes. Another color, an alias ID after canonical import, or a similar part does not count. Every model is evaluated independently against the full current inventory; pieces are not reserved, consumed, or allocated between models.
 
-The API exposes installation metadata at `/api/library/status` and serves only installed library files below `/api/ldraw/`.
+For each BOM row:
 
-## Parts catalog index
+- available quantity is `min(required, owned)`;
+- missing quantity is `max(required - owned, 0)`;
+- status is complete, partial, or missing;
+- percentage is rounded half-up to two decimals.
 
-Apply database migrations explicitly after starting the stack:
+The primary model percentage uses physical piece quantities, not only unique BOM lines. Missing-parts data is derived live from BOM and inventory and is never persisted as a wishlist.
 
-```sh
-docker compose run --rm api alembic upgrade head
-```
+## Security and local-first design
 
-Installing files does not index them. Build or replace the PostgreSQL catalog with:
+- No authentication exists because the MVP binds published ports to loopback and models one local workspace.
+- Production-like mode publishes only Nginx; API, PostgreSQL, and credentials remain inside the Compose network/environment.
+- Upload paths, archive members, LDraw extraction, and managed source paths are validated against traversal.
+- Backups contain no `.env` or database password.
+- Uploaded contents are not logged.
+- No SaaS, analytics, cloud storage, background worker, or external runtime API is required.
 
-```sh
-docker compose exec api python -m app.cli.ldraw_catalog rebuild
-```
-
-Inspect the installed and indexed fingerprints, counts, timestamp, and stale state:
-
-```sh
-docker compose exec api python -m app.cli.ldraw_catalog status
-```
-
-The index stores only searchable metadata, colors, relative asset paths, and one fingerprint record—never geometry or absolute filesystem paths. Replacing the official library changes its archive SHA-256. The API compares that installed fingerprint with the indexed fingerprint and marks the catalog stale until `rebuild` is run again.
-
-After replacing or force-reinstalling the library, rerun the catalog rebuild command. Rebuilds parse headers without modifying upstream files and replace catalog data in one database transaction. Indexing never runs automatically during API startup or from the browser.
-
-## Personal inventory
-
-Bricky resolves one deterministic internal workspace named `Local workspace` (`local-default`). There is no login, user identity, onboarding flow, or workspace picker. Every inventory request is scoped to this workspace by the API; browser requests cannot select a workspace ID.
-
-Inventory is stored in PostgreSQL rather than browser storage so quantities have one durable source of truth shared by the overview, catalog detail, and inventory screens. Browser local storage is not the source of truth.
-
-Apply the latest migration, including the workspace and inventory tables, with:
-
-```sh
-docker compose run --rm api alembic upgrade head
-```
-
-The inventory API provides:
-
-- `GET /api/inventory/summary`
-- `GET /api/inventory/items` with search, category, color, and pagination filters
-- `GET /api/inventory/items/{part_id}` for owned color variants
-- `PUT /api/inventory/items/{part_id}/{color_code}` to replace a quantity
-- `DELETE /api/inventory/items/{part_id}/{color_code}` for idempotent removal
-
-Inventory rows reference stable LDraw part IDs and color codes without destructive foreign keys to the rebuildable catalog tables. Writes validate against the current catalog, while reads preserve and display an inventory row even if catalog metadata temporarily disappears. Replacing or rebuilding the LDraw catalog does not intentionally delete personal inventory.
-
-Deleting the PostgreSQL Docker volume deletes personal inventory permanently:
-
-```sh
-docker compose down --volumes
-```
-
-Current limitations: one local workspace, positive quantities only, no history, reserved quantities, storage locations, sets, wishlists, import/export, scanning, or offline synchronization.
-
-## Imported LDraw models
-
-The Models page at <http://127.0.0.1:5173/models> accepts `.ldr` and `.mpd` files up to 25 MiB by default. Configure the server limit with `MODEL_MAX_UPLOAD_BYTES`. Uploaded originals are stored below `data/models/originals`, mounted only into the API container, and preserved byte-for-byte. Storage paths are application-generated; neither paths nor workspace IDs are accepted from browser requests.
-
-LDR is normally a single model file. MPD packages a main model and embedded submodels in one source, so MPD is recommended whenever a model depends on submodels. External sibling `.ldr` files and ZIP projects are not resolved in this checkpoint.
-
-The importer recursively resolves embedded MPD submodels, multiplies repeated submodel quantities, applies LDraw color-16 inheritance, and records indexed official parts as physical BOM items. Official part geometry remains in the separately installed LDraw library and is not copied into PostgreSQL. Primitives, official subparts, geometry lines, and color 24 are not physical BOM entries. Unknown colors and unresolved references are retained as structured warnings where possible. The stored declared-step count describes separators in the top-level source; runtime Three.js step metadata controls interactive navigation.
-
-Some official LDraw files are compatibility aliases whose description is `~Moved to <part-id>` and whose only geometry reference points to the canonical replacement. New imports validate both signals, follow moved-alias chains, and store the final canonical part ID in the derived BOM. References to an alias and its canonical replacement therefore merge when their physical color also matches. This is limited to authoritative official `Moved to` files; it is not general substitution, shortcut expansion, similar-part matching, or alternate-color matching. Alias failures retain the original BOM ID with a structured warning.
-
-Canonicalization never changes the uploaded source bytes, original filename, or source SHA-256. Models imported before this behavior keep their existing derived BOM until they are explicitly deleted and reimported; Bricky does not rewrite existing models during startup.
-
-Import statuses are:
-
-- `ready`: parsed without warnings.
-- `ready_with_warnings`: renderable/importable source with unresolved or non-fatal diagnostics.
-- `failed`: reserved for a persisted fatal result; structurally unusable uploads are currently rejected with HTTP 422 and are not stored.
-
-Model API endpoints are `POST /api/models`, paginated `GET /api/models`, `GET /api/models/{model_id}`, `GET /api/models/{model_id}/source`, and `DELETE /api/models/{model_id}`. Deleting a model removes its managed original, BOM, and issues, but never changes personal inventory or official library data. Duplicate source bytes in the local workspace return HTTP 409 with the existing model ID.
-
-Deleting `data/models` removes imported source files and leaves any corresponding database metadata unable to render. Delete models through the UI or API to remove both metadata and managed files consistently. Current limitations include no editing, generated steps, `.io` files, sibling-file projects, custom-part inventory, or thumbnails.
-
-## Model inventory coverage and missing parts
-
-Each imported model is compared dynamically with the current `local-default` inventory. Matching uses the normalized LDraw part ID and exact numeric physical color code. A quantity owned in another color, or a similar or aliased part, does not count. Missing catalog names or color metadata do not stop an exact natural-key match.
-
-Coverage distinguishes unique BOM rows from physical piece quantities. For each part/color row, available quantity is the smaller of required and owned quantity, and missing quantity never drops below zero. The primary readiness percentage is based on physical pieces: total available quantity divided by total required quantity. Percentages are rounded half-up to two decimal places. An empty BOM is treated as 100% covered and fully buildable.
-
-The model detail page exposes all coverage rows and a “Missing parts” view. This wishlist is a query result derived from current BOM and inventory data; it is not stored in a separate table and cannot become stale independently. Inventory edits refresh readiness and remove completed rows from the missing-parts view without reimporting the model.
-
-Inventory is not reserved or allocated between models. Every model is evaluated independently against the full current inventory, so totals across models are explicitly per-model comparisons and must not be interpreted as a globally buildable combination.
-
-Coverage endpoints are:
-
-- `GET /api/models/{model_id}/coverage`, optionally filtered with `status=complete|partial|missing` and `query=<part ID or name>`.
-- `GET /api/models/readiness-summary` for bounded overview aggregation.
-- `GET /api/models` includes a current coverage summary for each model on the requested page without frontend per-model requests.
-
-Current coverage limitations include no substitutions, alternate-color matching, reservations, allocations, inventory consumption, multiple model copies, persisted or manually edited wishlists, prices, stores, or purchase links.
+Public deployment is intentionally out of scope. It would require authentication, TLS, secret management, authorization, rate limiting, and a reviewed network policy.
 
 ## LDraw attribution and licensing
 
 This software uses the [LDraw Parts Library](https://www.ldraw.org/). LDraw is a community-run project and is not sponsored, endorsed, or authorized by the LEGO Group. Bricky is not affiliated with LDraw.org or the LEGO Group.
 
-Library files retain their original headers, author credits, `CAreadme.txt`, and other upstream notices. Applicable licenses are identified per upstream file and contributor agreement, including CC BY 2.0, CC BY 4.0, and CC0 content. See the [LDraw legal information](https://www.ldraw.org/legal-info) and the legal files included with the installed archive for the authoritative terms.
+Installed library files retain upstream headers, authors, `CAreadme.txt`, and license notices. Applicable terms include CC BY 2.0, CC BY 4.0, and CC0 content; the installed archive and [LDraw legal information](https://www.ldraw.org/legal-info) are authoritative.
 
-## Local URLs
+## Known limitations
 
-- Overview: <http://127.0.0.1:5173/>
-- Searchable catalog: <http://127.0.0.1:5173/catalog>
-- Personal inventory: <http://127.0.0.1:5173/inventory>
-- Imported models: <http://127.0.0.1:5173/models>
-- Synthetic step viewer: <http://127.0.0.1:5173/viewer-demo>
-- API health: <http://127.0.0.1:8000/api/health>
-- Proxied API health: <http://127.0.0.1:5173/api/health>
+- One hidden local workspace; no authentication or visible workspace selection.
+- No MOC editing, generated instructions, `.io`, GLB conversion, thumbnails, or sibling-file projects.
+- No sets, prices, stores, marketplaces, scanning, or cloud synchronization.
+- No part substitutions, alternative-color matching, reservations, or inventory consumption.
+- No persisted/manual wishlist; missing parts are derived per model.
+- Backup/restore is full replacement only, not incremental or point-in-time recovery.
+- Production-like packaging is for a trusted local workstation, not a public deployment.
 
-PostgreSQL is accessible only to other Compose services and is not published to the host. A healthy API response is `{"status":"ok","database":"ok"}` and is backed by a real `SELECT 1` query.
+## Roadmap beyond the MVP
 
-Catalog search is deterministic, case-insensitive substring matching without fuzzy-search extensions. Imported models preserve their source and derived BOM locally; editing, thumbnails, external sibling files, and automatic updates remain outside the current scope.
+A future version could introduce authenticated workspace ownership, authorized multiuser APIs, thumbnail jobs, explicit model-reparse tooling, and richer import packaging. Those changes should preserve natural-identifier isolation and immutable source storage rather than broadening this local MVP implicitly.
+
+## Engineering highlights
+
+- Recursive, cycle-aware MPD parsing with deterministic quantity/color propagation.
+- Exact canonical part/color BOM comparison and derived wishlist behavior.
+- Immutable source preservation with managed-path serving and deletion.
+- Transactional catalog replacement and model/BOM persistence.
+- Natural identifiers isolate personal data from rebuildable catalog tables.
+- Explicit offline/local operation with no startup downloads or hidden migrations.
+- Lazy-loaded Three.js keeps 3D code out of overview and list route bundles.
+- Versioned, checksummed backup/restore with traversal protection.
+- Broad automated coverage across parser, filesystem safety, persistence, API, frontend helpers, and operational archives.

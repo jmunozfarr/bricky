@@ -84,7 +84,7 @@ export default function OverviewPage() {
   return (
     <section className="page-panel" aria-labelledby="overview-title">
       <div className="page-heading">
-        <p className="eyebrow">Checkpoint 7</p>
+        <p className="eyebrow">Final local MVP</p>
         <h2 id="overview-title">Local workspace status</h2>
         <p>Runtime services, official library, and catalog indexing remain local.</p>
       </div>
