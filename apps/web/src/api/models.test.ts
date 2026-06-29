@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { getInstructionGraph, serializeCoverageQuery, serializeModelsQuery } from "./models";
+import {
+  getInstructionGraph,
+  getInstructionOccurrence,
+  serializeCoverageQuery,
+  serializeModelsQuery,
+} from "./models";
 
 describe("models query serialization", () => {
   it("encodes filters and clamps the page", () => {
@@ -40,6 +45,36 @@ describe("instruction graph API", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/models/model%2Fid/instruction-graph",
       { signal: undefined },
+    );
+    fetchMock.mockRestore();
+  });
+});
+
+describe("instruction playback API", () => {
+  it("passes cancellation to a bounded occurrence request", async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          );
+        }),
+    );
+
+    const request = getInstructionOccurrence(
+      "model/id",
+      "occ-000002",
+      3,
+      0,
+      controller.signal,
+    );
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/models/model%2Fid/instruction-occurrences/occ-000002?step=3&childOffset=0",
+      { signal: controller.signal },
     );
     fetchMock.mockRestore();
   });

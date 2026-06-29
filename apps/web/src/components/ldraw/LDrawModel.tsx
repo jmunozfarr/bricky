@@ -11,16 +11,29 @@ import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
 import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
 
 import { applyBuildingStepVisibility } from "./buildingSteps";
+import {
+  applyInstructionSceneVisibility,
+  createInstructionSceneIndex,
+  InstructionSceneIndex,
+  parseInstructionSourceManifest,
+} from "./instructionSceneIndex";
 
 export type LDrawLoadState =
   | { kind: "loading" }
-  | { kind: "ready"; model: Group }
+  | { kind: "ready"; model: Group; sceneIndex: InstructionSceneIndex | null }
   | { kind: "error"; message: string };
 
 export type LDrawModelSource =
   | { kind: "synthetic"; key: string; url: string }
   | {
       kind: "official";
+      key: string;
+      url: string;
+      materialsUrl: string;
+      partsLibraryPath: string;
+    }
+  | {
+      kind: "instruction-scope";
       key: string;
       url: string;
       materialsUrl: string;
@@ -40,17 +53,31 @@ function parseLDraw(loader: LDrawLoader, text: string): Promise<Group> {
   });
 }
 
+interface LoadedLDrawModel {
+  model: Group;
+  sceneIndex: InstructionSceneIndex | null;
+}
+
+export async function parseInstructionScopeText(
+  text: string,
+  loader = createLoader(),
+): Promise<LoadedLDrawModel> {
+  const manifest = parseInstructionSourceManifest(text);
+  const model = await parseLDraw(loader, text);
+  return { model, sceneIndex: createInstructionSceneIndex(model, manifest) };
+}
+
 async function loadModelSource(
   source: LDrawModelSource,
   signal: AbortSignal,
-): Promise<Group> {
+): Promise<LoadedLDrawModel> {
   const loader = createLoader();
   if (source.kind === "synthetic") {
     const response = await fetch(source.url, { signal });
     if (!response.ok) {
       throw new Error(`Model request returned HTTP ${response.status}`);
     }
-    return parseLDraw(loader, await response.text());
+    return { model: await parseLDraw(loader, await response.text()), sceneIndex: null };
   }
 
   loader.setPartsLibraryPath(source.partsLibraryPath);
@@ -63,10 +90,17 @@ async function loadModelSource(
     loader.addMaterial(redMaterial);
   }
 
-  return loader.loadAsync(source.url);
+  if (source.kind === "instruction-scope") {
+    const response = await fetch(source.url, { signal });
+    if (!response.ok) {
+      throw new Error(`Instruction scope request returned HTTP ${response.status}`);
+    }
+    return parseInstructionScopeText(await response.text(), loader);
+  }
+  return { model: await loader.loadAsync(source.url), sceneIndex: null };
 }
 
-function disposeModel(model: Group): void {
+export function disposeLDrawModel(model: Group): void {
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
 
@@ -100,16 +134,17 @@ export function useLDrawModel(source: LDrawModelSource): LDrawLoadState {
 
     async function loadModel() {
       try {
-        const model = await loadModelSource(source, controller.signal);
+        const loaded = await loadModelSource(source, controller.signal);
+        const model = loaded.model;
         model.rotation.x = Math.PI;
 
         if (!active) {
-          disposeModel(model);
+          disposeLDrawModel(model);
           return;
         }
 
         ownedModel = model;
-        setState({ kind: "ready", model });
+        setState({ kind: "ready", model, sceneIndex: loaded.sceneIndex });
       } catch (error: unknown) {
         if (!active || (error instanceof DOMException && error.name === "AbortError")) {
           return;
@@ -126,7 +161,7 @@ export function useLDrawModel(source: LDrawModelSource): LDrawLoadState {
       active = false;
       controller.abort();
       if (ownedModel !== null) {
-        disposeModel(ownedModel);
+        disposeLDrawModel(ownedModel);
       }
     };
   }, [source]);
@@ -143,6 +178,31 @@ export function LDrawModel({ model, selectedStep }: LDrawModelProps) {
   useLayoutEffect(() => {
     applyBuildingStepVisibility(model, selectedStep);
   }, [model, selectedStep]);
+
+  return <primitive object={model} />;
+}
+
+interface HierarchicalLDrawModelProps {
+  model: Group;
+  sceneIndex: InstructionSceneIndex;
+  activeOccurrenceId: string;
+  selectedStep: number;
+}
+
+export function HierarchicalLDrawModel({
+  model,
+  sceneIndex,
+  activeOccurrenceId,
+  selectedStep,
+}: HierarchicalLDrawModelProps) {
+  useLayoutEffect(() => {
+    applyInstructionSceneVisibility(
+      model,
+      sceneIndex,
+      activeOccurrenceId,
+      selectedStep,
+    );
+  }, [activeOccurrenceId, model, sceneIndex, selectedStep]);
 
   return <primitive object={model} />;
 }

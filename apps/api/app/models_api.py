@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import shutil
@@ -39,6 +40,15 @@ from app.services.instruction_graph import (
     InstructionGraph,
     InstructionGraphLimits,
     parse_instruction_graph,
+)
+from app.services.instruction_playback import (
+    PLAYBACK_CHILD_PAGE_SIZE,
+    PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM,
+    PlaybackData,
+    clear_playback_cache,
+    derive_occurrence_source,
+    parse_playback_data,
+    playback_occurrence,
 )
 from app.services.ldraw_model_parser import ModelParseError
 from app.services.local_workspace import resolve_local_workspace
@@ -264,6 +274,74 @@ class InstructionGraphResponse(BaseModel):
     issues: list[InstructionGraphIssueResponse]
     truncated: bool
     limits: InstructionGraphLimitsResponse
+
+
+class InstructionPlaybackIssueResponse(BaseModel):
+    code: str
+    message: str
+
+
+class InstructionPlaybackSummaryResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: uuid.UUID = Field(alias="modelId")
+    available: bool
+    root_occurrence_id: str | None = Field(alias="rootOccurrenceId")
+    fallback_reason: str | None = Field(alias="fallbackReason")
+    issues: list[InstructionPlaybackIssueResponse]
+
+
+class PlaybackBreadcrumbResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    occurrence_id: str = Field(alias="occurrenceId")
+    source_submodel_name: str = Field(alias="sourceSubmodelName")
+
+
+class PlaybackChildResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    occurrence_id: str = Field(alias="occurrenceId")
+    source_submodel_name: str = Field(alias="sourceSubmodelName")
+    attachment_step: int = Field(alias="attachmentStep")
+    traversal_order: int = Field(alias="traversalOrder")
+    repeated_definition_count: int = Field(alias="repeatedDefinitionCount")
+    repeated_definition_index: int = Field(alias="repeatedDefinitionIndex")
+
+
+class PlaybackStepSummaryResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    step: int
+    local_part_count: int = Field(alias="localPartCount")
+    child_attachment_count: int = Field(alias="childAttachmentCount")
+
+
+class InstructionPlaybackOccurrenceResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: uuid.UUID = Field(alias="modelId")
+    occurrence_id: str = Field(alias="occurrenceId")
+    parent_occurrence_id: str | None = Field(alias="parentOccurrenceId")
+    source_submodel_name: str = Field(alias="sourceSubmodelName")
+    attachment_step: int | None = Field(alias="attachmentStep")
+    depth: int
+    traversal_order: int = Field(alias="traversalOrder")
+    breadcrumbs: list[PlaybackBreadcrumbResponse]
+    local_step_count: int = Field(alias="localStepCount")
+    current_step: int = Field(alias="currentStep")
+    previous_step: int | None = Field(alias="previousStep")
+    next_step: int | None = Field(alias="nextStep")
+    complete: bool
+    empty: bool
+    repeated_definition_count: int = Field(alias="repeatedDefinitionCount")
+    repeated_definition_index: int = Field(alias="repeatedDefinitionIndex")
+    step_summary: PlaybackStepSummaryResponse = Field(alias="stepSummary")
+    children: list[PlaybackChildResponse]
+    child_total: int = Field(alias="childTotal")
+    child_offset: int = Field(alias="childOffset")
+    child_limit: int = Field(alias="childLimit")
+    scene_source_url: str = Field(alias="sceneSourceUrl")
 
 
 def _instruction_graph_response(
@@ -680,6 +758,22 @@ def create_models_router(
             )
         )
 
+    def playback_data_for(model: ImportedModel) -> PlaybackData:
+        source_path = _managed_source_path(storage_root, model)
+        if source_path is None or not source_path.is_file():
+            raise HTTPException(status_code=404, detail="Model source not found")
+        try:
+            return parse_playback_data(
+                model.source_sha256,
+                source_path.read_bytes(),
+                model.original_filename,
+                active_graph_limits,
+            )
+        except ModelParseError as error:
+            raise HTTPException(
+                status_code=422, detail=f"Instruction playback unavailable: {error}"
+            ) from error
+
     @router.get("/{model_id}/coverage", response_model=ModelCoverageResponse)
     def model_coverage(
         model_id: uuid.UUID,
@@ -797,6 +891,172 @@ def create_models_router(
         )
 
     @router.get(
+        "/{model_id}/instruction-playback",
+        response_model=InstructionPlaybackSummaryResponse,
+    )
+    def model_instruction_playback(
+        model_id: uuid.UUID, session: Session = Depends(session_dependency)
+    ) -> InstructionPlaybackSummaryResponse:
+        model = find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        data = playback_data_for(model)
+        session.commit()
+        fallback_reason = None
+        if not data.available:
+            fallback_reason = (
+                data.issues[0].message
+                if data.issues
+                else "The instruction graph is incomplete"
+            )
+        return InstructionPlaybackSummaryResponse(
+            model_id=model.public_id,
+            available=data.available,
+            root_occurrence_id=(
+                data.graph.root_occurrence_id if data.available else None
+            ),
+            fallback_reason=fallback_reason,
+            issues=[
+                InstructionPlaybackIssueResponse(
+                    code=issue.code, message=issue.message
+                )
+                for issue in data.issues
+            ],
+        )
+
+    @router.get(
+        "/{model_id}/instruction-occurrences/{occurrence_id}",
+        response_model=InstructionPlaybackOccurrenceResponse,
+    )
+    def model_instruction_occurrence(
+        model_id: uuid.UUID,
+        occurrence_id: str,
+        step: int = Query(default=1, ge=1),
+        child_offset: int = Query(default=0, alias="childOffset", ge=0),
+        child_limit: int = Query(
+            default=PLAYBACK_CHILD_PAGE_SIZE,
+            alias="childLimit",
+            ge=1,
+            le=PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM,
+        ),
+        session: Session = Depends(session_dependency),
+    ) -> InstructionPlaybackOccurrenceResponse:
+        model = find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        data = playback_data_for(model)
+        if occurrence_id not in data.occurrence_by_id:
+            raise HTTPException(status_code=404, detail="Instruction occurrence not found")
+        if not data.available:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Hierarchical playback is unavailable",
+                    "issues": [
+                        {"code": issue.code, "message": issue.message}
+                        for issue in data.issues
+                    ],
+                },
+            )
+        try:
+            result = playback_occurrence(
+                data,
+                occurrence_id,
+                current_step=step,
+                child_offset=child_offset,
+                child_limit=child_limit,
+            )
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        session.commit()
+        occurrence = result.occurrence
+        encoded_occurrence = quote(occurrence_id, safe="")
+        return InstructionPlaybackOccurrenceResponse(
+            model_id=model.public_id,
+            occurrence_id=occurrence.occurrence_id,
+            parent_occurrence_id=occurrence.parent_occurrence_id,
+            source_submodel_name=occurrence.source_submodel_name,
+            attachment_step=occurrence.attachment_step,
+            depth=occurrence.depth,
+            traversal_order=occurrence.traversal_order,
+            breadcrumbs=[
+                PlaybackBreadcrumbResponse(
+                    occurrence_id=item.occurrence_id,
+                    source_submodel_name=item.source_submodel_name,
+                )
+                for item in result.breadcrumbs
+            ],
+            local_step_count=result.local_step_count,
+            current_step=result.current_step,
+            previous_step=result.previous_step,
+            next_step=result.next_step,
+            complete=result.complete,
+            empty=result.empty,
+            repeated_definition_count=result.repeated_definition_count,
+            repeated_definition_index=result.repeated_definition_index,
+            step_summary=PlaybackStepSummaryResponse(
+                step=result.step_summary.step,
+                local_part_count=result.step_summary.local_part_count,
+                child_attachment_count=result.step_summary.child_attachment_count,
+            ),
+            children=[
+                PlaybackChildResponse(
+                    occurrence_id=child.occurrence_id,
+                    source_submodel_name=child.source_submodel_name,
+                    attachment_step=child.attachment_step,
+                    traversal_order=child.traversal_order,
+                    repeated_definition_count=child.repeated_definition_count,
+                    repeated_definition_index=child.repeated_definition_index,
+                )
+                for child in result.children
+            ],
+            child_total=result.child_total,
+            child_offset=result.child_offset,
+            child_limit=result.child_limit,
+            scene_source_url=(
+                f"/api/models/{quote(str(model.public_id), safe='')}/"
+                f"instruction-occurrences/{encoded_occurrence}/source"
+            ),
+        )
+
+    @router.get(
+        "/{model_id}/instruction-occurrences/{occurrence_id}/source",
+        response_class=Response,
+    )
+    def model_instruction_occurrence_source(
+        model_id: uuid.UUID,
+        occurrence_id: str,
+        session: Session = Depends(session_dependency),
+    ) -> Response:
+        model = find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        data = playback_data_for(model)
+        if occurrence_id not in data.occurrence_by_id:
+            raise HTTPException(status_code=404, detail="Instruction occurrence not found")
+        if not data.available:
+            raise HTTPException(
+                status_code=409, detail="Hierarchical playback is unavailable"
+            )
+        try:
+            content = derive_occurrence_source(data, occurrence_id)
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        session.commit()
+        etag = hashlib.sha256(
+            f"{model.source_sha256}:{occurrence_id}:v1".encode("ascii")
+        ).hexdigest()
+        return Response(
+            content=content,
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "Cache-Control": "private, max-age=3600",
+                "ETag": f'"{etag}"',
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
+    @router.get(
         "/{model_id}/instruction-graph", response_model=InstructionGraphResponse
     )
     def model_instruction_graph(
@@ -833,6 +1093,7 @@ def create_models_router(
         model_directory = source_path.parent if source_path is not None else None
         session.execute(delete(ImportedModel).where(ImportedModel.id == model.id))
         session.commit()
+        clear_playback_cache()
         if model_directory is not None and model_directory.is_dir():
             shutil.rmtree(model_directory)
         return Response(status_code=204)

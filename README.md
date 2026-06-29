@@ -19,7 +19,7 @@ For a concise presentation flow, use [`docs/DEMO.md`](docs/DEMO.md).
 - Track exact part/color inventory quantities in one hidden local workspace.
 - Import LDR/MPD sources up to a configurable limit and preserve original bytes.
 - Recursively resolve embedded MPD submodels, repeated quantities, and color inheritance.
-- Diagnose MPD source definitions and bounded hierarchical instruction occurrences without changing viewer playback.
+- Navigate MPD subassemblies with occurrence-local hierarchical steps, breadcrumbs, and an explicit flattened fallback.
 - Canonicalize validated official LDraw `Moved to` aliases during new imports.
 - Compare model BOM rows with current inventory by exact canonical part and physical color.
 - Derive build readiness and missing-parts views without persisted wishlist data.
@@ -47,7 +47,7 @@ flowchart LR
 Development publishes Vite on `127.0.0.1:5173` and FastAPI on `127.0.0.1:8000`. Production-like mode publishes only Nginx on `127.0.0.1:8080` by default; API and PostgreSQL remain internal Compose services.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for service boundaries, storage ownership, data classification, import/coverage flows, and the multiuser scaling path.
-The phase-one MPD graph design, supported subset, fixtures, and diagnostics are documented in [`docs/INSTRUCTION_GRAPH.md`](docs/INSTRUCTION_GRAPH.md).
+The MPD graph design, hierarchical playback semantics, supported subset, fixtures, and diagnostics are documented in [`docs/INSTRUCTION_GRAPH.md`](docs/INSTRUCTION_GRAPH.md). Bricky does not generate MPDs or convert instruction PDFs.
 
 ## Technology choices
 
@@ -295,7 +295,7 @@ Installed library files retain upstream headers, authors, `CAreadme.txt`, and li
 ## Known limitations
 
 - One hidden local workspace; no authentication or visible workspace selection.
-- No MOC editing, generated instructions, `.io`, GLB conversion, thumbnails, or sibling-file projects.
+- No MOC/MPD generation or editing, automatic instructions, instruction-PDF conversion, `.io`, GLB conversion, thumbnails, or sibling-file projects.
 - No sets, prices, stores, marketplaces, scanning, or cloud synchronization.
 - No part substitutions, alternative-color matching, reservations, or inventory consumption.
 - No persisted/manual wishlist; missing parts are derived per model.

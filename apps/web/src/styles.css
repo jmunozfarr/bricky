@@ -868,6 +868,152 @@ h1 {
   box-shadow: 0 1rem 3rem rgb(31 41 55 / 9%);
 }
 
+.viewer-mode-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid #d8d5ce;
+  border-radius: 0.9rem;
+  background: #ffffff;
+}
+
+.viewer-mode-panel h2,
+.viewer-mode-panel p {
+  margin-bottom: 0;
+}
+
+.viewer-mode-panel .metadata-warning {
+  flex-basis: 100%;
+}
+
+.instruction-breadcrumbs {
+  padding: 0 1.5rem 1rem;
+}
+
+.instruction-breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.instruction-breadcrumbs li:not(:last-child)::after {
+  margin-left: 0.35rem;
+  color: #9ca3af;
+  content: "/";
+}
+
+.instruction-breadcrumbs button {
+  min-height: auto;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  color: #1d4ed8;
+  background: transparent;
+}
+
+.instruction-breadcrumbs [aria-current="page"] {
+  font-weight: 750;
+}
+
+.hierarchical-controls {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.local-step-selector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.local-step-selector input {
+  width: 6rem;
+  padding: 0.5rem;
+  border: 1px solid #cbd0d8;
+  border-radius: 0.5rem;
+}
+
+.hierarchical-scope-actions,
+.child-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+}
+
+.playback-status {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  color: #4b5563;
+  text-align: center;
+}
+
+.child-subassemblies {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid #d8dadd;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.child-subassemblies h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.child-subassemblies ul {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.child-subassemblies li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem;
+  border: 1px solid #e1e4e8;
+  border-radius: 0.65rem;
+  background: #ffffff;
+}
+
+.child-subassemblies li > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.child-subassemblies li span,
+.child-pagination span {
+  color: #697386;
+  font-size: 0.8rem;
+}
+
+.scene-diagnostic {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 0.35rem;
+  color: #4b5563;
+  background: rgb(255 255 255 / 82%);
+  font-size: 0.7rem;
+}
+
 .viewer-heading {
   display: flex;
   align-items: end;
@@ -1326,6 +1472,22 @@ h1 {
   .viewer-controls {
     gap: 1rem;
     padding: 1rem;
+  }
+
+  .viewer-mode-panel,
+  .child-subassemblies li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hierarchical-controls {
+    padding: 1rem;
+  }
+
+  .hierarchical-scope-actions,
+  .child-pagination {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .step-actions {

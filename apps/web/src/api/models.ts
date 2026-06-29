@@ -133,6 +133,62 @@ export interface InstructionGraph {
   };
 }
 
+export interface InstructionPlaybackIssue {
+  code: string;
+  message: string;
+}
+
+export interface InstructionPlaybackSummary {
+  modelId: string;
+  available: boolean;
+  rootOccurrenceId: string | null;
+  fallbackReason: string | null;
+  issues: InstructionPlaybackIssue[];
+}
+
+export interface PlaybackBreadcrumb {
+  occurrenceId: string;
+  sourceSubmodelName: string;
+}
+
+export interface PlaybackChild {
+  occurrenceId: string;
+  sourceSubmodelName: string;
+  attachmentStep: number;
+  traversalOrder: number;
+  repeatedDefinitionCount: number;
+  repeatedDefinitionIndex: number;
+}
+
+export interface InstructionPlaybackOccurrence {
+  modelId: string;
+  occurrenceId: string;
+  parentOccurrenceId: string | null;
+  sourceSubmodelName: string;
+  attachmentStep: number | null;
+  depth: number;
+  traversalOrder: number;
+  breadcrumbs: PlaybackBreadcrumb[];
+  localStepCount: number;
+  currentStep: number;
+  previousStep: number | null;
+  nextStep: number | null;
+  complete: boolean;
+  empty: boolean;
+  repeatedDefinitionCount: number;
+  repeatedDefinitionIndex: number;
+  stepSummary: {
+    step: number;
+    localPartCount: number;
+    childAttachmentCount: number;
+  };
+  children: PlaybackChild[];
+  childTotal: number;
+  childOffset: number;
+  childLimit: number;
+  sceneSourceUrl: string;
+}
+
 export interface ModelsPage {
   items: ModelSummary[];
   page: number;
@@ -232,6 +288,33 @@ export function getInstructionGraph(
 ): Promise<InstructionGraph> {
   return fetchJson<InstructionGraph>(
     `/api/models/${encodeURIComponent(modelId)}/instruction-graph`,
+    signal,
+  );
+}
+
+export function getInstructionPlayback(
+  modelId: string,
+  signal?: AbortSignal,
+): Promise<InstructionPlaybackSummary> {
+  return fetchJson<InstructionPlaybackSummary>(
+    `/api/models/${encodeURIComponent(modelId)}/instruction-playback`,
+    signal,
+  );
+}
+
+export function getInstructionOccurrence(
+  modelId: string,
+  occurrenceId: string,
+  step: number,
+  childOffset = 0,
+  signal?: AbortSignal,
+): Promise<InstructionPlaybackOccurrence> {
+  const params = new URLSearchParams({
+    step: String(step),
+    childOffset: String(childOffset),
+  });
+  return fetchJson<InstructionPlaybackOccurrence>(
+    `/api/models/${encodeURIComponent(modelId)}/instruction-occurrences/${encodeURIComponent(occurrenceId)}?${params}`,
     signal,
   );
 }

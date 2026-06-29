@@ -50,7 +50,7 @@ sequenceDiagram
     API-->>Browser: public UUID and import summary
 ```
 
-Imported source can also be parsed on demand into a bounded hierarchical instruction graph. This diagnostic representation is not persisted and does not participate in the BOM transaction or current Three.js playback. See [`INSTRUCTION_GRAPH.md`](INSTRUCTION_GRAPH.md).
+Imported source can also be parsed on demand into a bounded hierarchical instruction graph. Playback requests use bounded occurrence metadata and ephemeral occurrence-scoped MPD source; neither representation is persisted or participates in the BOM transaction. The original flattened Three.js mode remains available. See [`INSTRUCTION_GRAPH.md`](INSTRUCTION_GRAPH.md).
 
 Source bytes are never normalized. Only derived rows are canonicalized.
 
