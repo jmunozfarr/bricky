@@ -50,10 +50,17 @@ export default function ModelsPage() {
   useEffect(() => {
     if (searchInput === query) return;
     const timer = window.setTimeout(() => {
-      updateParams("query", searchInput.trim(), true);
+      setParams((current) => {
+        const next = new URLSearchParams(current);
+        const trimmed = searchInput.trim();
+        if (trimmed) next.set("query", trimmed);
+        else next.delete("query");
+        next.set("page", "1");
+        return next;
+      });
     }, 300);
     return () => window.clearTimeout(timer);
-  });
+  }, [query, searchInput, setParams]);
 
   function updateParams(key: "query" | "status" | "page", value: string, reset = false) {
     setParams((current) => {
