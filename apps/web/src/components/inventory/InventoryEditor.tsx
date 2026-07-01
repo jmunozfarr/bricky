@@ -34,13 +34,12 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
       .then(([loadedColors, loadedVariants]) => {
         setColors(loadedColors);
         setVariants(loadedVariants);
-        const defaultColor =
-          loadedColors.find((color) => color.code === 4) ?? loadedColors[0];
+        const defaultColor = loadedColors.find((color) => color.code === 4) ?? loadedColors[0];
         setSelectedCode(defaultColor?.code ?? null);
         setQuantityInput(
           String(
-            loadedVariants.find((variant) => variant.colorCode === defaultColor?.code)
-              ?.quantity ?? 1,
+            loadedVariants.find((variant) => variant.colorCode === defaultColor?.code)?.quantity ??
+              1,
           ),
         );
         setLoading(false);
@@ -67,6 +66,9 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
     setQuantityInput(String(currentVariant?.quantity ?? 1));
     setMessage(null);
     setError(null);
+    // The input must reset only when the selected color changes; reacting to
+    // quantity refreshes would clobber in-progress edits and saved messages.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCode]);
 
   async function save() {
@@ -173,8 +175,16 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
           </div>
         </div>
       )}
-      {message && <p className="success-message" role="status">{message}</p>}
-      {error && <p className="inline-error" role="alert">{error}</p>}
+      {message && (
+        <p className="success-message" role="status">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="inline-error" role="alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }

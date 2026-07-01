@@ -1,6 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
 
-
 export default function NotFoundPage() {
   const location = useLocation();
   return (
@@ -10,7 +9,9 @@ export default function NotFoundPage() {
       <p>
         Bricky could not find <code>{location.pathname}</code>. No data was changed.
       </p>
-      <Link className="button-link" to="/">Return to overview</Link>
+      <Link className="button-link" to="/">
+        Return to overview
+      </Link>
     </section>
   );
 }

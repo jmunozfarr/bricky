@@ -4,9 +4,9 @@ import { nextPage, previousPage, serializePartsQuery } from "./catalog";
 
 describe("catalog query serialization", () => {
   it("encodes search values safely and omits empty filters", () => {
-    expect(
-      serializePartsQuery({ query: "brick & plate", category: "", page: 2 }),
-    ).toBe("query=brick+%26+plate&page=2");
+    expect(serializePartsQuery({ query: "brick & plate", category: "", page: 2 })).toBe(
+      "query=brick+%26+plate&page=2",
+    );
   });
 });
 

@@ -11,7 +11,6 @@ from app.services.ldraw_model_parser import (
     decode_model_source,
 )
 
-
 DEFAULT_MAX_NESTING_DEPTH = 32
 DEFAULT_MAX_EXPANDED_OCCURRENCES = 10_000
 DEFAULT_MAX_INSTRUCTION_NODES = 100_000
@@ -338,9 +337,7 @@ def parse_instruction_graph(
                 continue
             if line_type == "0" and _safe_render_meta(stripped):
                 meta_steps[-1].append(
-                    LocalRenderMeta(
-                        text=stripped, local_step=step, source_order=source_order
-                    )
+                    LocalRenderMeta(text=stripped, local_step=step, source_order=source_order)
                 )
                 continue
             if line_type != "1":
@@ -402,7 +399,6 @@ def parse_instruction_graph(
             ModelDefinition(source_submodel_name=section_name, local_steps=local_steps)
         )
 
-    root_definition = definitions[main_key]
     root = _OccurrenceBuilder(
         occurrence_id="occ-000001",
         parent_occurrence_id=None,
@@ -438,16 +434,11 @@ def parse_instruction_graph(
 
         source_node = definition.nodes[frame.next_node_index]
         frame.next_node_index += 1
-        node_color = _effective_color(
-            source_node.color_code, frame.occurrence.effective_color
-        )
+        node_color = _effective_color(source_node.color_code, frame.occurrence.effective_color)
         child_id: str | None = None
         child_frame: _TraversalFrame | None = None
 
-        if (
-            source_node.kind == "submodel_reference"
-            and source_node.normalized_filename is not None
-        ):
+        if source_node.kind == "submodel_reference" and source_node.normalized_filename is not None:
             child_key = source_node.normalized_filename
             child_depth = frame.occurrence.depth + 1
             if child_key in frame.ancestry:
@@ -543,9 +534,7 @@ def parse_instruction_graph(
         maximum_nesting_depth=max(
             (occurrence.depth for occurrence in frozen_occurrences), default=0
         ),
-        traversal_order=tuple(
-            occurrence.occurrence_id for occurrence in frozen_occurrences
-        ),
+        traversal_order=tuple(occurrence.occurrence_id for occurrence in frozen_occurrences),
         issues=tuple(issues),
         truncated=truncated,
     )

@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Full compose gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare environment file
+        run: |
+          cp .env.example .env
+          sed -i "s/^LOCAL_UID=.*/LOCAL_UID=$(id -u)/" .env
+          sed -i "s/^LOCAL_GID=.*/LOCAL_GID=$(id -g)/" .env
+
+      - name: Run lint, type, test, build, bundle, and e2e gates
+        run: ./scripts/check.sh
+
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --tail 200 db api web
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down

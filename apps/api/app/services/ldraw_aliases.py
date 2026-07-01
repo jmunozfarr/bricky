@@ -8,7 +8,6 @@ from typing import Literal
 
 from app.services.ldraw_metadata import decode_ldraw_text, parse_part_header
 
-
 AliasResolutionStatus = Literal[
     "unchanged",
     "resolved",
@@ -141,7 +140,7 @@ class LDrawMovedAliasResolver:
                         is_alias,
                         immediate_target,
                         "cycle",
-                        tuple(chain + [current]),
+                        (*chain, current),
                     ),
                 )
             inspection = self.inspect(current)
@@ -154,7 +153,7 @@ class LDrawMovedAliasResolver:
                         True,
                         immediate_target,
                         "malformed",
-                        tuple(chain + [current]),
+                        (*chain, current),
                     ),
                 )
             if not inspection.is_moved_alias:
@@ -207,10 +206,7 @@ class LDrawMovedAliasResolver:
         )
 
     def resolve_many(self, part_ids: set[str]) -> dict[str, AliasResolution]:
-        return {
-            part_id: self.resolve(part_id)
-            for part_id in sorted(part_ids, key=str.lower)
-        }
+        return {part_id: self.resolve(part_id) for part_id in sorted(part_ids, key=str.lower)}
 
     def _inspect_moved_record(
         self, normalized_id: str, record: OfficialPartRecord
@@ -228,12 +224,8 @@ class LDrawMovedAliasResolver:
         source_match = _MOVED_DESCRIPTION.fullmatch(header.description)
         if catalog_match is None or source_match is None:
             return AliasInspection(record.part_id, True, None, True)
-        catalog_target = _normalize_target(
-            catalog_match.group(1), require_dat_suffix=False
-        )
-        source_target = _normalize_target(
-            source_match.group(1), require_dat_suffix=False
-        )
+        catalog_target = _normalize_target(catalog_match.group(1), require_dat_suffix=False)
+        source_target = _normalize_target(source_match.group(1), require_dat_suffix=False)
         reference_target = self._validated_target_reference(content)
         if (
             catalog_target is None
@@ -290,8 +282,6 @@ class LDrawMovedAliasResolver:
         path = self._safe_source_path(record)
         return path is not None and path.is_file()
 
-    def _cache_resolution(
-        self, normalized_id: str, resolution: AliasResolution
-    ) -> AliasResolution:
+    def _cache_resolution(self, normalized_id: str, resolution: AliasResolution) -> AliasResolution:
         self._resolution_cache[normalized_id] = resolution
         return resolution

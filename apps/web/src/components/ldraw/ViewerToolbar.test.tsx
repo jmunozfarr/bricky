@@ -10,10 +10,7 @@ describe("viewer toolbar", () => {
   it("emits camera preset and zoom commands", () => {
     const onCameraCommand = vi.fn();
     render(
-      <ViewerToolbar
-        containerRef={createRef<HTMLElement>()}
-        onCameraCommand={onCameraCommand}
-      />,
+      <ViewerToolbar containerRef={createRef<HTMLElement>()} onCameraCommand={onCameraCommand} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Front" }));

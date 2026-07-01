@@ -21,9 +21,9 @@ describe("models query serialization", () => {
 
 describe("coverage query serialization", () => {
   it("encodes validated status and trimmed part search", () => {
-    expect(
-      serializeCoverageQuery({ status: "partial", query: "  3001 & red  " }),
-    ).toBe("status=partial&query=3001+%26+red");
+    expect(serializeCoverageQuery({ status: "partial", query: "  3001 & red  " })).toBe(
+      "status=partial&query=3001+%26+red",
+    );
   });
 
   it("omits empty filters", () => {
@@ -42,10 +42,9 @@ describe("instruction graph API", () => {
 
     await getInstructionGraph("model/id");
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/models/model%2Fid/instruction-graph",
-      { signal: undefined },
-    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/models/model%2Fid/instruction-graph", {
+      signal: undefined,
+    });
     fetchMock.mockRestore();
   });
 });
@@ -62,13 +61,7 @@ describe("instruction playback API", () => {
         }),
     );
 
-    const request = getInstructionOccurrence(
-      "model/id",
-      "occ-000002",
-      3,
-      0,
-      controller.signal,
-    );
+    const request = getInstructionOccurrence("model/id", "occ-000002", 3, 0, controller.signal);
     controller.abort();
 
     await expect(request).rejects.toMatchObject({ name: "AbortError" });

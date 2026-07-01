@@ -63,21 +63,23 @@ const manifest: BuildManifest = {
       step: 1,
       directGeometryCommandCount: 0,
       attachments: [],
-      parts: [{
-        sourcePartId: "3001",
-        partId: "3001",
-        aliasApplied: false,
-        instructionNodeIds: ["node-1"],
-        partName: "Brick 2 x 4",
-        colorCode: 4,
-        colorName: "Red",
-        colorHex: "#c91a09",
-        quantityThisStep: 1,
-        ownedQuantity: 0,
-        modelRequiredQuantity: 1,
-        modelMissingQuantity: 1,
-        catalogAvailable: true,
-      }],
+      parts: [
+        {
+          sourcePartId: "3001",
+          partId: "3001",
+          aliasApplied: false,
+          instructionNodeIds: ["node-1"],
+          partName: "Brick 2 x 4",
+          colorCode: 4,
+          colorName: "Red",
+          colorHex: "#c91a09",
+          quantityThisStep: 1,
+          ownedQuantity: 0,
+          modelRequiredQuantity: 1,
+          modelMissingQuantity: 1,
+          catalogAvailable: true,
+        },
+      ],
     },
     { step: 2, directGeometryCommandCount: 0, attachments: [], parts: [] },
   ],
@@ -97,7 +99,9 @@ describe("visual builder workspace", () => {
   it("presents exact current-step parts and switches modes without refetching", async () => {
     render(
       <MemoryRouter initialEntries={["/models/model-1/build"]}>
-        <Routes><Route path="/models/:modelId/build" element={<VisualBuilderPage />} /></Routes>
+        <Routes>
+          <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
+        </Routes>
       </MemoryRouter>,
     );
 

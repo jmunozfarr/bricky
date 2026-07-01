@@ -63,7 +63,7 @@ def test_installs_archive_with_top_level_ldraw_directory(tmp_path: Path) -> None
 def test_rejects_archive_without_ldconfig(tmp_path: Path) -> None:
     archive = create_library_archive(tmp_path / "missing-config.zip", include_config=False)
 
-    with pytest.raises(LibraryInstallError, match="LDConfig.ldr is missing"):
+    with pytest.raises(LibraryInstallError, match=r"LDConfig\.ldr is missing"):
         install_library(tmp_path / "official", archive_path=archive)
 
 

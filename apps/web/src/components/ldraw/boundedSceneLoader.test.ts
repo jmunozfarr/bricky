@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  LatestScopeLoader,
-  ScopeLoadSupersededError,
-} from "./boundedSceneLoader";
+import { LatestScopeLoader, ScopeLoadSupersededError } from "./boundedSceneLoader";
 
 interface Deferred<Value> {
   promise: Promise<Value>;
@@ -20,7 +17,7 @@ function deferred<Value>(): Deferred<Value> {
 
 describe("bounded instruction scene loader", () => {
   it("coalesces rapid navigation to the newest pending parse", async () => {
-    const loads: Array<{ key: string; result: Deferred<string> }> = [];
+    const loads: { key: string; result: Deferred<string> }[] = [];
     let active = 0;
     let maximumActive = 0;
     const disposed: string[] = [];
@@ -42,9 +39,7 @@ describe("bounded instruction scene loader", () => {
     const first = loader.request("a", "a");
     const middle = loader.request("b", "b");
     const latest = loader.request("c", "c");
-    const middleResult = expect(middle).rejects.toBeInstanceOf(
-      ScopeLoadSupersededError,
-    );
+    const middleResult = expect(middle).rejects.toBeInstanceOf(ScopeLoadSupersededError);
 
     expect(loads.map((item) => item.key)).toEqual(["a"]);
     loads[0]!.result.resolve("scene-a");
@@ -59,7 +54,7 @@ describe("bounded instruction scene loader", () => {
   });
 
   it("reuses successful scenes and evicts least-recently-used entries", async () => {
-    const load = vi.fn(async (key: string) => `scene-${key}`);
+    const load = vi.fn((key: string) => Promise.resolve(`scene-${key}`));
     const dispose = vi.fn<(value: string) => void>();
     const loader = new LatestScopeLoader(2, load, dispose);
     loader.setNamespace("model-one");

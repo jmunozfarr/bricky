@@ -1,9 +1,10 @@
-import { Group } from "three";
+import { Group, Object3D } from "three";
 
-import {
-  isPlaybackEntryVisible,
-  PlaybackVisibilityEntry,
-} from "./hierarchicalPlayback";
+import { isPlaybackEntryVisible, PlaybackVisibilityEntry } from "./hierarchicalPlayback";
+
+function isGroup(object: Object3D): object is Group {
+  return object instanceof Group;
+}
 
 const occurrenceNamePattern = /^__bricky_occ_(\d+)\.ldr$/;
 const nodeNamePattern = /^__bricky_node_(\d+)\.ldr$/;
@@ -84,7 +85,9 @@ export function parseInstructionSourceManifest(text: string): InstructionSourceM
         throw new InstructionSceneIndexError("Derived source occurrence metadata is incomplete.");
       }
       if (occurrences.has(occurrenceId)) {
-        throw new InstructionSceneIndexError(`Occurrence ${occurrenceId} appears twice in the manifest.`);
+        throw new InstructionSceneIndexError(
+          `Occurrence ${occurrenceId} appears twice in the manifest.`,
+        );
       }
       const attachmentStep = Number(attachment);
       const traversalPosition = Number(traversal);
@@ -109,7 +112,9 @@ export function parseInstructionSourceManifest(text: string): InstructionSourceM
         throw new InstructionSceneIndexError("Derived source part metadata is incomplete.");
       }
       if (parts.has(instructionNodeId)) {
-        throw new InstructionSceneIndexError(`Part ${instructionNodeId} appears twice in the manifest.`);
+        throw new InstructionSceneIndexError(
+          `Part ${instructionNodeId} appears twice in the manifest.`,
+        );
       }
       const localStep = Number(step);
       const traversalPosition = Number(traversal);
@@ -129,20 +134,24 @@ export function parseInstructionSourceManifest(text: string): InstructionSourceM
       });
     }
   }
-  if ((version !== 1 && version !== 2) || rootOccurrenceId === null || !occurrences.has(rootOccurrenceId)) {
+  if (
+    (version !== 1 && version !== 2) ||
+    rootOccurrenceId === null ||
+    !occurrences.has(rootOccurrenceId)
+  ) {
     throw new InstructionSceneIndexError("Derived source manifest is missing or unsupported.");
   }
   return { version, rootOccurrenceId, occurrences, parts, rootWrapped };
 }
 
 function occurrenceIdFromGroupName(name: string): string | null {
-  const match = occurrenceNamePattern.exec(name);
-  return match ? `occ-${match[1]}` : null;
+  const digits = occurrenceNamePattern.exec(name)?.[1];
+  return digits === undefined ? null : `occ-${digits}`;
 }
 
 function nodeIdFromGroupName(name: string): string | null {
-  const match = nodeNamePattern.exec(name);
-  return match ? `node-${match[1]}` : null;
+  const digits = nodeNamePattern.exec(name)?.[1];
+  return digits === undefined ? null : `node-${digits}`;
 }
 
 export function createInstructionSceneIndex(
@@ -178,7 +187,7 @@ export function createInstructionSceneIndex(
 
   model.traverse((object) => {
     objectCount += 1;
-    if (!(object instanceof Group)) return;
+    if (!isGroup(object)) return;
     const occurrenceId = occurrenceIdFromGroupName(object.name);
     if (occurrenceId !== null) {
       addOccurrence(object, occurrenceId);
@@ -234,10 +243,6 @@ export function applyInstructionSceneVisibility(
     if (object instanceof Group) object.visible = true;
   });
   for (const entry of index.entries) {
-    entry.group.visible = isPlaybackEntryVisible(
-      entry,
-      activeOccurrenceId,
-      currentStep,
-    );
+    entry.group.visible = isPlaybackEntryVisible(entry, activeOccurrenceId, currentStep);
   }
 }

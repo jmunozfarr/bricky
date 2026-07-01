@@ -5,21 +5,16 @@ export type CameraCommand =
   | { id: number; kind: "fit"; preset: CameraPreset }
   | { id: number; kind: "zoom"; direction: "in" | "out" };
 export type CameraCommandInput =
-  | { kind: "fit"; preset: CameraPreset }
-  | { kind: "zoom"; direction: "in" | "out" };
+  { kind: "fit"; preset: CameraPreset } | { kind: "zoom"; direction: "in" | "out" };
 
 interface ViewerToolbarProps {
   containerRef: RefObject<HTMLElement | null>;
   onCameraCommand: (command: CameraCommandInput) => void;
 }
 
-export function ViewerToolbar({
-  containerRef,
-  onCameraCommand,
-}: ViewerToolbarProps) {
+export function ViewerToolbar({ containerRef, onCameraCommand }: ViewerToolbarProps) {
   const [fullscreen, setFullscreen] = useState(false);
-  const fullscreenAvailable =
-    typeof document !== "undefined" && document.fullscreenEnabled;
+  const fullscreenAvailable = typeof document !== "undefined" && document.fullscreenEnabled;
 
   useEffect(() => {
     const update = () => setFullscreen(document.fullscreenElement === containerRef.current);
@@ -78,8 +73,7 @@ export function ViewerToolbar({
         <details className="viewer-shortcuts">
           <summary>Shortcuts</summary>
           <p>
-            Left/Right steps · Home/End first/final · R reset · F fullscreen ·
-            1–4 views · +/− zoom
+            Left/Right steps · Home/End first/final · R reset · F fullscreen · 1–4 views · +/− zoom
           </p>
         </details>
       </div>

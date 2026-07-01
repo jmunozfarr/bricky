@@ -1,10 +1,7 @@
 import { Group } from "three";
 import { describe, expect, it } from "vitest";
 
-import {
-  applyBuildingStepVisibility,
-  getBuildingStepCount,
-} from "./buildingSteps";
+import { applyBuildingStepVisibility, getBuildingStepCount } from "./buildingSteps";
 
 function createStepModel(stepCount: unknown): Group {
   const model = new Group();

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Iterable, Literal
-
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Literal
 
 CoverageStatus = Literal["complete", "partial", "missing"]
 
@@ -86,9 +86,7 @@ def calculate_model_coverage(
     for requirement in requirements:
         if requirement.required_quantity <= 0:
             raise ValueError("Required quantities must be positive")
-        owned = owned_by_key[
-            (normalize_part_id(requirement.part_id), requirement.color_code)
-        ]
+        owned = owned_by_key[(normalize_part_id(requirement.part_id), requirement.color_code)]
         available = min(requirement.required_quantity, owned)
         missing = max(requirement.required_quantity - owned, 0)
         status: CoverageStatus

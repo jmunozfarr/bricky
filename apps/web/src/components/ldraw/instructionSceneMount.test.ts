@@ -56,12 +56,7 @@ describe("exclusive instruction scene mounting", () => {
     canvas.add(host);
     const mount = new ExclusiveInstructionSceneMount(host);
     const step1 = scene("step-1", ["node-000001", "node-000002"]);
-    const step2 = scene("step-2", [
-      "node-000001",
-      "node-000002",
-      "node-000003",
-      "node-000004",
-    ]);
+    const step2 = scene("step-2", ["node-000001", "node-000002", "node-000003", "node-000004"]);
 
     mount.activate(step1);
     expect(host.children).toEqual([step1.model]);
@@ -78,12 +73,7 @@ describe("exclusive instruction scene mounting", () => {
     });
     expect(instructionSceneDiagnostic(step2)).toMatchObject({
       cacheKey: "step-2",
-      indexedNodeIds: [
-        "node-000001",
-        "node-000002",
-        "node-000003",
-        "node-000004",
-      ],
+      indexedNodeIds: ["node-000001", "node-000002", "node-000003", "node-000004"],
       mounted: true,
     });
   });
@@ -92,12 +82,7 @@ describe("exclusive instruction scene mounting", () => {
     const host = new Group();
     const mount = new ExclusiveInstructionSceneMount(host);
     const step1 = scene("step-1", ["node-000001", "node-000002"]);
-    const step2 = scene("step-2", [
-      "node-000001",
-      "node-000002",
-      "node-000003",
-      "node-000004",
-    ]);
+    const step2 = scene("step-2", ["node-000001", "node-000002", "node-000003", "node-000004"]);
 
     for (const active of [step1, step2, step1, step2]) mount.activate(active);
 
@@ -147,12 +132,7 @@ describe("exclusive instruction scene mounting", () => {
     pending.get("step-1")!.resolve(stale);
     await expect(first).rejects.toBeInstanceOf(ScopeLoadSupersededError);
     await vi.waitFor(() => expect(pending.has("step-2")).toBe(true));
-    const final = scene("step-2", [
-      "node-000001",
-      "node-000002",
-      "node-000003",
-      "node-000004",
-    ]);
+    const final = scene("step-2", ["node-000001", "node-000002", "node-000003", "node-000004"]);
     pending.get("step-2")!.resolve(final);
     await expect(newest).resolves.toBe(final);
 
@@ -168,10 +148,10 @@ describe("exclusive instruction scene mounting", () => {
     });
     const loader = new LatestScopeLoader<string, MountedInstructionScene>(
       2,
-      async (key) => {
+      (key) => {
         const value = scene(key, [`node-${key}`]);
         scenes.set(key, value);
-        return value;
+        return Promise.resolve(value);
       },
       dispose,
     );

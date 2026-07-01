@@ -3,13 +3,13 @@ from __future__ import annotations
 import math
 from collections.abc import Callable, Iterator
 from datetime import datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
-from sqlalchemy import case, delete, func, or_, select
+from sqlalchemy import Select, SQLColumnExpression, case, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
-from typing_extensions import Annotated
 
 from app.catalog_api import render_asset_url
 from app.models import InventoryItem, LDrawColor, Part
@@ -92,7 +92,7 @@ def _response(
     )
 
 
-def _item_query(workspace_id: int):
+def _item_query(workspace_id: int) -> Select[tuple[InventoryItem, Part, LDrawColor]]:
     return (
         select(InventoryItem, Part, LDrawColor)
         .outerjoin(Part, func.lower(Part.part_id) == func.lower(InventoryItem.part_id))
@@ -146,13 +146,16 @@ def create_inventory_router(session_dependency: SessionDependency) -> APIRouter:
         if color_code is not None:
             filters.append(InventoryItem.color_code == color_code)
 
-        total_items = session.scalar(
-            select(func.count())
-            .select_from(InventoryItem)
-            .outerjoin(Part, func.lower(Part.part_id) == func.lower(InventoryItem.part_id))
-            .where(*filters)
-        ) or 0
-        ordering: list[object] = []
+        total_items = (
+            session.scalar(
+                select(func.count())
+                .select_from(InventoryItem)
+                .outerjoin(Part, func.lower(Part.part_id) == func.lower(InventoryItem.part_id))
+                .where(*filters)
+            )
+            or 0
+        )
+        ordering: list[SQLColumnExpression[Any]] = []
         if normalized_query:
             ordering.append(
                 case(
@@ -161,7 +164,11 @@ def create_inventory_router(session_dependency: SessionDependency) -> APIRouter:
                 )
             )
         ordering.extend(
-            (func.lower(func.coalesce(Part.name, InventoryItem.part_id)), InventoryItem.part_id, InventoryItem.color_code)
+            (
+                func.lower(func.coalesce(Part.name, InventoryItem.part_id)),
+                InventoryItem.part_id,
+                InventoryItem.color_code,
+            )
         )
         rows = session.execute(
             _item_query(workspace.id)
@@ -192,9 +199,7 @@ def create_inventory_router(session_dependency: SessionDependency) -> APIRouter:
         session.commit()
         return [_response(item, part, color) for item, part, color in rows]
 
-    @router.put(
-        "/items/{part_id}/{color_code}", response_model=InventoryItemResponse
-    )
+    @router.put("/items/{part_id}/{color_code}", response_model=InventoryItemResponse)
     def set_quantity(
         payload: InventoryQuantityRequest,
         part_id: str,
@@ -239,9 +244,7 @@ def create_inventory_router(session_dependency: SessionDependency) -> APIRouter:
         ).one()
         return _response(*row)
 
-    @router.delete(
-        "/items/{part_id}/{color_code}", status_code=status.HTTP_204_NO_CONTENT
-    )
+    @router.delete("/items/{part_id}/{color_code}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_item(
         part_id: str,
         color_code: int = Path(ge=0),

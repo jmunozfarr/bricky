@@ -37,7 +37,6 @@ from app.services.ldraw_model_parser import (
 )
 from app.services.local_workspace import LOCAL_WORKSPACE_SLUG, resolve_local_workspace
 
-
 DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
@@ -108,9 +107,7 @@ def _stream_original(source: BinaryIO, destination: Path, maximum_bytes: int) ->
     return digest.hexdigest()
 
 
-def _find_duplicate(
-    session: Session, source_sha256: str
-) -> ImportedModel | None:
+def _find_duplicate(session: Session, source_sha256: str) -> ImportedModel | None:
     return session.scalar(
         select(ImportedModel)
         .join(Workspace, Workspace.id == ImportedModel.workspace_id)
@@ -130,7 +127,8 @@ def _canonicalize_moved_aliases(
     issue_details: dict[AliasResolutionStatus, tuple[str, str]] = {
         "cycle": (
             "moved_alias_cycle",
-            "Moved-part alias cycle prevented canonical resolution; the original part ID was retained",
+            "Moved-part alias cycle prevented canonical resolution; "
+            "the original part ID was retained",
         ),
         "missing_target": (
             "moved_alias_missing_target",
@@ -138,11 +136,13 @@ def _canonicalize_moved_aliases(
         ),
         "malformed": (
             "moved_alias_malformed",
-            "Moved-part alias metadata or target reference is malformed; the original part ID was retained",
+            "Moved-part alias metadata or target reference is malformed; "
+            "the original part ID was retained",
         ),
         "depth_exceeded": (
             "moved_alias_depth_exceeded",
-            "Moved-part alias chain exceeded the safe depth limit; the original part ID was retained",
+            "Moved-part alias chain exceeded the safe depth limit; "
+            "the original part ID was retained",
         ),
     }
     warned_part_ids: set[str] = set()
@@ -150,9 +150,7 @@ def _canonicalize_moved_aliases(
     for item in parsed.bom:
         resolution = resolutions[item.part_id]
         persisted_part_id = (
-            resolution.canonical_part_id
-            if resolution.status == "resolved"
-            else item.part_id
+            resolution.canonical_part_id if resolution.status == "resolved" else item.part_id
         )
         quantities[(persisted_part_id, item.color_code)] += item.quantity
         if (

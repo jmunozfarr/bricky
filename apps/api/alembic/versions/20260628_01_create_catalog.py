@@ -3,8 +3,8 @@
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 
+from alembic import op
 
 revision: str = "20260628_01"
 down_revision: str | None = None
@@ -43,9 +43,7 @@ def upgrade() -> None:
     op.create_index("ix_parts_part_id", "parts", ["part_id"], unique=True)
     op.create_index("ix_parts_name", "parts", ["name"])
     op.create_index("ix_parts_category", "parts", ["category"])
-    op.create_index(
-        "ix_parts_category_visible", "parts", ["category", "is_subpart"]
-    )
+    op.create_index("ix_parts_category_visible", "parts", ["category", "is_subpart"])
     op.create_index("ix_parts_is_subpart", "parts", ["is_subpart"])
 
     op.create_table(

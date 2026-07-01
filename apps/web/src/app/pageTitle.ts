@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 
-
 export const APPLICATION_NAME = "Bricky";
 
 export function formatPageTitle(pageTitle: string): string {

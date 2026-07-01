@@ -24,14 +24,10 @@ import {
 } from "../models/helpers";
 
 type DetailState =
-  | { kind: "loading" }
-  | { kind: "ready"; data: ModelDetail }
-  | { kind: "error"; message: string };
+  { kind: "loading" } | { kind: "ready"; data: ModelDetail } | { kind: "error"; message: string };
 
 type CoverageState =
-  | { kind: "loading" }
-  | { kind: "ready"; data: ModelCoverage }
-  | { kind: "error"; message: string };
+  { kind: "loading" } | { kind: "ready"; data: ModelCoverage } | { kind: "error"; message: string };
 
 type CoverageView = "all" | "wishlist";
 
@@ -46,7 +42,8 @@ export default function ModelDetailPage() {
   const [coverageStatus, setCoverageStatus] = useState<CoverageStatus | "all">("all");
   const [coverageQuery, setCoverageQuery] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const returnTarget = `/models${params.get("return") ? `?${params.get("return")}` : ""}`;
+  const returnSearch = params.get("return");
+  const returnTarget = `/models${returnSearch ? `?${returnSearch}` : ""}`;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -90,7 +87,7 @@ export default function ModelDetailPage() {
     setDeleting(true);
     try {
       await deleteModel(modelId);
-      navigate(returnTarget);
+      await navigate(returnTarget);
     } catch (error: unknown) {
       setState({
         kind: "error",
@@ -117,7 +114,8 @@ export default function ModelDetailPage() {
   if (state.kind === "error") {
     return (
       <div className="error" role="alert">
-        <strong>Model request failed.</strong><span>{state.message}</span>
+        <strong>Model request failed.</strong>
+        <span>{state.message}</span>
       </div>
     );
   }
@@ -126,15 +124,22 @@ export default function ModelDetailPage() {
   return (
     <div className="model-detail">
       <div className="detail-actions">
-        <Link className="button-link" to={returnTarget}>Back to models</Link>
+        <Link className="button-link" to={returnTarget}>
+          Back to models
+        </Link>
         <button className="danger-button" disabled={deleting} onClick={() => void remove()}>
           {deleting ? "Deleting…" : "Delete model"}
         </button>
       </div>
       <section className="page-panel">
         <div className="page-heading catalog-heading">
-          <div><p className="eyebrow">Imported {model.sourceFormat.toUpperCase()}</p><h2>{model.name}</h2></div>
-          <span className={`model-status model-status--${model.importStatus}`}>{modelStatusLabel(model.importStatus)}</span>
+          <div>
+            <p className="eyebrow">Imported {model.sourceFormat.toUpperCase()}</p>
+            <h2>{model.name}</h2>
+          </div>
+          <span className={`model-status model-status--${model.importStatus}`}>
+            {modelStatusLabel(model.importStatus)}
+          </span>
         </div>
         <dl className="part-metadata">
           <Meta label="Original filename" value={model.originalFilename} />
@@ -150,7 +155,10 @@ export default function ModelDetailPage() {
         <div>
           <p className="eyebrow">Interactive instructions</p>
           <h2 id="builder-launch-title">Visual builder</h2>
-          <p>Follow authored steps with current parts highlighted, inventory context, and guided subassembly tasks.</p>
+          <p>
+            Follow authored steps with current parts highlighted, inventory context, and guided
+            subassembly tasks.
+          </p>
         </div>
         <Link
           className="button-link"
@@ -164,10 +172,13 @@ export default function ModelDetailPage() {
 
       {params.get("debug") === "viewer" && <InstructionGraphPanel modelId={model.modelId} />}
 
-      {coverage.kind === "loading" && <div className="page-message">Calculating build readiness…</div>}
+      {coverage.kind === "loading" && (
+        <div className="page-message">Calculating build readiness…</div>
+      )}
       {coverage.kind === "error" && (
         <div className="error" role="alert">
-          <strong>Coverage request failed.</strong><span>{coverage.message}</span>
+          <strong>Coverage request failed.</strong>
+          <span>{coverage.message}</span>
         </div>
       )}
       {coverage.kind === "ready" && (
@@ -188,14 +199,20 @@ export default function ModelDetailPage() {
               <button
                 type="button"
                 aria-pressed={coverageView === "all"}
-                onClick={() => { setCoverageView("all"); setCoverageStatus("all"); }}
+                onClick={() => {
+                  setCoverageView("all");
+                  setCoverageStatus("all");
+                }}
               >
                 All parts
               </button>
               <button
                 type="button"
                 aria-pressed={coverageView === "wishlist"}
-                onClick={() => { setCoverageView("wishlist"); setCoverageStatus("all"); }}
+                onClick={() => {
+                  setCoverageView("wishlist");
+                  setCoverageStatus("all");
+                }}
               >
                 Missing parts
               </button>
@@ -214,7 +231,9 @@ export default function ModelDetailPage() {
                 <span>Coverage status</span>
                 <select
                   value={coverageStatus}
-                  onChange={(event) => setCoverageStatus(event.currentTarget.value as CoverageStatus | "all")}
+                  onChange={(event) =>
+                    setCoverageStatus(event.currentTarget.value as CoverageStatus | "all")
+                  }
                 >
                   <option value="all">All</option>
                   <option value="missing">Missing</option>
@@ -240,12 +259,18 @@ export default function ModelDetailPage() {
 
       {model.issues.length > 0 && (
         <section className="page-panel">
-          <div className="page-heading"><p className="eyebrow">Import diagnostics</p><h2>Warnings</h2></div>
+          <div className="page-heading">
+            <p className="eyebrow">Import diagnostics</p>
+            <h2>Warnings</h2>
+          </div>
           <ul className="issue-list">
             {model.issues.map((issue, index) => (
               <li key={`${issue.code}-${index}`}>
                 <strong>{issue.code.replaceAll("_", " ")}</strong>
-                <span>{issue.message}{issue.referencedFilename ? ` — ${issue.referencedFilename}` : ""}</span>
+                <span>
+                  {issue.message}
+                  {issue.referencedFilename ? ` — ${issue.referencedFilename}` : ""}
+                </span>
               </li>
             ))}
           </ul>
@@ -286,10 +311,16 @@ function InstructionGraphPanel({ modelId }: { modelId: string }) {
       }}
     >
       <summary>
-        <span><span className="eyebrow">Developer diagnostic</span>Instruction hierarchy</span>
+        <span>
+          <span className="eyebrow">Developer diagnostic</span>Instruction hierarchy
+        </span>
       </summary>
       {state.kind === "loading" && <div className="page-message">Parsing instruction graph…</div>}
-      {state.kind === "error" && <div className="error" role="alert">{state.message}</div>}
+      {state.kind === "error" && (
+        <div className="error" role="alert">
+          {state.message}
+        </div>
+      )}
       {state.kind === "ready" && (
         <div className="instruction-graph-content">
           <dl className="part-metadata">
@@ -319,8 +350,12 @@ function InstructionGraphPanel({ modelId }: { modelId: string }) {
                 <strong>{occurrence.sourceSubmodelName}</strong>
                 <span>
                   depth {occurrence.depth}
-                  {occurrence.attachmentStep !== null ? ` · parent step ${occurrence.attachmentStep}` : " · root"}
-                  {occurrence.effectiveColor !== null ? ` · color ${occurrence.effectiveColor}` : ""}
+                  {occurrence.attachmentStep !== null
+                    ? ` · parent step ${occurrence.attachmentStep}`
+                    : " · root"}
+                  {occurrence.effectiveColor !== null
+                    ? ` · color ${occurrence.effectiveColor}`
+                    : ""}
                   {` · position ${occurrence.localTransform.translation.join(", ")}`}
                 </span>
               </li>
@@ -328,7 +363,8 @@ function InstructionGraphPanel({ modelId }: { modelId: string }) {
           </ol>
           {state.data.expandedOccurrenceCount > visibleOccurrenceLimit && (
             <p className="metadata-warning">
-              Showing the first {visibleOccurrenceLimit.toLocaleString()} occurrences in deterministic traversal order.
+              Showing the first {visibleOccurrenceLimit.toLocaleString()} occurrences in
+              deterministic traversal order.
             </p>
           )}
         </div>
@@ -345,9 +381,13 @@ function BuildReadiness({ coverage }: { coverage: ModelCoverage }) {
       <div className="readiness-heading">
         <div>
           <p className="eyebrow">Build readiness</p>
-          <h2 id="readiness-title">{formatCoveragePercentage(summary.pieceCoveragePercentage)} covered</h2>
+          <h2 id="readiness-title">
+            {formatCoveragePercentage(summary.pieceCoveragePercentage)} covered
+          </h2>
         </div>
-        <span className={`build-state build-state--${summary.fullyBuildable ? "complete" : "incomplete"}`}>
+        <span
+          className={`build-state build-state--${summary.fullyBuildable ? "complete" : "incomplete"}`}
+        >
           {summary.fullyBuildable ? "Fully buildable" : "Incomplete"}
         </span>
       </div>
@@ -362,7 +402,9 @@ function BuildReadiness({ coverage }: { coverage: ModelCoverage }) {
         <span style={{ width: `${progress}%` }} />
       </div>
       <p className="coverage-progress-text">
-        {summary.totalAvailableQuantity.toLocaleString()} available of {summary.totalRequiredQuantity.toLocaleString()} required physical pieces; {summary.totalMissingQuantity.toLocaleString()} missing.
+        {summary.totalAvailableQuantity.toLocaleString()} available of{" "}
+        {summary.totalRequiredQuantity.toLocaleString()} required physical pieces;{" "}
+        {summary.totalMissingQuantity.toLocaleString()} missing.
       </p>
       <dl className="readiness-counts">
         <Meta label="Unique BOM rows" value={summary.uniqueItemCount} />
@@ -380,32 +422,62 @@ function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
       <table className="bom-table coverage-table">
         <thead>
           <tr>
-            <th>Part</th><th>Name</th><th>Exact color</th><th>Required</th><th>Owned</th><th>Missing</th><th>Status</th><th>Actions</th>
+            <th>Part</th>
+            <th>Name</th>
+            <th>Exact color</th>
+            <th>Required</th>
+            <th>Owned</th>
+            <th>Missing</th>
+            <th>Status</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => (
-            <tr className={`coverage-row coverage-row--${item.status}`} key={`${item.partId}-${item.colorCode}`}>
-              <td><span className="part-id">{item.partId}</span></td>
-              <td>{item.partName}{!item.catalogAvailable && <small className="metadata-warning">Catalog metadata unavailable</small>}</td>
+            <tr
+              className={`coverage-row coverage-row--${item.status}`}
+              key={`${item.partId}-${item.colorCode}`}
+            >
+              <td>
+                <span className="part-id">{item.partId}</span>
+              </td>
+              <td>
+                {item.partName}
+                {!item.catalogAvailable && (
+                  <small className="metadata-warning">Catalog metadata unavailable</small>
+                )}
+              </td>
               <td>
                 <span className="inventory-color">
-                  {item.colorHex && <span className="color-swatch" style={{ backgroundColor: item.colorHex }} aria-hidden="true" />}
+                  {item.colorHex && (
+                    <span
+                      className="color-swatch"
+                      style={{ backgroundColor: item.colorHex }}
+                      aria-hidden="true"
+                    />
+                  )}
                   {item.colorName} ({item.colorCode})
                 </span>
               </td>
               <td>{item.requiredQuantity}</td>
               <td>{item.ownedQuantity}</td>
-              <td><strong>{item.missingQuantity}</strong></td>
               <td>
-                <span className={`coverage-status coverage-status--${item.status}`} aria-label={`Coverage status: ${coverageStatusLabel(item.status)}`}>
+                <strong>{item.missingQuantity}</strong>
+              </td>
+              <td>
+                <span
+                  className={`coverage-status coverage-status--${item.status}`}
+                  aria-label={`Coverage status: ${coverageStatusLabel(item.status)}`}
+                >
                   {coverageStatusLabel(item.status)}
                 </span>
               </td>
               <td>
                 <div className="coverage-actions">
                   {item.catalogAvailable ? (
-                    <Link to={`/catalog?part=${encodeURIComponent(item.partId)}`}>Inspect official part</Link>
+                    <Link to={`/catalog?part=${encodeURIComponent(item.partId)}`}>
+                      Inspect official part
+                    </Link>
                   ) : (
                     <span>Official part unavailable</span>
                   )}
@@ -426,5 +498,10 @@ function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
 }
 
 function Meta({ label, value }: { label: string; value: string | number }) {
-  return <div><dt>{label}</dt><dd>{value}</dd></div>;
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
 }

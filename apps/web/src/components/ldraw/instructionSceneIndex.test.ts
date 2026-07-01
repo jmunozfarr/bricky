@@ -48,10 +48,7 @@ describe("derived LDraw scene indexing", () => {
     expect(occurrences[2]!.definitionName).toBe("module.ldr");
     expect(occurrences[1]!.group.position.x).toBe(10);
     expect(occurrences[2]!.group.position.x).toBe(-10);
-    expect(parts.map((entry) => entry.instructionNodeId)).toEqual([
-      "node-000003",
-      "node-000005",
-    ]);
+    expect(parts.map((entry) => entry.instructionNodeId)).toEqual(["node-000003", "node-000005"]);
 
     applyInstructionSceneVisibility(model, sceneIndex!, "occ-000001", 2);
     expect(occurrences[1]!.group.visible).toBe(true);
@@ -146,12 +143,7 @@ describe("derived LDraw scene indexing", () => {
         entry.instructionNodeId === null ? [] : [entry.instructionNodeId],
       ) ?? [];
 
-    expect(nodeIds).toEqual([
-      "node-000001",
-      "node-000002",
-      "node-000003",
-      "node-000004",
-    ]);
+    expect(nodeIds).toEqual(["node-000001", "node-000002", "node-000003", "node-000004"]);
     expect(new Set(nodeIds).size).toBe(4);
     model.updateMatrixWorld(true);
     const partMatrices = sceneIndex?.entries.flatMap((entry) =>

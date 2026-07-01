@@ -133,9 +133,7 @@ def parse_color_config(content: bytes) -> list[ColorDefinition]:
             edge_hex = edge_value if _HEX_COLOR.fullmatch(edge_value) else None
             alpha = int(tokens[tokens.index("ALPHA") + 1]) if "ALPHA" in tokens else 255
             luminance = (
-                int(tokens[tokens.index("LUMINANCE") + 1])
-                if "LUMINANCE" in tokens
-                else None
+                int(tokens[tokens.index("LUMINANCE") + 1]) if "LUMINANCE" in tokens else None
             )
             finish = next((token for token in tokens if token in _FINISHES), None)
             if "MATERIAL" in tokens:

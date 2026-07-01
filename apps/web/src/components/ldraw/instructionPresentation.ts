@@ -1,12 +1,4 @@
-import {
-  Color,
-  Group,
-  LineSegments,
-  Material,
-  Mesh,
-  Object3D,
-  Points,
-} from "three";
+import { Color, Group, LineSegments, Material, Mesh, Object3D, Points } from "three";
 
 import { InstructionSceneIndex, SceneIndexEntry } from "./instructionSceneIndex";
 
@@ -18,12 +10,21 @@ function isRenderable(object: Object3D): object is Renderable {
   return object instanceof Mesh || object instanceof LineSegments || object instanceof Points;
 }
 
+function isGroup(object: Object3D): object is Group {
+  return object instanceof Group;
+}
+
 function materialsOf(object: Renderable): Material[] {
   return Array.isArray(object.material) ? object.material : [object.material];
 }
 
 function assignMaterials(object: Renderable, materials: Material[]): void {
-  object.material = Array.isArray(object.material) ? materials : materials[0]!;
+  if (Array.isArray(object.material)) {
+    object.material = materials;
+    return;
+  }
+  const [first] = materials;
+  if (first !== undefined) object.material = first;
 }
 
 export class InstructionPresentationController {
@@ -41,11 +42,7 @@ export class InstructionPresentationController {
     });
   }
 
-  apply(
-    activeOccurrenceId: string,
-    currentStep: number,
-    mode: InstructionPresentationMode,
-  ): void {
+  apply(activeOccurrenceId: string, currentStep: number, mode: InstructionPresentationMode): void {
     this.restore();
     this.model.traverse((object) => {
       if (object instanceof Group) object.visible = true;
@@ -57,8 +54,8 @@ export class InstructionPresentationController {
     }
 
     this.model.traverse((object) => {
-      if (!(object instanceof Group) || this.indexedGroups.has(object)) return;
-      const step = object.userData.buildingStep;
+      if (!isGroup(object) || this.indexedGroups.has(object)) return;
+      const step: unknown = object.userData.buildingStep;
       if (typeof step !== "number" || !Number.isInteger(step)) return;
       const localStep = step + 1;
       object.visible = localStep <= currentStep;
@@ -104,19 +101,23 @@ export class InstructionPresentationController {
   private applyGhost(group: Group): void {
     group.traverse((object) => {
       if (!isRenderable(object)) return;
+      const originals = this.originals.get(object);
+      if (originals === undefined) return;
       assignMaterials(
         object,
-        this.originals.get(object)!.map((material) => this.variant(material, "ghost")),
+        originals.map((material) => this.variant(material, "ghost")),
       );
     });
   }
 
   private applyCurrent(group: Group): void {
     group.traverse((object) => {
-      if (!(object instanceof LineSegments)) return;
+      if (!isRenderable(object) || !(object instanceof LineSegments)) return;
+      const originals = this.originals.get(object);
+      if (originals === undefined) return;
       assignMaterials(
         object,
-        this.originals.get(object)!.map((material) => this.variant(material, "current")),
+        originals.map((material) => this.variant(material, "current")),
       );
     });
   }

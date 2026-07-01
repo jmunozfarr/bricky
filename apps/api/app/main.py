@@ -1,13 +1,13 @@
-from collections.abc import Iterator
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import psycopg
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
-from sqlalchemy.orm import Session, sessionmaker
 
 from app.catalog_api import create_catalog_router
 from app.database import SessionFactory
@@ -19,7 +19,6 @@ from app.services.instruction_graph import (
     DEFAULT_MAX_NESTING_DEPTH,
     InstructionGraphLimits,
 )
-from app.services.ldraw_library import get_library_status
 from app.services.instruction_playback import (
     DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES,
     DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS,
@@ -27,6 +26,7 @@ from app.services.instruction_playback import (
     DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES,
     RenderComplexityLimits,
 )
+from app.services.ldraw_library import get_library_status
 from app.services.model_import import DEFAULT_MAX_UPLOAD_BYTES
 
 
@@ -76,9 +76,7 @@ def create_app(
     )
     resolved_instruction_graph_limits = instruction_graph_limits or InstructionGraphLimits(
         max_nesting_depth=int(
-            os.environ.get(
-                "INSTRUCTION_GRAPH_MAX_NESTING_DEPTH", str(DEFAULT_MAX_NESTING_DEPTH)
-            )
+            os.environ.get("INSTRUCTION_GRAPH_MAX_NESTING_DEPTH", str(DEFAULT_MAX_NESTING_DEPTH))
         ),
         max_expanded_occurrences=int(
             os.environ.get(
@@ -93,34 +91,31 @@ def create_app(
             )
         ),
     )
-    resolved_render_complexity_limits = (
-        render_complexity_limits
-        or RenderComplexityLimits(
-            max_expanded_instruction_nodes=int(
-                os.environ.get(
-                    "RENDER_MAX_EXPANDED_INSTRUCTION_NODES",
-                    str(DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES),
-                )
-            ),
-            max_expanded_occurrences=int(
-                os.environ.get(
-                    "RENDER_MAX_EXPANDED_OCCURRENCES",
-                    str(DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES),
-                )
-            ),
-            max_direct_geometry_commands=int(
-                os.environ.get(
-                    "RENDER_MAX_DIRECT_GEOMETRY_COMMANDS",
-                    str(DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS),
-                )
-            ),
-            max_derived_source_bytes=int(
-                os.environ.get(
-                    "RENDER_MAX_DERIVED_SOURCE_BYTES",
-                    str(DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES),
-                )
-            ),
-        )
+    resolved_render_complexity_limits = render_complexity_limits or RenderComplexityLimits(
+        max_expanded_instruction_nodes=int(
+            os.environ.get(
+                "RENDER_MAX_EXPANDED_INSTRUCTION_NODES",
+                str(DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES),
+            )
+        ),
+        max_expanded_occurrences=int(
+            os.environ.get(
+                "RENDER_MAX_EXPANDED_OCCURRENCES",
+                str(DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES),
+            )
+        ),
+        max_direct_geometry_commands=int(
+            os.environ.get(
+                "RENDER_MAX_DIRECT_GEOMETRY_COMMANDS",
+                str(DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS),
+            )
+        ),
+        max_derived_source_bytes=int(
+            os.environ.get(
+                "RENDER_MAX_DERIVED_SOURCE_BYTES",
+                str(DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES),
+            )
+        ),
     )
 
     def catalog_session() -> Iterator[Session]:
@@ -131,10 +126,12 @@ def create_app(
     def health() -> HealthResponse:
         database_url = os.environ["DATABASE_URL"]
 
-        with psycopg.connect(database_url, connect_timeout=3) as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                result = cursor.fetchone()
+        with (
+            psycopg.connect(database_url, connect_timeout=3) as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()
 
         if result != (1,):
             raise RuntimeError("PostgreSQL health query returned an unexpected result")
@@ -155,9 +152,7 @@ def create_app(
             archive_sha256=status.archive_sha256,
         )
 
-    application.include_router(
-        create_catalog_router(resolved_library_root, catalog_session)
-    )
+    application.include_router(create_catalog_router(resolved_library_root, catalog_session))
     application.include_router(create_inventory_router(catalog_session))
     application.include_router(
         create_models_router(

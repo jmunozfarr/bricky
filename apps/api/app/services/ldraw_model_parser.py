@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import re
 import math
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -174,9 +174,7 @@ def parse_ldraw_model(
     if not meaningful:
         raise ModelParseError("The main model section contains no references or geometry")
 
-    declared_steps = 1 + sum(
-        1 for line in main_lines if _STEP_DIRECTIVE.match(line.strip())
-    )
+    declared_steps = 1 + sum(1 for line in main_lines if _STEP_DIRECTIVE.match(line.strip()))
     normalized_parts = {part_id.lower(): part_id for part_id in official_part_ids}
     quantities: Counter[tuple[str, int]] = Counter()
     issues: list[ParseIssue] = []
@@ -207,7 +205,9 @@ def parse_ldraw_model(
             return None
         return color_code
 
-    def traverse(section_key: str, parent_color: int | None, multiplier: int, stack: tuple[str, ...]) -> None:
+    def traverse(
+        section_key: str, parent_color: int | None, multiplier: int, stack: tuple[str, ...]
+    ) -> None:
         if section_key in stack:
             add_issue(
                 "recursive_submodel_cycle",

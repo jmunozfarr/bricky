@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { Category, getCategories, getColors, LDrawColor, nextPage, previousPage } from "../api/catalog";
+import {
+  Category,
+  getCategories,
+  getColors,
+  LDrawColor,
+  nextPage,
+  previousPage,
+} from "../api/catalog";
 import {
   deleteInventoryItem,
   getInventorySummary,
@@ -22,9 +29,7 @@ import {
 } from "../inventory/helpers";
 
 type AsyncState<T> =
-  | { kind: "loading" }
-  | { kind: "ready"; data: T }
-  | { kind: "error"; message: string };
+  { kind: "loading" } | { kind: "ready"; data: T } | { kind: "error"; message: string };
 
 export default function InventoryPage() {
   const [params, setParams] = useSearchParams();
@@ -32,9 +37,10 @@ export default function InventoryPage() {
   const category = params.get("category") ?? "";
   const rawColorCode = params.get("colorCode");
   const parsedColorCode = rawColorCode === null ? null : Number(rawColorCode);
-  const colorCode = parsedColorCode !== null && Number.isInteger(parsedColorCode) && parsedColorCode >= 0
-    ? parsedColorCode
-    : null;
+  const colorCode =
+    parsedColorCode !== null && Number.isInteger(parsedColorCode) && parsedColorCode >= 0
+      ? parsedColorCode
+      : null;
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const selectedPartId = params.get("part");
   const [searchInput, setSearchInput] = useState(query);
@@ -167,16 +173,30 @@ export default function InventoryPage() {
         </label>
         <label>
           <span>Category</span>
-          <select value={category} onChange={(event) => updateFilter("category", event.currentTarget.value)}>
+          <select
+            value={category}
+            onChange={(event) => updateFilter("category", event.currentTarget.value)}
+          >
             <option value="">All categories</option>
-            {categories.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+            {categories.map((item) => (
+              <option key={item.name} value={item.name}>
+                {item.name}
+              </option>
+            ))}
           </select>
         </label>
         <label>
           <span>Color</span>
-          <select value={colorCode ?? ""} onChange={(event) => updateFilter("colorCode", event.currentTarget.value)}>
+          <select
+            value={colorCode ?? ""}
+            onChange={(event) => updateFilter("colorCode", event.currentTarget.value)}
+          >
             <option value="">All colors</option>
-            {colors.map((color) => <option key={color.code} value={color.code}>{color.name} ({color.code})</option>)}
+            {colors.map((color) => (
+              <option key={color.code} value={color.code}>
+                {color.name} ({color.code})
+              </option>
+            ))}
           </select>
         </label>
       </div>
@@ -201,9 +221,19 @@ export default function InventoryPage() {
             </div>
           )}
           <div className="pagination" aria-label="Inventory pagination">
-            <button type="button" disabled={page <= 1} onClick={() => setPage(previousPage(page))}>Previous</button>
-            <span>Page {page} of {Math.max(1, results.data.totalPages)}</span>
-            <button type="button" disabled={page >= results.data.totalPages} onClick={() => setPage(nextPage(page, results.data.totalPages))}>Next</button>
+            <button type="button" disabled={page <= 1} onClick={() => setPage(previousPage(page))}>
+              Previous
+            </button>
+            <span>
+              Page {page} of {Math.max(1, results.data.totalPages)}
+            </span>
+            <button
+              type="button"
+              disabled={page >= results.data.totalPages}
+              onClick={() => setPage(nextPage(page, results.data.totalPages))}
+            >
+              Next
+            </button>
           </div>
         </>
       )}
@@ -263,12 +293,24 @@ function InventoryCard({
       <h3>{item.partName}</h3>
       <p>{item.category}</p>
       <div className="inventory-color">
-        <span className="color-swatch" style={{ backgroundColor: colorSwatchValue(item.colorHex, item.alpha) }} />
-        <span>{item.colorName} ({item.colorCode})</span>
+        <span
+          className="color-swatch"
+          style={{ backgroundColor: colorSwatchValue(item.colorHex, item.alpha) }}
+        />
+        <span>
+          {item.colorName} ({item.colorCode})
+        </span>
       </div>
       {!item.catalogAvailable && <p className="inline-error">Catalog metadata unavailable</p>}
       <div className="quantity-controls">
-        <button type="button" aria-label={`Decrease ${item.partId} quantity`} disabled={busy} onClick={() => decremented === null ? void remove() : void save(decremented)}>−</button>
+        <button
+          type="button"
+          aria-label={`Decrease ${item.partId} quantity`}
+          disabled={busy}
+          onClick={() => (decremented === null ? void remove() : void save(decremented))}
+        >
+          −
+        </button>
         <input
           aria-label={`Quantity for ${item.partId} in color ${item.colorCode}`}
           type="number"
@@ -278,24 +320,55 @@ function InventoryCard({
           onChange={(event) => setInput(event.currentTarget.value)}
           disabled={busy}
         />
-        <button type="button" aria-label={`Increase ${item.partId} quantity`} disabled={busy || item.quantity >= 999999} onClick={() => void save(incrementQuantity(item.quantity))}>+</button>
+        <button
+          type="button"
+          aria-label={`Increase ${item.partId} quantity`}
+          disabled={busy || item.quantity >= 999999}
+          onClick={() => void save(incrementQuantity(item.quantity))}
+        >
+          +
+        </button>
       </div>
       <div className="inventory-card-actions">
-        <button type="button" disabled={busy || parsedInput === null} onClick={() => parsedInput !== null && void save(parsedInput)}>Update</button>
-        <button type="button" disabled={busy} onClick={() => void remove()}>Remove</button>
-        <button type="button" disabled={busy || !item.catalogAvailable} onClick={onInspect}>Inspect</button>
+        <button
+          type="button"
+          disabled={busy || parsedInput === null}
+          onClick={() => parsedInput !== null && void save(parsedInput)}
+        >
+          Update
+        </button>
+        <button type="button" disabled={busy} onClick={() => void remove()}>
+          Remove
+        </button>
+        <button type="button" disabled={busy || !item.catalogAvailable} onClick={onInspect}>
+          Inspect
+        </button>
       </div>
-      {error && <p className="inline-error" role="alert">{error}</p>}
+      {error && (
+        <p className="inline-error" role="alert">
+          {error}
+        </p>
+      )}
     </article>
   );
 }
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
-  return <article><span>{label}</span><strong>{value.toLocaleString()}</strong></article>;
+  return (
+    <article>
+      <span>{label}</span>
+      <strong>{value.toLocaleString()}</strong>
+    </article>
+  );
 }
 
 function ErrorPanel({ message }: { message: string }) {
-  return <div className="error" role="alert"><strong>Inventory request failed.</strong><span>{message}</span></div>;
+  return (
+    <div className="error" role="alert">
+      <strong>Inventory request failed.</strong>
+      <span>{message}</span>
+    </div>
+  );
 }
 
 function setAsyncError<T>(caught: unknown, setter: (state: AsyncState<T>) => void) {

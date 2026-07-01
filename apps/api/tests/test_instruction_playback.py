@@ -4,9 +4,11 @@ import hashlib
 from pathlib import Path
 
 import pytest
+from instruction_fixture_factory import generated_large_repeated_model
 
 from app.services.instruction_graph import InstructionGraphLimits, parse_instruction_graph
 from app.services.instruction_playback import (
+    PlaybackData,
     RenderComplexityLimits,
     build_playback_data,
     derive_occurrence_source,
@@ -14,13 +16,11 @@ from app.services.instruction_playback import (
     playback_occurrence,
     select_render_strategy,
 )
-from instruction_fixture_factory import generated_large_repeated_model
-
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "instruction_graph"
 
 
-def data(name: str, limits: InstructionGraphLimits | None = None):
+def data(name: str, limits: InstructionGraphLimits | None = None) -> PlaybackData:
     source = (FIXTURE_ROOT / name).read_bytes()
     return build_playback_data(parse_instruction_graph(source, limits=limits))
 
@@ -116,9 +116,7 @@ def test_cycle_and_limit_graphs_reject_playback_cleanly() -> None:
 
 
 def test_generated_child_navigation_is_paginated_without_losing_identity() -> None:
-    playback = build_playback_data(
-        parse_instruction_graph(generated_large_repeated_model(100))
-    )
+    playback = build_playback_data(parse_instruction_graph(generated_large_repeated_model(100)))
     page = playback_occurrence(
         playback,
         "occ-000001",
@@ -162,9 +160,11 @@ def test_direct_geometry_is_step_aware_and_keeps_occurrence_color_context() -> N
     assert "5 24 0 0 0 10 0 0 0 10 0 10 10 0" in child_step_two
     assert "1 4 10 20 30 0 -1 0 1 0 0 0 0 1 __bricky_occ_000002.ldr" in parent
     assert "5 24 0 0 0 10 0 0 0 10 0 10 10 0" in parent
-    assert child_step_one.index("0 BFC CERTIFY CCW") < child_step_one.index(
-        "__bricky_node_000002.ldr"
-    ) < child_step_one.index("2 24 0 0 0 10 0 0")
+    assert (
+        child_step_one.index("0 BFC CERTIFY CCW")
+        < child_step_one.index("__bricky_node_000002.ldr")
+        < child_step_one.index("2 24 0 0 0 10 0 0")
+    )
 
 
 def test_local_strategy_excludes_children_but_retains_navigation_metadata() -> None:
@@ -225,9 +225,7 @@ def test_local_step_two_contains_each_cumulative_root_part_exactly_once() -> Non
     assert "3703.dat" not in step_one and "32532.dat" not in step_one
 
     manifest_ids = [
-        line.split()[3]
-        for line in step_two.splitlines()
-        if line.startswith("0 !BRICKY PART ")
+        line.split()[3] for line in step_two.splitlines() if line.startswith("0 !BRICKY PART ")
     ]
     wrapper_definitions = [
         line.split()[2]
@@ -235,9 +233,7 @@ def test_local_step_two_contains_each_cumulative_root_part_exactly_once() -> Non
         if line.startswith("0 FILE __bricky_node_")
     ]
     placement_lines = [
-        line
-        for line in step_two.splitlines()
-        if line.startswith("1 ") and "__bricky_node_" in line
+        line for line in step_two.splitlines() if line.startswith("1 ") and "__bricky_node_" in line
     ]
     assert manifest_ids == [
         "node-000001",
@@ -255,8 +251,6 @@ def test_local_step_two_contains_each_cumulative_root_part_exactly_once() -> Non
     ]
     for filename in ("32531.dat", "6558.dat", "3703.dat", "32532.dat"):
         assert step_two.count(filename) == 1
-        assert (
-            f"1 16 0 0 0 1 0 0 0 1 0 0 0 1 {filename}" in step_two
-        )
+        assert f"1 16 0 0 0 1 0 0 0 1 0 0 0 1 {filename}" in step_two
     assert step_two.count("0 !BRICKY OCCURRENCE ") == 1
     assert "__bricky_occ_000002" not in step_two

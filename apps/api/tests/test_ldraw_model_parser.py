@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.ldraw_model_parser import ModelParseError, parse_ldraw_model
-
+from app.services.ldraw_model_parser import ModelParseError, ParsedModel, parse_ldraw_model
 
 PARTS = {"3001", "3002", "3020"}
 COLORS = {1, 2, 4, 5}
@@ -14,14 +13,12 @@ def ref(color: int, filename: str) -> str:
     return f"1 {color} {IDENTITY} {filename}"
 
 
-def parse(text: str | bytes):
+def parse(text: str | bytes) -> ParsedModel:
     content = text if isinstance(text, bytes) else text.encode()
-    return parse_ldraw_model(
-        content, official_part_ids=PARTS, known_color_codes=COLORS
-    )
+    return parse_ldraw_model(content, official_part_ids=PARTS, known_color_codes=COLORS)
 
 
-def quantities(result) -> list[tuple[str, int, int]]:
+def quantities(result: ParsedModel) -> list[tuple[str, int, int]]:
     return [(item.part_id, item.color_code, item.quantity) for item in result.bom]
 
 

@@ -54,9 +54,9 @@ from app.services.instruction_playback import (
     playback_occurrence,
     select_render_strategy,
 )
-from app.services.ldraw_model_parser import ModelParseError
-from app.services.ldraw_library import get_library_status
 from app.services.ldraw_aliases import LDrawMovedAliasResolver, OfficialPartRecord
+from app.services.ldraw_library import get_library_status
+from app.services.ldraw_model_parser import ModelParseError
 from app.services.ldraw_pack import (
     PACKED_SOURCE_CACHE,
     LDrawPackError,
@@ -82,9 +82,13 @@ from app.services.model_import import (
     import_model,
 )
 
-
 LOGGER = logging.getLogger(__name__)
 SessionDependency = Callable[[], Iterator[Session]]
+
+SCOPE_COMPLEXITY_DETAIL = {
+    "code": "scope_complexity_limit",
+    "message": "Complete subtree rendering exceeds the configured safety policy",
+}
 
 
 class CoverageSummaryResponse(BaseModel):
@@ -322,7 +326,7 @@ class InstructionPlaybackSummaryResponse(BaseModel):
         alias="recommendedRenderStrategy"
     )
     render_strategy_reason: str = Field(alias="renderStrategyReason")
-    complexity: "RenderComplexityResponse | None"
+    complexity: RenderComplexityResponse | None
     flattened_rendering_allowed: bool = Field(alias="flattenedRenderingAllowed")
 
 
@@ -579,9 +583,7 @@ def _coverage_summary(summary: CoverageSummary) -> CoverageSummaryResponse:
     )
 
 
-def _summary(
-    model: ImportedModel, coverage: CoverageSummary | None = None
-) -> ModelSummaryResponse:
+def _summary(model: ImportedModel, coverage: CoverageSummary | None = None) -> ModelSummaryResponse:
     return ModelSummaryResponse(
         model_id=model.public_id,
         name=model.name,
@@ -602,12 +604,7 @@ def _inventory_for_requirements(
     workspace_id: int,
     requirements: list[CoverageRequirement],
 ) -> list[InventoryQuantity]:
-    keys = sorted(
-        {
-            (normalize_part_id(item.part_id), item.color_code)
-            for item in requirements
-        }
-    )
+    keys = sorted({(normalize_part_id(item.part_id), item.color_code) for item in requirements})
     if not keys:
         return []
     rows = session.execute(
@@ -795,9 +792,7 @@ def create_models_router(
             if normalized_status not in {"ready", "ready_with_warnings", "failed"}:
                 raise HTTPException(status_code=422, detail="Unknown model import status")
             filters.append(ImportedModel.import_status == normalized_status)
-        total = session.scalar(
-            select(func.count()).select_from(ImportedModel).where(*filters)
-        ) or 0
+        total = session.scalar(select(func.count()).select_from(ImportedModel).where(*filters)) or 0
         models = session.scalars(
             select(ImportedModel)
             .where(*filters)
@@ -824,15 +819,10 @@ def create_models_router(
                         required_quantity=quantity,
                     )
                 )
-        coverage_by_model = _coverage_by_model(
-            session, workspace.id, requirements_by_model
-        )
+        coverage_by_model = _coverage_by_model(session, workspace.id, requirements_by_model)
         session.commit()
         return ModelsPageResponse(
-            items=[
-                _summary(model, coverage_by_model[model.id].summary)
-                for model in models
-            ],
+            items=[_summary(model, coverage_by_model[model.id].summary) for model in models],
             page=page,
             page_size=page_size,
             total_items=total,
@@ -846,9 +836,7 @@ def create_models_router(
         workspace = resolve_local_workspace(session)
         model_ids = list(
             session.scalars(
-                select(ImportedModel.id).where(
-                    ImportedModel.workspace_id == workspace.id
-                )
+                select(ImportedModel.id).where(ImportedModel.workspace_id == workspace.id)
             )
         )
         requirements_by_model: dict[int, list[CoverageRequirement]] = {
@@ -874,9 +862,7 @@ def create_models_router(
             total_models=len(model_ids),
             fully_buildable_models=fully_buildable,
             incomplete_models=len(model_ids) - fully_buildable,
-            total_missing_quantity=sum(
-                summary.total_missing_quantity for summary in summaries
-            ),
+            total_missing_quantity=sum(summary.total_missing_quantity for summary in summaries),
         )
 
     def find_model(session: Session, model_id: uuid.UUID) -> ImportedModel | None:
@@ -904,9 +890,7 @@ def create_models_router(
                 status_code=422, detail=f"Instruction playback unavailable: {error}"
             ) from error
 
-    def scene_identity(
-        model: ImportedModel, occurrence_id: str, render_strategy: str
-    ) -> str:
+    def scene_identity(model: ImportedModel, occurrence_id: str, render_strategy: str) -> str:
         library = get_library_status(library_root)
         fingerprint = library.archive_sha256 or "unversioned-library"
         return hashlib.sha256(
@@ -977,13 +961,15 @@ def create_models_router(
                 entry.color_code,
             ),
         ):
-            part, color = metadata[
-                (normalize_part_id(item.part_id), item.color_code)
-            ]
+            part, color = metadata[(normalize_part_id(item.part_id), item.color_code)]
             if coverage_status is not None and item.status != coverage_status:
                 continue
             part_name = part.name if part is not None else item.part_id
-            if normalized_query and normalized_query not in item.part_id.lower() and normalized_query not in part_name.lower():
+            if (
+                normalized_query
+                and normalized_query not in item.part_id.lower()
+                and normalized_query not in part_name.lower()
+            ):
                 continue
             response_items.append(_coverage_item_response(item, part, color))
         session.commit()
@@ -1062,43 +1048,31 @@ def create_models_router(
         session.commit()
         fallback_reason = None
         selection = (
-            select_render_strategy(
-                data, data.graph.root_occurrence_id, active_render_limits
-            )
+            select_render_strategy(data, data.graph.root_occurrence_id, active_render_limits)
             if data.available
             else None
         )
         if not data.available:
             fallback_reason = (
-                data.issues[0].message
-                if data.issues
-                else "The instruction graph is incomplete"
+                data.issues[0].message if data.issues else "The instruction graph is incomplete"
             )
         return InstructionPlaybackSummaryResponse(
             model_id=model.public_id,
             available=data.available,
-            root_occurrence_id=(
-                data.graph.root_occurrence_id if data.available else None
-            ),
+            root_occurrence_id=(data.graph.root_occurrence_id if data.available else None),
             fallback_reason=fallback_reason,
             issues=[
-                InstructionPlaybackIssueResponse(
-                    code=issue.code, message=issue.message
-                )
+                InstructionPlaybackIssueResponse(code=issue.code, message=issue.message)
                 for issue in data.issues
             ],
             recommended_render_strategy=(
                 selection.recommended_strategy if selection is not None else None
             ),
             render_strategy_reason=(
-                selection.reason
-                if selection is not None
-                else "instruction_graph_unavailable"
+                selection.reason if selection is not None else "instruction_graph_unavailable"
             ),
             complexity=(
-                _render_complexity_response(selection.complexity)
-                if selection is not None
-                else None
+                _render_complexity_response(selection.complexity) if selection is not None else None
             ),
             flattened_rendering_allowed=(
                 selection is None or selection.recommended_strategy == "subtree"
@@ -1155,30 +1129,21 @@ def create_models_router(
         alias_resolutions = alias_resolver.resolve_many(set(source_part_ids))
         canonical_by_source = {
             source_id: (
-                resolution.canonical_part_id
-                if resolution.status == "resolved"
-                else source_id
+                resolution.canonical_part_id if resolution.status == "resolved" else source_id
             )
             for source_id, resolution in alias_resolutions.items()
         }
-        catalog_parts = {
-            normalize_part_id(part.part_id): part for part in official_parts
-        }
+        catalog_parts = {normalize_part_id(part.part_id): part for part in official_parts}
         colors = {
             color.code: color
-            for color in session.scalars(
-                select(LDrawColor).where(LDrawColor.code.in_(color_codes))
-            )
+            for color in session.scalars(select(LDrawColor).where(LDrawColor.code.in_(color_codes)))
         }
 
         bom_rows = list(
-            session.scalars(
-                select(ModelBomItem).where(ModelBomItem.model_id == model.id)
-            )
+            session.scalars(select(ModelBomItem).where(ModelBomItem.model_id == model.id))
         )
         requirements = [
-            CoverageRequirement(item.part_id, item.color_code, item.quantity)
-            for item in bom_rows
+            CoverageRequirement(item.part_id, item.color_code, item.quantity) for item in bom_rows
         ]
         workspace = resolve_local_workspace(session)
         coverage = calculate_model_coverage(
@@ -1186,8 +1151,7 @@ def create_models_router(
             _inventory_for_requirements(session, workspace.id, requirements),
         )
         coverage_by_key = {
-            (normalize_part_id(item.part_id), item.color_code): item
-            for item in coverage.items
+            (normalize_part_id(item.part_id), item.color_code): item for item in coverage.items
         }
         raw_inventory = {
             (normalize_part_id(part_id), color_code): quantity
@@ -1214,9 +1178,7 @@ def create_models_router(
                     repeated_definition_count=data.repeated_definition_counts[
                         child.source_submodel_name.replace("\\", "/").lower()
                     ],
-                    repeated_definition_index=data.repeated_definition_indices[
-                        child.occurrence_id
-                    ],
+                    repeated_definition_index=data.repeated_definition_indices[child.occurrence_id],
                 )
             )
 
@@ -1245,8 +1207,14 @@ def create_models_router(
                     if coverage_item is not None
                     else raw_inventory.get((normalize_part_id(part_id), color_code), 0)
                 )
-                required = coverage_item.required_quantity if coverage_item is not None else len(node_ids)
-                missing = coverage_item.missing_quantity if coverage_item is not None else max(required - owned, 0)
+                required = (
+                    coverage_item.required_quantity if coverage_item is not None else len(node_ids)
+                )
+                missing = (
+                    coverage_item.missing_quantity
+                    if coverage_item is not None
+                    else max(required - owned, 0)
+                )
                 response_parts.append(
                     BuildStepPartResponse(
                         source_part_id=part_id,
@@ -1256,8 +1224,7 @@ def create_models_router(
                             else canonical_part_id
                         ),
                         alias_applied=(
-                            normalize_part_id(canonical_part_id)
-                            != normalize_part_id(part_id)
+                            normalize_part_id(canonical_part_id) != normalize_part_id(part_id)
                         ),
                         instruction_node_ids=node_ids,
                         part_name=part.name if part is not None else part_id,
@@ -1265,7 +1232,9 @@ def create_models_router(
                         color_name=(
                             color.name
                             if color is not None
-                            else "Inherited colour" if color_code is None else f"Color {color_code}"
+                            else "Inherited colour"
+                            if color_code is None
+                            else f"Color {color_code}"
                         ),
                         color_hex=color.value_hex if color is not None else None,
                         quantity_this_step=len(node_ids),
@@ -1288,9 +1257,7 @@ def create_models_router(
         cache_key = scene_identity(model, occurrence_id, render_strategy)
         delivery: Literal["packed", "external"] = "external"
         try:
-            cache_key, _packed = packed_scene_for(
-                model, data, occurrence_id, render_strategy
-            )
+            cache_key, _packed = packed_scene_for(model, data, occurrence_id, render_strategy)
             delivery = "packed"
         except (LDrawPackError, LDrawPackLimitError):
             LOGGER.info(
@@ -1364,8 +1331,7 @@ def create_models_router(
                 detail={
                     "message": "Hierarchical playback is unavailable",
                     "issues": [
-                        {"code": issue.code, "message": issue.message}
-                        for issue in data.issues
+                        {"code": issue.code, "message": issue.message} for issue in data.issues
                     ],
                 },
             )
@@ -1377,9 +1343,7 @@ def create_models_router(
                 child_offset=child_offset,
                 child_limit=child_limit,
             )
-            selection = select_render_strategy(
-                data, occurrence_id, active_render_limits
-            )
+            selection = select_render_strategy(data, occurrence_id, active_render_limits)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         render_strategy = (
@@ -1387,17 +1351,8 @@ def create_models_router(
             if requested_strategy == "recommended"
             else requested_strategy
         )
-        if (
-            render_strategy == "subtree"
-            and selection.recommended_strategy == "local"
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "scope_complexity_limit",
-                    "message": "Complete subtree rendering exceeds the configured safety policy",
-                },
-            )
+        if render_strategy == "subtree" and selection.recommended_strategy == "local":
+            raise HTTPException(status_code=409, detail=SCOPE_COMPLEXITY_DETAIL)
         session.commit()
         occurrence = result.occurrence
         encoded_occurrence = quote(occurrence_id, safe="")
@@ -1428,9 +1383,7 @@ def create_models_router(
                 step=result.step_summary.step,
                 local_part_count=result.step_summary.local_part_count,
                 child_attachment_count=result.step_summary.child_attachment_count,
-                direct_geometry_command_count=(
-                    result.step_summary.direct_geometry_command_count
-                ),
+                direct_geometry_command_count=(result.step_summary.direct_geometry_command_count),
             ),
             children=[
                 PlaybackChildResponse(
@@ -1476,30 +1429,18 @@ def create_models_router(
         if occurrence_id not in data.occurrence_by_id:
             raise HTTPException(status_code=404, detail="Instruction occurrence not found")
         if not data.available:
-            raise HTTPException(
-                status_code=409, detail="Hierarchical playback is unavailable"
-            )
+            raise HTTPException(status_code=409, detail="Hierarchical playback is unavailable")
         try:
-            selection = select_render_strategy(
-                data, occurrence_id, active_render_limits
-            )
+            selection = select_render_strategy(data, occurrence_id, active_render_limits)
             if mode == "subtree" and selection.recommended_strategy == "local":
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "scope_complexity_limit",
-                        "message": "Complete subtree rendering exceeds the configured safety policy",
-                    },
-                )
+                raise HTTPException(status_code=409, detail=SCOPE_COMPLEXITY_DETAIL)
             if delivery == "packed":
                 if step is not None:
                     raise HTTPException(
                         status_code=422,
                         detail="Packed delivery is available only for complete scenes",
                     )
-                _cache_key, packed = packed_scene_for(
-                    model, data, occurrence_id, mode
-                )
+                _cache_key, packed = packed_scene_for(model, data, occurrence_id, mode)
                 content = packed.content
             else:
                 content = derive_occurrence_source(
@@ -1527,9 +1468,7 @@ def create_models_router(
             },
         )
 
-    @router.get(
-        "/{model_id}/instruction-graph", response_model=InstructionGraphResponse
-    )
+    @router.get("/{model_id}/instruction-graph", response_model=InstructionGraphResponse)
     def model_instruction_graph(
         model_id: uuid.UUID, session: Session = Depends(session_dependency)
     ) -> InstructionGraphResponse:

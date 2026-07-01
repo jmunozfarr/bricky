@@ -51,13 +51,21 @@ Full gate (starts required services, runs everything, mirrors CI):
 Equivalent individual commands, all run inside the running containers:
 
 ```sh
-docker compose exec -T api pytest -q                  # backend tests
-docker compose exec -T web npm run test                # vitest (unit)
-docker compose exec -T web npm run typecheck            # tsc -b --pretty false
-docker compose exec -T web npm run build                 # tsc -b && vite build
-docker compose exec -T web npm run check:bundle           # bundle-size budgets
-./scripts/e2e.sh                                            # Playwright + axe via compose.e2e.yaml
+docker compose exec -T api ruff check .               # python lint
+docker compose exec -T api ruff format --check .       # python formatting
+docker compose exec -T api mypy app tests               # python types
+docker compose exec -T api pytest -q                     # backend tests
+docker compose exec -T web npm run lint                   # eslint (type-checked)
+docker compose exec -T web npm run format:check            # prettier
+docker compose exec -T web npm run test                     # vitest (unit)
+docker compose exec -T web npm run typecheck                 # tsc -b --pretty false
+docker compose exec -T web npm run build                      # tsc -b && vite build
+docker compose exec -T web npm run check:bundle                # bundle-size budgets
+./scripts/e2e.sh                                                # Playwright + axe via compose.e2e.yaml
 ```
+
+Autofixers: `ruff check . --fix` / `ruff format .` (api), `npx eslint . --fix` / `npm run format` (web).
+Tool configs: `apps/api/pyproject.toml` (ruff + mypy), `apps/web/eslint.config.js`, `apps/web/.prettierrc`.
 
 Run a single backend test: `docker compose exec -T api pytest -q tests/test_ldraw_pack.py::test_name`.
 Run a single frontend test: `docker compose exec -T web npx vitest run src/path/to/file.test.ts`.
