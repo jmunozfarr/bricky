@@ -12,9 +12,7 @@ def requirement(
     return CoverageRequirement(part_id, color_code, quantity)
 
 
-def owned(
-    part_id: str = "3001", color_code: int = 4, quantity: int = 2
-) -> InventoryQuantity:
+def owned(part_id: str = "3001", color_code: int = 4, quantity: int = 2) -> InventoryQuantity:
     return InventoryQuantity(part_id, color_code, quantity)
 
 

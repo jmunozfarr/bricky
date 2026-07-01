@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from time import perf_counter
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session, sessionmaker
-
 from instruction_fixture_factory import generated_large_repeated_model
+from sqlalchemy.orm import Session, sessionmaker
 from test_models_api import client_for, seed_catalog, upload
 
 
@@ -17,7 +17,7 @@ def test_playback_api_diagnostics(
     catalog_session_factory: sessionmaker[Session],
     tmp_path: Path,
     physical_parts: int,
-    record_property: pytest.RecordProperty,
+    record_property: Callable[[str, object], None],
 ) -> None:
     seed_catalog(catalog_session_factory)
     client: TestClient = client_for(catalog_session_factory, tmp_path)
@@ -29,16 +29,12 @@ def test_playback_api_diagnostics(
 
     started = perf_counter()
     summary = client.get(f"/api/models/{model_id}/instruction-playback")
-    root = client.get(
-        f"/api/models/{model_id}/instruction-occurrences/occ-000001?step=1"
-    )
+    root = client.get(f"/api/models/{model_id}/instruction-occurrences/occ-000001?step=1")
     source = client.get(root.json()["sceneSourceUrl"])
     initial_api_ms = (perf_counter() - started) * 1_000
 
     scope_started = perf_counter()
-    child = client.get(
-        f"/api/models/{model_id}/instruction-occurrences/occ-000002?step=1"
-    )
+    child = client.get(f"/api/models/{model_id}/instruction-occurrences/occ-000002?step=1")
     child_source = client.get(child.json()["sceneSourceUrl"])
     scope_api_ms = (perf_counter() - scope_started) * 1_000
     diagnostics = {

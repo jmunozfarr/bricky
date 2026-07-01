@@ -4,13 +4,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import CatalogIndexState, LDrawColor, Part
 from app.services.ldraw_library import get_library_status
 from app.services.ldraw_metadata import parse_color_config, parse_part_header
-
 
 INDEXER_VERSION = "1"
 
@@ -47,9 +46,8 @@ def get_catalog_status(session: Session, library_root: Path) -> CatalogStatus:
     state = session.get(CatalogIndexState, 1)
     installed_fingerprint = library.archive_sha256 if library.installed else None
     indexed = state is not None
-    stale = indexed and (
-        installed_fingerprint is None
-        or state.library_fingerprint != installed_fingerprint
+    stale = state is not None and (
+        installed_fingerprint is None or state.library_fingerprint != installed_fingerprint
     )
     return CatalogStatus(
         library_installed=library.installed,
@@ -63,9 +61,7 @@ def get_catalog_status(session: Session, library_root: Path) -> CatalogStatus:
     )
 
 
-def rebuild_catalog(
-    session_factory: sessionmaker[Session], library_root: Path
-) -> RebuildReport:
+def rebuild_catalog(session_factory: sessionmaker[Session], library_root: Path) -> RebuildReport:
     started = datetime.now(UTC)
     library = get_library_status(library_root)
     if not library.installed:

@@ -3,8 +3,8 @@
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 
+from alembic import op
 
 revision: str = "20260629_03"
 down_revision: str | None = "20260628_02"
@@ -64,9 +64,7 @@ def upgrade() -> None:
         sa.Column("color_code", sa.Integer(), nullable=False),
         sa.Column("quantity", sa.Integer(), nullable=False),
         sa.CheckConstraint("quantity > 0", name="ck_model_bom_quantity_positive"),
-        sa.UniqueConstraint(
-            "model_id", "part_id", "color_code", name="uq_model_bom_part_color"
-        ),
+        sa.UniqueConstraint("model_id", "part_id", "color_code", name="uq_model_bom_part_color"),
     )
     op.create_index("ix_model_bom_items_model_id", "model_bom_items", ["model_id"])
     op.create_index("ix_model_bom_items_part_id", "model_bom_items", ["part_id"])

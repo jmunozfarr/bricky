@@ -162,27 +162,21 @@ def test_inventory_mutations_refresh_coverage_without_reimport(
         model_count = session.scalar(select(func.count(ImportedModel.id)))
         source_hash = session.scalar(select(ImportedModel.source_sha256))
 
-    assert client.put(
-        "/api/inventory/items/3001/4", json={"quantity": 2}
-    ).status_code == 200
+    assert client.put("/api/inventory/items/3001/4", json={"quantity": 2}).status_code == 200
     partial = client.get(f"/api/models/{model_id}/coverage").json()
     assert partial["items"][0]["ownedQuantity"] == 2
     assert partial["items"][0]["missingQuantity"] == 2
     assert partial["items"][0]["status"] == "partial"
     assert partial["summary"]["pieceCoveragePercentage"] == 50
 
-    assert client.put(
-        "/api/inventory/items/3001/4", json={"quantity": 7}
-    ).status_code == 200
+    assert client.put("/api/inventory/items/3001/4", json={"quantity": 7}).status_code == 200
     complete = client.get(f"/api/models/{model_id}/coverage").json()
     assert complete["items"][0]["availableQuantity"] == 4
     assert complete["items"][0]["missingQuantity"] == 0
     assert complete["items"][0]["status"] == "complete"
     assert complete["summary"]["fullyBuildable"] is True
 
-    assert client.put(
-        "/api/inventory/items/3001/1", json={"quantity": 99}
-    ).status_code == 200
+    assert client.put("/api/inventory/items/3001/1", json={"quantity": 99}).status_code == 200
     wrong_color = client.get(f"/api/models/{model_id}/coverage").json()
     assert wrong_color["items"][0]["ownedQuantity"] == 7
 
@@ -209,8 +203,12 @@ def test_unknown_metadata_colors_and_workspace_scope(
         assert other is not None
         session.add_all(
             [
-                InventoryItem(workspace_id=local.id, part_id="CUSTOM-X", color_code=999, quantity=1),
-                InventoryItem(workspace_id=other.id, part_id="custom-x", color_code=999, quantity=50),
+                InventoryItem(
+                    workspace_id=local.id, part_id="CUSTOM-X", color_code=999, quantity=1
+                ),
+                InventoryItem(
+                    workspace_id=other.id, part_id="custom-x", color_code=999, quantity=50
+                ),
             ]
         )
     client = client_for(catalog_session_factory, tmp_path)
@@ -232,7 +230,9 @@ def test_empty_bom_reads_do_not_mutate_inventory_and_catalog_loss_is_safe(
     model_id = seed_model(catalog_session_factory, [("3001", 4, 1)])
     with catalog_session_factory.begin() as session:
         workspace = resolve_local_workspace(session)
-        session.add(InventoryItem(workspace_id=workspace.id, part_id="3001", color_code=4, quantity=1))
+        session.add(
+            InventoryItem(workspace_id=workspace.id, part_id="3001", color_code=4, quantity=1)
+        )
     client = client_for(catalog_session_factory, tmp_path)
     empty = client.get(f"/api/models/{empty_id}/coverage").json()["summary"]
     assert empty["pieceCoveragePercentage"] == 100

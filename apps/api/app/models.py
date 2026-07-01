@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import uuid
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
@@ -41,9 +41,7 @@ class Part(Base):
     keywords: Mapped[str | None] = mapped_column(Text)
     is_subpart: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_shortcut: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -79,9 +77,7 @@ class Workspace(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(128))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -108,9 +104,7 @@ class InventoryItem(Base):
     part_id: Mapped[str] = mapped_column(String(64), index=True)
     color_code: Mapped[int] = mapped_column(Integer, index=True)
     quantity: Mapped[int] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -119,9 +113,7 @@ class InventoryItem(Base):
 class ImportedModel(Base):
     __tablename__ = "imported_models"
     __table_args__ = (
-        UniqueConstraint(
-            "workspace_id", "source_sha256", name="uq_models_workspace_source_sha256"
-        ),
+        UniqueConstraint("workspace_id", "source_sha256", name="uq_models_workspace_source_sha256"),
         Index("ix_models_workspace_created", "workspace_id", "created_at"),
     )
 
@@ -143,9 +135,7 @@ class ImportedModel(Base):
     total_part_quantity: Mapped[int] = mapped_column(Integer)
     unique_part_color_count: Mapped[int] = mapped_column(Integer)
     unresolved_reference_count: Mapped[int] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -154,9 +144,7 @@ class ImportedModel(Base):
 class ModelBomItem(Base):
     __tablename__ = "model_bom_items"
     __table_args__ = (
-        UniqueConstraint(
-            "model_id", "part_id", "color_code", name="uq_model_bom_part_color"
-        ),
+        UniqueConstraint("model_id", "part_id", "color_code", name="uq_model_bom_part_color"),
         CheckConstraint("quantity > 0", name="ck_model_bom_quantity_positive"),
         Index("ix_model_bom_model_part", "model_id", "part_id"),
         Index("ix_model_bom_model_color", "model_id", "color_code"),

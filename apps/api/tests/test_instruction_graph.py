@@ -4,6 +4,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 import pytest
+from instruction_fixture_factory import generated_large_repeated_model
 
 from app.services.instruction_graph import (
     InstructionGraph,
@@ -11,8 +12,6 @@ from app.services.instruction_graph import (
     parse_instruction_graph,
 )
 from app.services.ldraw_model_parser import parse_ldraw_model
-from instruction_fixture_factory import generated_large_repeated_model
-
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "instruction_graph"
 STATIC_FIXTURES = (
@@ -58,8 +57,7 @@ def test_flat_steps_are_local_to_the_main_definition() -> None:
 def test_nested_steps_remain_on_their_source_definitions() -> None:
     result = graph("nested_stepped_submodels.mpd")
     definitions = {
-        definition.source_submodel_name: definition
-        for definition in result.model_definitions
+        definition.source_submodel_name: definition for definition in result.model_definitions
     }
     assert len(definitions["main.ldr"].local_steps) == 1
     assert len(definitions["level-one.ldr"].local_steps) == 2
@@ -101,9 +99,7 @@ def test_attachment_steps_are_in_the_parent_occurrence_timeline() -> None:
     result = graph("explicit_attachment_steps.mpd")
     children = result.occurrences[1:]
     assert [child.attachment_step for child in children] == [2, 3]
-    attachments = [
-        node for node in result.instruction_nodes if node.kind == "submodel_attachment"
-    ]
+    attachments = [node for node in result.instruction_nodes if node.kind == "submodel_attachment"]
     assert [node.occurrence_id for node in attachments] == ["occ-000001", "occ-000001"]
     assert [node.local_step for node in attachments] == [2, 3]
     assert [node.child_occurrence_id for node in attachments] == [
@@ -160,18 +156,14 @@ def test_all_configurable_limits_return_structured_issues() -> None:
 def test_instruction_fixtures_preserve_existing_bom_quantities(
     name: str, expected_quantity: int
 ) -> None:
-    result = parse_ldraw_model(
-        fixture(name), official_part_ids=PARTS, known_color_codes=COLORS
-    )
+    result = parse_ldraw_model(fixture(name), official_part_ids=PARTS, known_color_codes=COLORS)
     assert sum(item.quantity for item in result.bom) == expected_quantity
 
 
 def test_generated_large_repeated_fixture_is_part_of_the_corpus() -> None:
     source = generated_large_repeated_model(100)
     result = parse_instruction_graph(source)
-    bom = parse_ldraw_model(
-        source, official_part_ids=PARTS, known_color_codes=COLORS
-    )
+    bom = parse_ldraw_model(source, official_part_ids=PARTS, known_color_codes=COLORS)
     assert len(result.occurrences) == 101
     assert len(result.instruction_nodes) == 200
     assert sum(item.quantity for item in bom.bom) == 100
@@ -186,9 +178,7 @@ def test_direct_geometry_is_retained_by_step_without_becoming_nodes() -> None:
     )
 
     assert [
-        geometry.command_type
-        for step in hose.local_steps
-        for geometry in step.direct_geometry
+        geometry.command_type for step in hose.local_steps for geometry in step.direct_geometry
     ] == [2, 3, 4, 5]
     assert [geometry.color_token for geometry in hose.local_steps[0].direct_geometry] == [
         "24",

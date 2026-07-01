@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -12,7 +13,6 @@ from app.main import create_app
 from app.models import ImportedModel, InventoryItem, ModelBomItem
 from app.services.ldraw_catalog import rebuild_catalog
 from app.services.ldraw_library import manifest_path_for
-
 
 IDENTITY = "0 0 0 1 0 0 0 1 0 0 0 1"
 
@@ -87,9 +87,7 @@ def create_library(tmp_path: Path) -> Path:
     return root
 
 
-def client_for(
-    factory: sessionmaker[Session], root: Path, storage: Path
-) -> TestClient:
+def client_for(factory: sessionmaker[Session], root: Path, storage: Path) -> TestClient:
     return TestClient(
         create_app(
             library_root=root,
@@ -99,7 +97,7 @@ def client_for(
     )
 
 
-def upload(client: TestClient, source: bytes, filename: str = "aliases.ldr"):
+def upload(client: TestClient, source: bytes, filename: str = "aliases.ldr") -> httpx.Response:
     return client.post(
         "/api/models",
         files={"file": (filename, source, "text/plain")},
@@ -157,17 +155,13 @@ def test_coverage_uses_canonical_inventory_and_catalog_rebuild_preserves_data(
     client = client_for(catalog_session_factory, root, tmp_path / "models")
     model_id = upload(client, (reference("alias", 4) + "\n").encode()).json()["modelId"]
 
-    assert client.put(
-        "/api/inventory/items/alias/4", json={"quantity": 10}
-    ).status_code == 200
+    assert client.put("/api/inventory/items/alias/4", json={"quantity": 10}).status_code == 200
     alias_only = client.get(f"/api/models/{model_id}/coverage").json()
     assert alias_only["items"][0]["partId"] == "canonical"
     assert alias_only["items"][0]["ownedQuantity"] == 0
     assert alias_only["summary"]["pieceCoveragePercentage"] == 0
 
-    assert client.put(
-        "/api/inventory/items/canonical/4", json={"quantity": 1}
-    ).status_code == 200
+    assert client.put("/api/inventory/items/canonical/4", json={"quantity": 1}).status_code == 200
     canonical = client.get(f"/api/models/{model_id}/coverage").json()
     assert canonical["items"][0]["ownedQuantity"] == 1
     assert canonical["items"][0]["status"] == "complete"

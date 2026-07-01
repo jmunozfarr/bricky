@@ -4,11 +4,12 @@ import math
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path, PurePosixPath
+from typing import Any
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import ColumnElement, SQLColumnExpression, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import LDrawColor, Part
@@ -105,9 +106,7 @@ def _escaped_pattern(query: str) -> str:
     return f"%{escaped}%"
 
 
-def create_catalog_router(
-    library_root: Path, session_dependency: SessionDependency
-) -> APIRouter:
+def create_catalog_router(library_root: Path, session_dependency: SessionDependency) -> APIRouter:
     router = APIRouter(prefix="/api")
 
     @router.get("/catalog/status", response_model=CatalogStatusResponse)
@@ -130,7 +129,7 @@ def create_catalog_router(
         page_size: int = Query(default=24, alias="pageSize", ge=1, le=100),
         session: Session = Depends(session_dependency),
     ) -> PartsPageResponse:
-        filters = [Part.is_subpart.is_(False)]
+        filters: list[ColumnElement[bool]] = [Part.is_subpart.is_(False)]
         normalized_query = query.strip()
         if normalized_query:
             pattern = _escaped_pattern(normalized_query)
@@ -143,10 +142,8 @@ def create_catalog_router(
         if category:
             filters.append(func.lower(Part.category) == category.strip().lower())
 
-        total_items = session.scalar(
-            select(func.count()).select_from(Part).where(*filters)
-        ) or 0
-        ordering: list[object] = []
+        total_items = session.scalar(select(func.count()).select_from(Part).where(*filters)) or 0
+        ordering: list[SQLColumnExpression[Any]] = []
         if normalized_query:
             ordering.append(
                 case(

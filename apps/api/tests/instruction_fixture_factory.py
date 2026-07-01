@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 IDENTITY = "0 0 0 1 0 0 0 1 0 0 0 1"
 
 

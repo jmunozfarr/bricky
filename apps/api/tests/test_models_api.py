@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
@@ -15,9 +16,8 @@ from app.models import (
     Part,
     Workspace,
 )
-from app.services.local_workspace import resolve_local_workspace
 from app.services.instruction_graph import InstructionGraphLimits
-
+from app.services.local_workspace import resolve_local_workspace
 
 IDENTITY = "0 0 0 1 0 0 0 1 0 0 0 1"
 
@@ -69,7 +69,7 @@ def client_for(
     )
 
 
-def upload(client: TestClient, content: bytes, filename: str = "demo.ldr"):
+def upload(client: TestClient, content: bytes, filename: str = "demo.ldr") -> httpx.Response:
     return client.post(
         "/api/models",
         files={"file": (filename, content, "text/plain")},
@@ -148,7 +148,7 @@ def test_instruction_graph_endpoint_expands_distinct_occurrences(
             "0 FILE main.ldr",
             f"1 4 {IDENTITY} module.ldr",
             "0 STEP",
-            f"1 1 20 0 0 0 -1 0 1 0 0 0 0 1 module.ldr",
+            "1 1 20 0 0 0 -1 0 1 0 0 0 0 1 module.ldr",
             "0 FILE module.ldr",
             f"1 16 {IDENTITY} 3001.dat",
         ]

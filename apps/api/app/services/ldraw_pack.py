@@ -4,7 +4,6 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-
 DEFAULT_MAX_PACKED_BYTES = 16 * 1024 * 1024
 DEFAULT_MAX_PACKED_FILES = 5_000
 DEFAULT_PACK_CACHE_BYTES = 64 * 1024 * 1024
@@ -108,8 +107,7 @@ def _embedded_names(source: str) -> set[str]:
     return {
         normalized
         for line in source.splitlines()
-        if line.startswith("0 FILE ")
-        and (normalized := _normalized(line[7:])) is not None
+        if line.startswith("0 FILE ") and (normalized := _normalized(line[7:])) is not None
     }
 
 

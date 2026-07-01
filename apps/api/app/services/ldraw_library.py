@@ -14,7 +14,6 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
-
 DEFAULT_LIBRARY_URL = "https://library.ldraw.org/library/updates/complete.zip"
 MANIFEST_VERSION = 1
 
@@ -116,15 +115,17 @@ def _read_manifest(path: Path) -> LibraryManifest | None:
         ):
             return None
 
-        values = tuple(raw_counts.get(key) for key in ("dat", "ldr", "png"))
-        if not all(isinstance(value, int) and value >= 0 for value in values):
+        dat, ldr, png = (raw_counts.get(key) for key in ("dat", "ldr", "png"))
+        if not (isinstance(dat, int) and isinstance(ldr, int) and isinstance(png, int)):
+            return None
+        if min(dat, ldr, png) < 0:
             return None
 
         return LibraryManifest(
             installed_at=installed_at,
             source=source,
             archive_sha256=archive_sha256,
-            file_counts=FileCounts(dat=values[0], ldr=values[1], png=values[2]),
+            file_counts=FileCounts(dat=dat, ldr=ldr, png=png),
         )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
@@ -239,9 +240,7 @@ def _locate_library_root(extracted_root: Path) -> Path:
         top_level_entries = list(extracted_root.iterdir())
         if top_level_entries == [nested_root]:
             return nested_root
-        raise LibraryInstallError(
-            "Archive must contain only one top-level ldraw directory"
-        )
+        raise LibraryInstallError("Archive must contain only one top-level ldraw directory")
 
     details = "; ".join(direct_problems)
     raise LibraryInstallError(f"Archive does not contain a valid LDraw library: {details}")

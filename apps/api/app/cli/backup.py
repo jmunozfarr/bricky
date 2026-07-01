@@ -12,8 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import BinaryIO
-
+from typing import IO
 
 BACKUP_FORMAT = "bricky-backup"
 BACKUP_VERSION = 1
@@ -44,7 +43,7 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _sha256_stream(source: BinaryIO) -> tuple[str, int]:
+def _sha256_stream(source: IO[bytes]) -> tuple[str, int]:
     digest = hashlib.sha256()
     size = 0
     while chunk := source.read(1024 * 1024):
@@ -92,12 +91,8 @@ def create_backup(
             raise BackupError("Database payload is not a PostgreSQL custom-format dump")
 
     output_archive.parent.mkdir(parents=True, exist_ok=True)
-    package_directory = Path(
-        tempfile.mkdtemp(prefix=".backup-package-", dir=output_archive.parent)
-    )
-    temporary_archive = output_archive.with_name(
-        f".{output_archive.name}.{uuid.uuid4().hex}.tmp"
-    )
+    package_directory = Path(tempfile.mkdtemp(prefix=".backup-package-", dir=output_archive.parent))
+    temporary_archive = output_archive.with_name(f".{output_archive.name}.{uuid.uuid4().hex}.tmp")
     try:
         archive_root = package_directory / ARCHIVE_ROOT
         archive_root.mkdir()
@@ -134,7 +129,7 @@ def create_backup(
         os.chmod(temporary_archive, 0o600)
         os.replace(temporary_archive, output_archive)
         return BackupValidation(
-            created_at=manifest["createdAt"],
+            created_at=str(manifest["createdAt"]),
             payload_count=len(payloads),
             model_file_count=len(copied_models),
             database_sha256=str(payloads[DATABASE_PATH]["sha256"]),
@@ -252,9 +247,7 @@ def validate_backup(archive_path: Path) -> BackupValidation:
         with tarfile.open(archive_path, mode="r:gz") as archive:
             members = _safe_archive_members(archive)
             manifest = _load_manifest(archive, members)
-            created_at, payloads, model_file_count = _validated_manifest(
-                manifest, members
-            )
+            created_at, payloads, model_file_count = _validated_manifest(manifest, members)
             for path, expected in payloads.items():
                 member = members[f"{ARCHIVE_ROOT}/{path}"]
                 source = archive.extractfile(member)
@@ -274,9 +267,7 @@ def validate_backup(archive_path: Path) -> BackupValidation:
     )
 
 
-def prepare_restore(
-    archive_path: Path, destination: Path, *, force: bool
-) -> BackupValidation:
+def prepare_restore(archive_path: Path, destination: Path, *, force: bool) -> BackupValidation:
     if not force:
         raise BackupError("Restore preparation requires explicit force confirmation")
     if destination.exists():
@@ -373,9 +364,7 @@ def main() -> int:
         elif args.command == "validate":
             result = validate_backup(args.archive)
         elif args.command == "prepare-restore":
-            result = prepare_restore(
-                args.archive, args.destination, force=args.force
-            )
+            result = prepare_restore(args.archive, args.destination, force=args.force)
         else:
             count = replace_models(args.source, args.destination)
             print(f"Restored model files: {count}")

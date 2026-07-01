@@ -13,7 +13,6 @@ from app.models import Part
 from app.services.ldraw_catalog import CatalogError, get_catalog_status, rebuild_catalog
 from app.services.ldraw_library import manifest_path_for
 
-
 FINGERPRINT = "a" * 64
 
 
@@ -164,9 +163,7 @@ def test_catalog_api_reports_current_index(
 ) -> None:
     root = create_synthetic_library(tmp_path)
     rebuild_catalog(catalog_session_factory, root)
-    response = TestClient(create_app(root, catalog_session_factory)).get(
-        "/api/catalog/status"
-    )
+    response = TestClient(create_app(root, catalog_session_factory)).get("/api/catalog/status")
 
     assert response.status_code == 200
     assert response.json()["libraryInstalled"] is True

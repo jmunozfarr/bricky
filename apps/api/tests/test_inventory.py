@@ -120,9 +120,10 @@ def test_unknown_catalog_values_and_quantity_validation(
     assert client.put("/api/inventory/items/unknown/4", json={"quantity": 1}).status_code == 404
     assert client.put("/api/inventory/items/3001/999", json={"quantity": 1}).status_code == 404
     for quantity in (0, -1, 1_000_000):
-        assert client.put(
-            "/api/inventory/items/3001/4", json={"quantity": quantity}
-        ).status_code == 422
+        assert (
+            client.put("/api/inventory/items/3001/4", json={"quantity": quantity}).status_code
+            == 422
+        )
 
 
 def test_deletion_is_idempotent(
@@ -149,9 +150,7 @@ def test_inventory_search_filters_pagination_variants_and_summary(
     name = client.get("/api/inventory/items", params={"query": "plate"}).json()
     category = client.get("/api/inventory/items", params={"category": "Brick"}).json()
     color = client.get("/api/inventory/items", params={"colorCode": 1}).json()
-    page = client.get(
-        "/api/inventory/items", params={"page": 2, "pageSize": 1}
-    ).json()
+    page = client.get("/api/inventory/items", params={"page": 2, "pageSize": 1}).json()
     variants = client.get("/api/inventory/items/3001").json()
     summary = client.get("/api/inventory/summary").json()
 
@@ -174,9 +173,7 @@ def test_missing_catalog_metadata_keeps_inventory_visible(
     with catalog_session_factory.begin() as session:
         session.execute(delete(Part).where(Part.part_id == "3001"))
 
-    item = client.get("/api/inventory/items", params={"query": "3001"}).json()[
-        "items"
-    ][0]
+    item = client.get("/api/inventory/items", params={"query": "3001"}).json()["items"][0]
 
     assert item["quantity"] == 5
     assert item["catalogAvailable"] is False
@@ -194,9 +191,7 @@ def test_catalog_rebuild_preserves_inventory(
     (root / "parts").mkdir(parents=True)
     (root / "p").mkdir()
     (root / "p" / "box.dat").write_text("0 Primitive\n")
-    (root / "LDConfig.ldr").write_text(
-        "0 !COLOUR Red CODE 4 VALUE #C91A09 EDGE #333333\n"
-    )
+    (root / "LDConfig.ldr").write_text("0 !COLOUR Red CODE 4 VALUE #C91A09 EDGE #333333\n")
     (root / "parts" / "3001.dat").write_text(
         "0 Brick 2 x 4\n0 !CATEGORY Brick\n3 16 0 0 0 1 0 0 0 1 0\n"
     )

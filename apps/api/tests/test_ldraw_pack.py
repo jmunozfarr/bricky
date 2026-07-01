@@ -4,7 +4,6 @@ import pytest
 
 from app.services.ldraw_pack import LDrawPackLimitError, pack_ldraw_source
 
-
 IDENTITY = "0 0 0 1 0 0 0 1 0 0 0 1"
 
 

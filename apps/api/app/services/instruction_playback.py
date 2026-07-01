@@ -7,8 +7,8 @@ from functools import lru_cache
 from typing import Literal
 
 from app.services.instruction_graph import (
-    ExpandedInstructionNode,
     IDENTITY_TRANSFORM,
+    ExpandedInstructionNode,
     InstructionGraph,
     InstructionGraphIssue,
     InstructionGraphLimits,
@@ -19,7 +19,6 @@ from app.services.instruction_graph import (
     parse_instruction_graph,
 )
 from app.services.ldraw_model_parser import _normalize_reference
-
 
 PLAYBACK_CHILD_PAGE_SIZE = 50
 PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM = 100
@@ -34,20 +33,21 @@ RenderStrategy = Literal["subtree", "local"]
 
 @dataclass(frozen=True)
 class RenderComplexityLimits:
-    max_expanded_instruction_nodes: int = (
-        DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES
-    )
+    max_expanded_instruction_nodes: int = DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES
     max_expanded_occurrences: int = DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES
     max_direct_geometry_commands: int = DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS
     max_derived_source_bytes: int = DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES
 
     def __post_init__(self) -> None:
-        if min(
-            self.max_expanded_instruction_nodes,
-            self.max_expanded_occurrences,
-            self.max_direct_geometry_commands,
-            self.max_derived_source_bytes,
-        ) < 1:
+        if (
+            min(
+                self.max_expanded_instruction_nodes,
+                self.max_expanded_occurrences,
+                self.max_direct_geometry_commands,
+                self.max_derived_source_bytes,
+            )
+            < 1
+        ):
             raise ValueError("Render complexity limits must be positive")
 
 
@@ -137,9 +137,7 @@ def _playback_issue(issue: InstructionGraphIssue) -> PlaybackIssue:
 
 
 def build_playback_data(graph: InstructionGraph) -> PlaybackData:
-    occurrence_by_id = {
-        occurrence.occurrence_id: occurrence for occurrence in graph.occurrences
-    }
+    occurrence_by_id = {occurrence.occurrence_id: occurrence for occurrence in graph.occurrences}
     definition_by_name = {
         _definition_key(definition.source_submodel_name): definition
         for definition in graph.model_definitions
@@ -152,8 +150,7 @@ def build_playback_data(graph: InstructionGraph) -> PlaybackData:
     }
 
     definition_counts = Counter(
-        _definition_key(occurrence.source_submodel_name)
-        for occurrence in graph.occurrences
+        _definition_key(occurrence.source_submodel_name) for occurrence in graph.occurrences
     )
     seen: Counter[str] = Counter()
     repeated_indices: dict[str, int] = {}
@@ -205,9 +202,7 @@ def clear_playback_cache() -> None:
     parse_playback_data.cache_clear()
 
 
-def playback_breadcrumbs(
-    data: PlaybackData, occurrence_id: str
-) -> tuple[PlaybackBreadcrumb, ...]:
+def playback_breadcrumbs(data: PlaybackData, occurrence_id: str) -> tuple[PlaybackBreadcrumb, ...]:
     occurrence = data.occurrence_by_id.get(occurrence_id)
     if occurrence is None:
         raise KeyError(occurrence_id)
@@ -246,9 +241,7 @@ def playback_occurrence(
     if child_offset < 0:
         raise ValueError("Child offset cannot be negative")
     if child_limit < 1 or child_limit > PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM:
-        raise ValueError(
-            f"Child limit must be between 1 and {PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM}"
-        )
+        raise ValueError(f"Child limit must be between 1 and {PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM}")
 
     nodes = data.nodes_by_occurrence.get(occurrence_id, ())
     step_nodes = tuple(node for node in nodes if node.local_step == current_step)
@@ -267,9 +260,7 @@ def playback_occurrence(
             repeated_definition_count=data.repeated_definition_counts[
                 _definition_key(child.source_submodel_name)
             ],
-            repeated_definition_index=data.repeated_definition_indices[
-                child.occurrence_id
-            ],
+            repeated_definition_index=data.repeated_definition_indices[child.occurrence_id],
         )
         for child in children_at_step[child_offset : child_offset + child_limit]
     )
@@ -281,17 +272,14 @@ def playback_occurrence(
         previous_step=current_step - 1 if current_step > 1 else None,
         next_step=current_step + 1 if current_step < step_count else None,
         complete=current_step == step_count,
-        empty=not nodes
-        and not any(step.direct_geometry for step in definition.local_steps),
+        empty=not nodes and not any(step.direct_geometry for step in definition.local_steps),
         repeated_definition_count=data.repeated_definition_counts[
             _definition_key(occurrence.source_submodel_name)
         ],
         repeated_definition_index=data.repeated_definition_indices[occurrence_id],
         step_summary=PlaybackStepSummary(
             step=current_step,
-            local_part_count=sum(
-                node.kind == "part_reference" for node in step_nodes
-            ),
+            local_part_count=sum(node.kind == "part_reference" for node in step_nodes),
             child_attachment_count=len(children_at_step),
             direct_geometry_command_count=len(step_definition.direct_geometry),
         ),
@@ -306,17 +294,18 @@ def _format_number(value: float) -> str:
     return "0" if value == 0 else format(value, ".15g")
 
 
-def _type_one_line(
-    color: int | None, transform: LocalTransform, filename: str
-) -> str:
+def _type_one_line(color: int | None, transform: LocalTransform, filename: str) -> str:
     normalized = _normalize_reference(filename)
     if normalized is None:
         raise ValueError("Unsafe reference cannot be included in derived source")
     values = (*transform.translation, *transform.matrix)
     return " ".join(
-        ("1", str(color if color is not None else 16))
-        + tuple(_format_number(value) for value in values)
-        + (normalized,)
+        (
+            "1",
+            str(color if color is not None else 16),
+            *(_format_number(value) for value in values),
+            normalized,
+        )
     )
 
 
@@ -345,10 +334,7 @@ def _subtree_occurrences(
         result.append(occurrence)
         stack.extend(
             reversed(
-                [
-                    data.occurrence_by_id[child_id]
-                    for child_id in occurrence.child_occurrence_ids
-                ]
+                [data.occurrence_by_id[child_id] for child_id in occurrence.child_occurrence_ids]
             )
         )
     return tuple(result)
@@ -388,9 +374,7 @@ def _definition_render_lines(
             lines.append("0 STEP")
         items: list[tuple[int, str]] = []
         if maximum_step is None or step.step <= maximum_step:
-            items.extend(
-                (meta.source_order, meta.text) for meta in step.render_meta
-            )
+            items.extend((meta.source_order, meta.text) for meta in step.render_meta)
             items.extend(
                 (geometry.source_order, _direct_geometry_line(geometry))
                 for geometry in step.direct_geometry
@@ -401,9 +385,7 @@ def _definition_render_lines(
             items.append(
                 (
                     node.source_order,
-                    _type_one_line(
-                        node.color_code, node.local_transform, node.source_filename
-                    ),
+                    _type_one_line(node.color_code, node.local_transform, node.source_filename),
                 )
             )
         lines.extend(text for _order, text in sorted(items, key=lambda item: item[0]))
@@ -429,9 +411,7 @@ def _referenced_embedded_definitions(
     return tuple(result)
 
 
-def _is_embedded_custom_attachment(
-    data: PlaybackData, node: ExpandedInstructionNode
-) -> bool:
+def _is_embedded_custom_attachment(data: PlaybackData, node: ExpandedInstructionNode) -> bool:
     return (
         node.kind == "submodel_attachment"
         and node.source_filename.lower().endswith(".dat")
@@ -453,9 +433,7 @@ def _serialize_occurrence_source(
         raise KeyError(occurrence_id)
     root_definition = data.definition_by_name[_definition_key(root.source_submodel_name)]
     if current_step < 1 or current_step > len(root_definition.local_steps):
-        raise ValueError(
-            f"Step must be between 1 and {len(root_definition.local_steps)}"
-        )
+        raise ValueError(f"Step must be between 1 and {len(root_definition.local_steps)}")
     occurrences = (
         _visible_subtree_occurrences(data, occurrence_id, current_step)
         if strategy == "subtree"
@@ -510,12 +488,8 @@ def _serialize_occurrence_source(
             )
         )
 
-    root_has_direct_geometry = any(
-        step.direct_geometry for step in root_definition.local_steps
-    )
-    needs_color_context_wrapper = (
-        root.effective_color is not None and root_has_direct_geometry
-    )
+    root_has_direct_geometry = any(step.direct_geometry for step in root_definition.local_steps)
+    needs_color_context_wrapper = root.effective_color is not None and root_has_direct_geometry
     if needs_color_context_wrapper:
         lines.append("0 !BRICKY ROOT_WRAPPED 1")
         lines.extend(
@@ -536,21 +510,16 @@ def _serialize_occurrence_source(
         occurrence_nodes = tuple(
             node for node in nodes if node.occurrence_id == occurrence.occurrence_id
         )
-        definition = data.definition_by_name[
-            _definition_key(occurrence.source_submodel_name)
-        ]
+        definition = data.definition_by_name[_definition_key(occurrence.source_submodel_name)]
         for local_step in definition.local_steps:
             if local_step.step > 1:
                 lines.append("0 STEP")
             items: list[tuple[int, str]] = []
             geometry_visible = (
-                occurrence.occurrence_id != occurrence_id
-                or local_step.step <= current_step
+                occurrence.occurrence_id != occurrence_id or local_step.step <= current_step
             )
             if geometry_visible:
-                items.extend(
-                    (meta.source_order, meta.text) for meta in local_step.render_meta
-                )
+                items.extend((meta.source_order, meta.text) for meta in local_step.render_meta)
                 items.extend(
                     (geometry.source_order, _direct_geometry_line(geometry))
                     for geometry in local_step.direct_geometry
@@ -577,9 +546,7 @@ def _serialize_occurrence_source(
                 items.append(
                     (
                         node.source_order,
-                        _type_one_line(
-                            node.effective_color, node.local_transform, target
-                        ),
+                        _type_one_line(node.effective_color, node.local_transform, target),
                     )
                 )
             lines.extend(text for _order, text in sorted(items, key=lambda item: item[0]))
@@ -603,18 +570,14 @@ def _serialize_occurrence_source(
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def occurrence_render_complexity(
-    data: PlaybackData, occurrence_id: str
-) -> RenderComplexity:
+def occurrence_render_complexity(data: PlaybackData, occurrence_id: str) -> RenderComplexity:
     cached = data.render_complexity_by_occurrence.get(occurrence_id)
     if cached is not None:
         return cached
     occurrences = _subtree_occurrences(data, occurrence_id)
     occurrence_ids = {occurrence.occurrence_id for occurrence in occurrences}
     nodes = tuple(
-        node
-        for node in data.graph.instruction_nodes
-        if node.occurrence_id in occurrence_ids
+        node for node in data.graph.instruction_nodes if node.occurrence_id in occurrence_ids
     )
     direct_geometry_count = sum(
         len(step.direct_geometry)
@@ -680,22 +643,14 @@ def select_render_strategy(
     active_limits = limits or RenderComplexityLimits()
     complexity = occurrence_render_complexity(data, occurrence_id)
     over_limit = (
-        complexity.expanded_instruction_node_count
-        > active_limits.max_expanded_instruction_nodes
-        or complexity.expanded_occurrence_count
-        > active_limits.max_expanded_occurrences
-        or complexity.direct_geometry_command_count
-        > active_limits.max_direct_geometry_commands
-        or complexity.estimated_derived_source_bytes
-        > active_limits.max_derived_source_bytes
+        complexity.expanded_instruction_node_count > active_limits.max_expanded_instruction_nodes
+        or complexity.expanded_occurrence_count > active_limits.max_expanded_occurrences
+        or complexity.direct_geometry_command_count > active_limits.max_direct_geometry_commands
+        or complexity.estimated_derived_source_bytes > active_limits.max_derived_source_bytes
     )
     return RenderStrategySelection(
         recommended_strategy="local" if over_limit else "subtree",
-        reason=(
-            "scope_complexity_limit"
-            if over_limit
-            else "within_scope_complexity_limits"
-        ),
+        reason=("scope_complexity_limit" if over_limit else "within_scope_complexity_limits"),
         complexity=complexity,
     )
 

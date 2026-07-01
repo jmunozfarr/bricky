@@ -7,7 +7,6 @@ from app.services.ldraw_aliases import (
     OfficialPartRecord,
 )
 
-
 IDENTITY = "0 0 0 1 0 0 0 1 0 0 0 1"
 
 
@@ -93,9 +92,7 @@ def test_normal_part_and_shortcut_are_not_moved_aliases(tmp_path: Path) -> None:
     normal = write_part(root, "3001")
     shortcut = write_part(root, "shortcut", "~Shortcut assembly")
     (root / shortcut.relative_path).write_text(
-        "0 ~Shortcut assembly\n"
-        "0 Name: shortcut.dat\n"
-        f"1 16 {IDENTITY} 3001.dat\n",
+        f"0 ~Shortcut assembly\n0 Name: shortcut.dat\n1 16 {IDENTITY} 3001.dat\n",
         encoding="utf-8",
     )
     resolver = LDrawMovedAliasResolver(root, [normal, shortcut])
@@ -147,9 +144,7 @@ def test_fixed_color_alias_resolves_but_subpart_target_is_not_physical(
     fixed_color = write_moved(root, "sticker-old", "sticker-new", color_code=47)
     canonical = write_part(root, "sticker-new")
     subpart_alias = write_moved(root, "legacy-subpart", "s/legacy")
-    resolver = LDrawMovedAliasResolver(
-        root, [fixed_color, canonical, subpart_alias]
-    )
+    resolver = LDrawMovedAliasResolver(root, [fixed_color, canonical, subpart_alias])
 
     assert resolver.resolve("sticker-old").status == "resolved"
     assert resolver.resolve("sticker-old").canonical_part_id == "sticker-new"
