@@ -20,6 +20,9 @@ For a concise presentation flow, use [`docs/DEMO.md`](docs/DEMO.md).
 - Import LDR/MPD sources up to a configurable limit and preserve original bytes.
 - Recursively resolve embedded MPD submodels, repeated quantities, and color inheritance.
 - Navigate MPD subassemblies with occurrence-local hierarchical steps, preserved direct geometry, and complexity-bounded subtree/local rendering.
+- Inspect models with camera presets, keyboard/touch controls, adaptive rendering quality, fullscreen, and recoverable WebGL states.
+- Follow exact visual build steps in a dedicated workspace with highlighted new parts, ghosted context, model-wide inventory status, and guided subassembly tasks.
+- Follow the system theme or select persistent oxblood light and dark modes.
 - Canonicalize validated official LDraw `Moved to` aliases during new imports.
 - Compare model BOM rows with current inventory by exact canonical part and physical color.
 - Derive build readiness and missing-parts views without persisted wishlist data.
@@ -222,7 +225,10 @@ docker compose exec -T api pytest -q
 docker compose exec -T web npm run test
 docker compose exec -T web npm run typecheck
 docker compose exec -T web npm run build
+./scripts/e2e.sh
 ```
+
+The stable viewer interaction, browser, accessibility, and moderated usability gates are documented in [`docs/VIEWER_STABLE_RELEASE.md`](docs/VIEWER_STABLE_RELEASE.md).
 
 Tests use synthetic schemas, libraries, archives, and model sources. They do not require or modify the real installed LDraw library or personal runtime data.
 
