@@ -9,8 +9,21 @@ compose config --quiet
 echo "Starting development services required by checks"
 compose up --build -d db api web
 
+echo "Linting Python sources"
+compose exec -T api ruff check .
+compose exec -T api ruff format --check .
+
+echo "Type-checking Python sources"
+compose exec -T api mypy app tests
+
 echo "Running API tests"
 compose exec -T api pytest -q
+
+echo "Linting frontend sources"
+compose exec -T web npm run lint
+
+echo "Checking frontend formatting"
+compose exec -T web npm run format:check
 
 echo "Running frontend tests"
 compose exec -T web npm run test

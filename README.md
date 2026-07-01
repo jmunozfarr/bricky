@@ -221,12 +221,20 @@ Equivalent commands:
 
 ```sh
 docker compose config
+docker compose exec -T api ruff check .
+docker compose exec -T api ruff format --check .
+docker compose exec -T api mypy app tests
 docker compose exec -T api pytest -q
+docker compose exec -T web npm run lint
+docker compose exec -T web npm run format:check
 docker compose exec -T web npm run test
 docker compose exec -T web npm run typecheck
 docker compose exec -T web npm run build
 ./scripts/e2e.sh
 ```
+
+The same gate runs in GitHub Actions on pushes and pull requests
+(`.github/workflows/ci.yml`), so a green local `./scripts/check.sh` mirrors CI.
 
 The stable viewer interaction, browser, accessibility, and moderated usability gates are documented in [`docs/VIEWER_STABLE_RELEASE.md`](docs/VIEWER_STABLE_RELEASE.md).
 
