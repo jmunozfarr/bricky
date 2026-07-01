@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">Bricky brick mark</title>
-  <rect width="64" height="64" rx="14" fill="#b45309"/>
-  <rect x="12" y="24" width="40" height="27" rx="4" fill="#fff7ed"/>
-  <circle cx="22" cy="20" r="7" fill="#fed7aa"/>
-  <circle cx="42" cy="20" r="7" fill="#fed7aa"/>
-  <path d="M20 33h24M20 42h16" stroke="#b45309" stroke-width="5" stroke-linecap="round"/>
+  <rect width="64" height="64" rx="14" fill="#7f1d2d"/>
+  <rect x="12" y="24" width="40" height="27" rx="4" fill="#fff7f8"/>
+  <circle cx="22" cy="20" r="7" fill="#f4b8c2"/>
+  <circle cx="42" cy="20" r="7" fill="#f4b8c2"/>
+  <path d="M20 33h24M20 42h16" stroke="#7f1d2d" stroke-width="5" stroke-linecap="round"/>
 </svg>

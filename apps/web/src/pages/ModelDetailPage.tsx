@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import {
@@ -22,8 +22,6 @@ import {
   formatCoveragePercentage,
   modelStatusLabel,
 } from "../models/helpers";
-
-const ImportedModelViewer = lazy(() => import("../components/ldraw/ImportedModelViewer"));
 
 type DetailState =
   | { kind: "loading" }
@@ -148,11 +146,23 @@ export default function ModelDetailPage() {
         </dl>
       </section>
 
-      <Suspense fallback={<div className="page-message">Loading 3D viewer…</div>}>
-        <ImportedModelViewer modelId={model.modelId} sourceUrl={model.sourceUrl} title={model.name} />
-      </Suspense>
+      <section className="page-panel builder-launch-panel" aria-labelledby="builder-launch-title">
+        <div>
+          <p className="eyebrow">Interactive instructions</p>
+          <h2 id="builder-launch-title">Visual builder</h2>
+          <p>Follow authored steps with current parts highlighted, inventory context, and guided subassembly tasks.</p>
+        </div>
+        <Link
+          className="button-link"
+          to={`/models/${model.modelId}/build`}
+          onMouseEnter={() => void import("./VisualBuilderPage")}
+          onFocus={() => void import("./VisualBuilderPage")}
+        >
+          Open visual builder
+        </Link>
+      </section>
 
-      <InstructionGraphPanel modelId={model.modelId} />
+      {params.get("debug") === "viewer" && <InstructionGraphPanel modelId={model.modelId} />}
 
       {coverage.kind === "loading" && <div className="page-message">Calculating build readiness…</div>}
       {coverage.kind === "error" && (

@@ -16,12 +16,15 @@ import {
   ScopeLoadSupersededError,
 } from "./boundedSceneLoader";
 import {
-  applyInstructionSceneVisibility,
   createInstructionSceneIndex,
   InstructionSceneIndex,
   parseInstructionSourceManifest,
 } from "./instructionSceneIndex";
 import { ExclusiveInstructionSceneMount } from "./instructionSceneMount";
+import {
+  InstructionPresentationController,
+  InstructionPresentationMode,
+} from "./instructionPresentation";
 
 export type LDrawLoadState =
   | { kind: "loading" }
@@ -171,7 +174,10 @@ export function cachedInstructionScenes(): Array<[string, LoadedLDrawModel]> {
   return instructionSceneLoader.cachedEntries();
 }
 
-export function useLDrawModel(source: LDrawModelSource): LDrawLoadState {
+export function useLDrawModel(
+  source: LDrawModelSource,
+  retryVersion = 0,
+): LDrawLoadState {
   const [state, setState] = useState<LDrawLoadState>({ kind: "loading" });
 
   useEffect(() => {
@@ -242,7 +248,7 @@ export function useLDrawModel(source: LDrawModelSource): LDrawLoadState {
         disposeLDrawModel(ownedModel);
       }
     };
-  }, [source]);
+  }, [retryVersion, source]);
 
   return state;
 }
@@ -267,6 +273,7 @@ interface HierarchicalLDrawModelProps {
   activeOccurrenceId: string;
   selectedStep: number;
   cacheKey: string;
+  presentationMode?: InstructionPresentationMode;
 }
 
 export function HierarchicalLDrawModel({
@@ -276,16 +283,18 @@ export function HierarchicalLDrawModel({
   activeOccurrenceId,
   selectedStep,
   cacheKey,
+  presentationMode = "assembled",
 }: HierarchicalLDrawModelProps) {
   const mount = useMemo(() => new ExclusiveInstructionSceneMount(host), [host]);
+  const presentation = useMemo(
+    () => new InstructionPresentationController(model, sceneIndex),
+    [model, sceneIndex],
+  );
   useLayoutEffect(() => {
-    applyInstructionSceneVisibility(
-      model,
-      sceneIndex,
-      activeOccurrenceId,
-      selectedStep,
-    );
-  }, [activeOccurrenceId, model, sceneIndex, selectedStep]);
+    presentation.apply(activeOccurrenceId, selectedStep, presentationMode);
+  }, [activeOccurrenceId, presentation, presentationMode, selectedStep]);
+
+  useEffect(() => () => presentation.dispose(), [presentation]);
 
   useLayoutEffect(() => {
     mount.activate({ cacheKey, model, sceneIndex });

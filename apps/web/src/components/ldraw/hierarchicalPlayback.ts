@@ -119,3 +119,12 @@ export function localRenderNotice(strategy: RenderStrategy): string | null {
     ? "Memory-safe local rendering is active. Completed child assemblies remain attached in the instructions and navigation, but their geometry is omitted from this canvas."
     : null;
 }
+
+export function occurrenceRequestKey(
+  modelId: string,
+  occurrenceId: string,
+  step: number,
+  childOffset: number,
+): string {
+  return `${modelId}:${occurrenceId}:${step}:${childOffset}`;
+}

@@ -86,6 +86,7 @@ export default function ModelsPage() {
   }
 
   const returnSearch = params.toString();
+  const prefetchBuilder = () => void import("./VisualBuilderPage");
   return (
     <section className="page-panel" aria-labelledby="models-title">
       <div className="page-heading catalog-heading">
@@ -120,7 +121,10 @@ export default function ModelsPage() {
               <span>{model.coverage.fullyBuildable ? "Fully buildable" : `${model.coverage.totalMissingQuantity.toLocaleString()} pieces missing`}</span>
             </div>}
             <small>{new Date(model.createdAt).toLocaleString()}</small>
-            <Link className="button-link" to={`/models/${model.modelId}?return=${encodeURIComponent(returnSearch)}`}>Inspect model</Link>
+            <div className="model-card-actions">
+              <Link className="button-link" to={`/models/${model.modelId}?return=${encodeURIComponent(returnSearch)}`}>Model details</Link>
+              <Link className="button-link" to={`/models/${model.modelId}/build`} onMouseEnter={prefetchBuilder} onFocus={prefetchBuilder}>Open builder</Link>
+            </div>
           </article>)}</div>}
         <div className="pagination"><button disabled={page <= 1} onClick={() => updateParams("page", String(page - 1))}>Previous</button><span>Page {page} of {Math.max(1, results.data.totalPages)}</span><button disabled={page >= results.data.totalPages} onClick={() => updateParams("page", String(page + 1))}>Next</button></div>
       </>}

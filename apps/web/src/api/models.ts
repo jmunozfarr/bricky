@@ -219,6 +219,51 @@ export interface InstructionPlaybackOccurrence {
   complexity: RenderComplexity;
 }
 
+export interface BuildScene {
+  url: string;
+  cacheKey: string;
+  renderStrategy: RenderStrategy;
+  delivery: "packed" | "external";
+  complexity: RenderComplexity;
+}
+
+export interface BuildStepPart {
+  sourcePartId: string;
+  partId: string;
+  aliasApplied: boolean;
+  instructionNodeIds: string[];
+  partName: string;
+  colorCode: number | null;
+  colorName: string;
+  colorHex: string | null;
+  quantityThisStep: number;
+  ownedQuantity: number;
+  modelRequiredQuantity: number;
+  modelMissingQuantity: number;
+  catalogAvailable: boolean;
+}
+
+export interface BuildStep {
+  step: number;
+  parts: BuildStepPart[];
+  directGeometryCommandCount: number;
+  attachments: PlaybackChild[];
+}
+
+export interface BuildManifest {
+  modelId: string;
+  modelName: string;
+  occurrenceId: string;
+  parentOccurrenceId: string | null;
+  sourceSubmodelName: string;
+  attachmentStep: number | null;
+  breadcrumbs: PlaybackBreadcrumb[];
+  repeatedDefinitionCount: number;
+  repeatedDefinitionIndex: number;
+  scene: BuildScene;
+  steps: BuildStep[];
+}
+
 export interface ModelsPage {
   items: ModelSummary[];
   page: number;
@@ -345,6 +390,17 @@ export function getInstructionOccurrence(
   });
   return fetchJson<InstructionPlaybackOccurrence>(
     `/api/models/${encodeURIComponent(modelId)}/instruction-occurrences/${encodeURIComponent(occurrenceId)}?${params}`,
+    signal,
+  );
+}
+
+export function getBuildManifest(
+  modelId: string,
+  occurrenceId: string,
+  signal?: AbortSignal,
+): Promise<BuildManifest> {
+  return fetchJson<BuildManifest>(
+    `/api/models/${encodeURIComponent(modelId)}/instruction-occurrences/${encodeURIComponent(occurrenceId)}/build-manifest`,
     signal,
   );
 }

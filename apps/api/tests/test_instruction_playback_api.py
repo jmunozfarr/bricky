@@ -89,6 +89,46 @@ def test_occurrence_payload_has_breadcrumbs_immediate_children_and_repeats(
     ]
 
 
+def test_build_manifest_returns_complete_scene_steps_parts_and_inventory(
+    catalog_session_factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    client, model_id, _source = imported_fixture(
+        catalog_session_factory, tmp_path, "flat_steps.mpd"
+    )
+    assert client.put(
+        "/api/inventory/items/3001/4", json={"quantity": 2}
+    ).status_code == 200
+
+    response = client.get(
+        f"/api/models/{model_id}/instruction-occurrences/occ-000001/build-manifest"
+    )
+
+    assert response.status_code == 200
+    manifest = response.json()
+    assert manifest["occurrenceId"] == "occ-000001"
+    assert "step=" not in manifest["scene"]["url"]
+    assert len(manifest["scene"]["cacheKey"]) == 64
+    assert [step["step"] for step in manifest["steps"]] == [1, 2, 3]
+    assert manifest["steps"][0]["parts"] == [
+        {
+            "sourcePartId": "3001",
+            "partId": "3001",
+            "aliasApplied": False,
+            "instructionNodeIds": ["node-000001"],
+            "partName": "Brick 2 x 4",
+            "colorCode": 4,
+            "colorName": "Red",
+            "colorHex": "#C91A09",
+            "quantityThisStep": 1,
+            "ownedQuantity": 2,
+            "modelRequiredQuantity": 1,
+            "modelMissingQuantity": 0,
+            "catalogAvailable": True,
+        }
+    ]
+    assert manifest["steps"][2]["parts"][0]["catalogAvailable"] is False
+
+
 def test_derived_source_is_safe_ephemeral_and_preserves_original(
     catalog_session_factory: sessionmaker[Session], tmp_path: Path
 ) -> None:

@@ -1,10 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 
 import { getBuildingStepCount } from "./buildingSteps";
 import { BuildingStepControls } from "./BuildingStepControls";
 import { LDrawModel, LDrawModelSource, useLDrawModel } from "./LDrawModel";
 import { ViewerCamera } from "./ViewerCamera";
+import { WebGlLifecycle } from "./WebGlLifecycle";
+import { maximumViewerDpr } from "./viewerQuality";
+import {
+  CameraCommand,
+  CameraCommandInput,
+  isEditableShortcutTarget,
+  ViewerToolbar,
+} from "./ViewerToolbar";
 
 export const SYNTHETIC_MODEL_SOURCE: LDrawModelSource = {
   kind: "synthetic",
@@ -39,9 +47,17 @@ interface LDrawViewerProps {
 }
 
 export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
-  const loadState = useLDrawModel(source);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const [contextLost, setContextLost] = useState(false);
+  const [canvasVersion, setCanvasVersion] = useState(0);
+  const loadState = useLDrawModel(source, retryVersion);
   const [selectedStep, setSelectedStep] = useState(0);
-  const [resetVersion, setResetVersion] = useState(0);
+  const [cameraCommand, setCameraCommand] = useState<CameraCommand>({
+    id: 0,
+    kind: "fit",
+    preset: "isometric",
+  });
+  const viewerRef = useRef<HTMLElement>(null);
   const model = loadState.kind === "ready" ? loadState.model : null;
   const stepCount = useMemo(
     () => (model === null ? 1 : getBuildingStepCount(model)),
@@ -54,8 +70,39 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
     setSelectedStep(Math.min(Math.max(Math.trunc(step), 0), stepCount - 1));
   }
 
+  function issueCameraCommand(command: CameraCommandInput) {
+    setCameraCommand((current) => ({ ...command, id: current.id + 1 }));
+  }
+
+  function handleShortcut(event: KeyboardEvent<HTMLElement>) {
+    if (isEditableShortcutTarget(event.target)) return;
+    const key = event.key.toLowerCase();
+    if (key === "arrowleft") selectStep(selectedStep - 1);
+    else if (key === "arrowright") selectStep(selectedStep + 1);
+    else if (key === "home") selectStep(0);
+    else if (key === "end") selectStep(stepCount - 1);
+    else if (key === "r") issueCameraCommand({ kind: "fit", preset: "isometric" });
+    else if (key === "1") issueCameraCommand({ kind: "fit", preset: "isometric" });
+    else if (key === "2") issueCameraCommand({ kind: "fit", preset: "front" });
+    else if (key === "3") issueCameraCommand({ kind: "fit", preset: "right" });
+    else if (key === "4") issueCameraCommand({ kind: "fit", preset: "top" });
+    else if (key === "+" || key === "=") issueCameraCommand({ kind: "zoom", direction: "in" });
+    else if (key === "-" || key === "_") issueCameraCommand({ kind: "zoom", direction: "out" });
+    else if (key === "f" && document.fullscreenEnabled) {
+      if (document.fullscreenElement === viewerRef.current) void document.exitFullscreen();
+      else void viewerRef.current?.requestFullscreen();
+    }
+    else return;
+    event.preventDefault();
+  }
+
   return (
-    <section className="viewer-section" aria-labelledby="viewer-title">
+    <section
+      ref={viewerRef}
+      className="viewer-section"
+      aria-labelledby="viewer-title"
+      onKeyDown={handleShortcut}
+    >
       <div className="viewer-heading">
         <div>
           <p className="eyebrow">{eyebrow}</p>
@@ -63,24 +110,40 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
         </div>
         <p>Drag to rotate · Scroll to zoom</p>
       </div>
-      <div className="viewer-frame">
+      <ViewerToolbar containerRef={viewerRef} onCameraCommand={issueCameraCommand} />
+      <div
+        className="viewer-frame"
+        tabIndex={0}
+        aria-label={`Keyboard controls for ${title}`}
+      >
         <Canvas
+          key={canvasVersion}
           camera={{ fov: 40, near: 0.1, far: 10_000 }}
-          dpr={[1, 2]}
+          dpr={[1, maximumViewerDpr(window.innerWidth, window.devicePixelRatio)]}
+          frameloop="demand"
+          performance={{ min: 0.75, debounce: 300 }}
           role="img"
           aria-label={`Interactive three-dimensional view of ${title}`}
           fallback={<div className="viewer-message">WebGL is unavailable.</div>}
         >
-          <color attach="background" args={["#e6e7e8"]} />
-          <ambientLight intensity={1.4} />
+          <WebGlLifecycle
+            onContextLost={() => setContextLost(true)}
+            onContextRestored={() => {
+              setContextLost(false);
+              setCanvasVersion((version) => version + 1);
+            }}
+          />
+          <ambientLight intensity={1.45} />
           <directionalLight position={[100, 150, 100]} intensity={2.2} />
           <directionalLight position={[-80, 60, -100]} intensity={1.1} />
           {model !== null && (
-            <>
               <LDrawModel model={model} selectedStep={selectedStep} />
-              <ViewerCamera model={model} resetVersion={resetVersion} />
-            </>
           )}
+          <ViewerCamera
+            model={model}
+            fitVersion={source.key}
+            command={cameraCommand}
+          />
         </Canvas>
         {loadState.kind === "loading" && (
           <div className="viewer-message" role="status">
@@ -91,16 +154,32 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
           <div className="viewer-message viewer-message--error" role="alert">
             <strong>Unable to load the LDraw model.</strong>
             <span>{loadState.message}</span>
+            <button type="button" onClick={() => setRetryVersion((value) => value + 1)}>
+              Try again
+            </button>
+          </div>
+        )}
+        {contextLost && (
+          <div className="viewer-message viewer-message--error" role="alert">
+            <strong>The 3D graphics context was interrupted.</strong>
+            <span>The viewer will recover when the browser restores WebGL.</span>
           </div>
         )}
       </div>
       {loadState.kind === "ready" && (
-        <BuildingStepControls
-          selectedStep={selectedStep}
-          stepCount={stepCount}
-          onStepChange={selectStep}
-          onResetCamera={() => setResetVersion((version) => version + 1)}
-        />
+        <>
+          <p className="sr-only">
+            {title}, step {selectedStep + 1} of {stepCount}.
+          </p>
+          <BuildingStepControls
+            selectedStep={selectedStep}
+            stepCount={stepCount}
+            onStepChange={selectStep}
+            onResetCamera={() =>
+              issueCameraCommand({ kind: "fit", preset: "isometric" })
+            }
+          />
+        </>
       )}
     </section>
   );

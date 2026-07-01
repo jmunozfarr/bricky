@@ -50,10 +50,20 @@ from app.services.instruction_playback import (
     clear_playback_cache,
     derive_occurrence_source,
     parse_playback_data,
+    playback_breadcrumbs,
     playback_occurrence,
     select_render_strategy,
 )
 from app.services.ldraw_model_parser import ModelParseError
+from app.services.ldraw_library import get_library_status
+from app.services.ldraw_aliases import LDrawMovedAliasResolver, OfficialPartRecord
+from app.services.ldraw_pack import (
+    PACKED_SOURCE_CACHE,
+    LDrawPackError,
+    LDrawPackLimitError,
+    PackedLDrawSource,
+    pack_ldraw_source,
+)
 from app.services.local_workspace import resolve_local_workspace
 from app.services.model_coverage import (
     CoverageItem,
@@ -383,6 +393,59 @@ class InstructionPlaybackOccurrenceResponse(BaseModel):
     )
     render_strategy_reason: str = Field(alias="renderStrategyReason")
     complexity: RenderComplexityResponse
+
+
+class BuildSceneResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    url: str
+    cache_key: str = Field(alias="cacheKey")
+    render_strategy: Literal["subtree", "local"] = Field(alias="renderStrategy")
+    delivery: Literal["packed", "external"]
+    complexity: RenderComplexityResponse
+
+
+class BuildStepPartResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    source_part_id: str = Field(alias="sourcePartId")
+    part_id: str = Field(alias="partId")
+    alias_applied: bool = Field(alias="aliasApplied")
+    instruction_node_ids: list[str] = Field(alias="instructionNodeIds")
+    part_name: str = Field(alias="partName")
+    color_code: int | None = Field(alias="colorCode")
+    color_name: str = Field(alias="colorName")
+    color_hex: str | None = Field(alias="colorHex")
+    quantity_this_step: int = Field(alias="quantityThisStep")
+    owned_quantity: int = Field(alias="ownedQuantity")
+    model_required_quantity: int = Field(alias="modelRequiredQuantity")
+    model_missing_quantity: int = Field(alias="modelMissingQuantity")
+    catalog_available: bool = Field(alias="catalogAvailable")
+
+
+class BuildStepResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    step: int
+    parts: list[BuildStepPartResponse]
+    direct_geometry_command_count: int = Field(alias="directGeometryCommandCount")
+    attachments: list[PlaybackChildResponse]
+
+
+class BuildManifestResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    model_id: uuid.UUID = Field(alias="modelId")
+    model_name: str = Field(alias="modelName")
+    occurrence_id: str = Field(alias="occurrenceId")
+    parent_occurrence_id: str | None = Field(alias="parentOccurrenceId")
+    source_submodel_name: str = Field(alias="sourceSubmodelName")
+    attachment_step: int | None = Field(alias="attachmentStep")
+    breadcrumbs: list[PlaybackBreadcrumbResponse]
+    repeated_definition_count: int = Field(alias="repeatedDefinitionCount")
+    repeated_definition_index: int = Field(alias="repeatedDefinitionIndex")
+    scene: BuildSceneResponse
+    steps: list[BuildStepResponse]
 
 
 def _render_complexity_response(
@@ -841,6 +904,34 @@ def create_models_router(
                 status_code=422, detail=f"Instruction playback unavailable: {error}"
             ) from error
 
+    def scene_identity(
+        model: ImportedModel, occurrence_id: str, render_strategy: str
+    ) -> str:
+        library = get_library_status(library_root)
+        fingerprint = library.archive_sha256 or "unversioned-library"
+        return hashlib.sha256(
+            f"{model.source_sha256}:{occurrence_id}:{render_strategy}:complete:v3:{fingerprint}".encode(
+                "ascii"
+            )
+        ).hexdigest()
+
+    def packed_scene_for(
+        model: ImportedModel,
+        data: PlaybackData,
+        occurrence_id: str,
+        render_strategy: Literal["subtree", "local"],
+    ) -> tuple[str, PackedLDrawSource]:
+        cache_key = scene_identity(model, occurrence_id, render_strategy)
+        cached = PACKED_SOURCE_CACHE.get(cache_key)
+        if cached is not None:
+            return cache_key, cached
+        derived = derive_occurrence_source(
+            data, occurrence_id, current_step=None, strategy=render_strategy
+        )
+        packed = pack_ldraw_source(derived, library_root)
+        PACKED_SOURCE_CACHE.set(cache_key, packed)
+        return cache_key, packed
+
     @router.get("/{model_id}/coverage", response_model=ModelCoverageResponse)
     def model_coverage(
         model_id: uuid.UUID,
@@ -1015,6 +1106,233 @@ def create_models_router(
         )
 
     @router.get(
+        "/{model_id}/instruction-occurrences/{occurrence_id}/build-manifest",
+        response_model=BuildManifestResponse,
+    )
+    def model_build_manifest(
+        model_id: uuid.UUID,
+        occurrence_id: str,
+        session: Session = Depends(session_dependency),
+    ) -> BuildManifestResponse:
+        model = find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        data = playback_data_for(model)
+        occurrence = data.occurrence_by_id.get(occurrence_id)
+        if occurrence is None:
+            raise HTTPException(status_code=404, detail="Instruction occurrence not found")
+        if not data.available:
+            raise HTTPException(status_code=409, detail="Hierarchical playback is unavailable")
+
+        definition = data.definition_by_name[
+            occurrence.source_submodel_name.replace("\\", "/").lower()
+        ]
+        selection = select_render_strategy(data, occurrence_id, active_render_limits)
+        render_strategy = selection.recommended_strategy
+        nodes = data.nodes_by_occurrence.get(occurrence_id, ())
+
+        def source_part_id(filename: str) -> str:
+            name = PurePosixPath(filename.replace("\\", "/")).name
+            return name[:-4].lower() if name.lower().endswith(".dat") else name.lower()
+
+        part_nodes = [node for node in nodes if node.kind == "part_reference"]
+        source_part_ids = sorted({source_part_id(node.source_filename) for node in part_nodes})
+        color_codes = sorted(
+            {node.effective_color for node in part_nodes if node.effective_color is not None}
+        )
+        official_parts = list(session.scalars(select(Part).where(Part.is_subpart.is_(False))))
+        alias_resolver = LDrawMovedAliasResolver(
+            library_root,
+            [
+                OfficialPartRecord(
+                    part_id=part.part_id,
+                    description=part.name,
+                    relative_path=part.relative_path,
+                )
+                for part in official_parts
+            ],
+        )
+        alias_resolutions = alias_resolver.resolve_many(set(source_part_ids))
+        canonical_by_source = {
+            source_id: (
+                resolution.canonical_part_id
+                if resolution.status == "resolved"
+                else source_id
+            )
+            for source_id, resolution in alias_resolutions.items()
+        }
+        catalog_parts = {
+            normalize_part_id(part.part_id): part for part in official_parts
+        }
+        colors = {
+            color.code: color
+            for color in session.scalars(
+                select(LDrawColor).where(LDrawColor.code.in_(color_codes))
+            )
+        }
+
+        bom_rows = list(
+            session.scalars(
+                select(ModelBomItem).where(ModelBomItem.model_id == model.id)
+            )
+        )
+        requirements = [
+            CoverageRequirement(item.part_id, item.color_code, item.quantity)
+            for item in bom_rows
+        ]
+        workspace = resolve_local_workspace(session)
+        coverage = calculate_model_coverage(
+            requirements,
+            _inventory_for_requirements(session, workspace.id, requirements),
+        )
+        coverage_by_key = {
+            (normalize_part_id(item.part_id), item.color_code): item
+            for item in coverage.items
+        }
+        raw_inventory = {
+            (normalize_part_id(part_id), color_code): quantity
+            for part_id, color_code, quantity in session.execute(
+                select(
+                    InventoryItem.part_id,
+                    InventoryItem.color_code,
+                    InventoryItem.quantity,
+                ).where(InventoryItem.workspace_id == workspace.id)
+            )
+        }
+
+        children_by_step: dict[int, list[PlaybackChildResponse]] = {}
+        for child_id in occurrence.child_occurrence_ids:
+            child = data.occurrence_by_id[child_id]
+            if child.attachment_step is None:
+                continue
+            children_by_step.setdefault(child.attachment_step, []).append(
+                PlaybackChildResponse(
+                    occurrence_id=child.occurrence_id,
+                    source_submodel_name=child.source_submodel_name,
+                    attachment_step=child.attachment_step,
+                    traversal_order=child.traversal_order,
+                    repeated_definition_count=data.repeated_definition_counts[
+                        child.source_submodel_name.replace("\\", "/").lower()
+                    ],
+                    repeated_definition_index=data.repeated_definition_indices[
+                        child.occurrence_id
+                    ],
+                )
+            )
+
+        steps: list[BuildStepResponse] = []
+        for local_step in definition.local_steps:
+            grouped: dict[tuple[str, int | None], list[str]] = {}
+            for node in part_nodes:
+                if node.local_step != local_step.step:
+                    continue
+                key = (source_part_id(node.source_filename), node.effective_color)
+                grouped.setdefault(key, []).append(node.instruction_node_id)
+            response_parts: list[BuildStepPartResponse] = []
+            for (part_id, color_code), node_ids in sorted(
+                grouped.items(), key=lambda item: (item[0][0], item[0][1] or -1)
+            ):
+                canonical_part_id = canonical_by_source.get(part_id, part_id)
+                part = catalog_parts.get(normalize_part_id(canonical_part_id))
+                color = colors.get(color_code) if color_code is not None else None
+                coverage_item = (
+                    coverage_by_key.get((normalize_part_id(canonical_part_id), color_code))
+                    if color_code is not None
+                    else None
+                )
+                owned = (
+                    coverage_item.owned_quantity
+                    if coverage_item is not None
+                    else raw_inventory.get((normalize_part_id(part_id), color_code), 0)
+                )
+                required = coverage_item.required_quantity if coverage_item is not None else len(node_ids)
+                missing = coverage_item.missing_quantity if coverage_item is not None else max(required - owned, 0)
+                response_parts.append(
+                    BuildStepPartResponse(
+                        source_part_id=part_id,
+                        part_id=(
+                            coverage_item.part_id
+                            if coverage_item is not None
+                            else canonical_part_id
+                        ),
+                        alias_applied=(
+                            normalize_part_id(canonical_part_id)
+                            != normalize_part_id(part_id)
+                        ),
+                        instruction_node_ids=node_ids,
+                        part_name=part.name if part is not None else part_id,
+                        color_code=color_code,
+                        color_name=(
+                            color.name
+                            if color is not None
+                            else "Inherited colour" if color_code is None else f"Color {color_code}"
+                        ),
+                        color_hex=color.value_hex if color is not None else None,
+                        quantity_this_step=len(node_ids),
+                        owned_quantity=owned,
+                        model_required_quantity=required,
+                        model_missing_quantity=missing,
+                        catalog_available=part is not None and not part.is_subpart,
+                    )
+                )
+            steps.append(
+                BuildStepResponse(
+                    step=local_step.step,
+                    parts=response_parts,
+                    direct_geometry_command_count=len(local_step.direct_geometry),
+                    attachments=children_by_step.get(local_step.step, []),
+                )
+            )
+
+        encoded_occurrence = quote(occurrence_id, safe="")
+        cache_key = scene_identity(model, occurrence_id, render_strategy)
+        delivery: Literal["packed", "external"] = "external"
+        try:
+            cache_key, _packed = packed_scene_for(
+                model, data, occurrence_id, render_strategy
+            )
+            delivery = "packed"
+        except (LDrawPackError, LDrawPackLimitError):
+            LOGGER.info(
+                "Packed scene unavailable for model %s occurrence %s; using external assets",
+                model.public_id,
+                occurrence_id,
+            )
+        scene_url = (
+            f"/api/models/{quote(str(model.public_id), safe='')}/"
+            f"instruction-occurrences/{encoded_occurrence}/source"
+            f"?mode={render_strategy}&delivery={delivery}&v={cache_key}"
+        )
+        session.commit()
+        return BuildManifestResponse(
+            model_id=model.public_id,
+            model_name=model.name,
+            occurrence_id=occurrence.occurrence_id,
+            parent_occurrence_id=occurrence.parent_occurrence_id,
+            source_submodel_name=occurrence.source_submodel_name,
+            attachment_step=occurrence.attachment_step,
+            breadcrumbs=[
+                PlaybackBreadcrumbResponse(
+                    occurrence_id=item.occurrence_id,
+                    source_submodel_name=item.source_submodel_name,
+                )
+                for item in playback_breadcrumbs(data, occurrence_id)
+            ],
+            repeated_definition_count=data.repeated_definition_counts[
+                occurrence.source_submodel_name.replace("\\", "/").lower()
+            ],
+            repeated_definition_index=data.repeated_definition_indices[occurrence_id],
+            scene=BuildSceneResponse(
+                url=scene_url,
+                cache_key=cache_key,
+                render_strategy=render_strategy,
+                delivery=delivery,
+                complexity=_render_complexity_response(selection.complexity),
+            ),
+            steps=steps,
+        )
+
+    @router.get(
         "/{model_id}/instruction-occurrences/{occurrence_id}",
         response_model=InstructionPlaybackOccurrenceResponse,
     )
@@ -1148,6 +1466,7 @@ def create_models_router(
         occurrence_id: str,
         mode: Literal["subtree", "local"] = Query(default="subtree"),
         step: int | None = Query(default=None, ge=1),
+        delivery: Literal["external", "packed"] = Query(default="external"),
         session: Session = Depends(session_dependency),
     ) -> Response:
         model = find_model(session, model_id)
@@ -1172,20 +1491,37 @@ def create_models_router(
                         "message": "Complete subtree rendering exceeds the configured safety policy",
                     },
                 )
-            content = derive_occurrence_source(
-                data, occurrence_id, current_step=step, strategy=mode
-            )
+            if delivery == "packed":
+                if step is not None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Packed delivery is available only for complete scenes",
+                    )
+                _cache_key, packed = packed_scene_for(
+                    model, data, occurrence_id, mode
+                )
+                content = packed.content
+            else:
+                content = derive_occurrence_source(
+                    data, occurrence_id, current_step=step, strategy=mode
+                )
+        except LDrawPackLimitError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except LDrawPackError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         session.commit()
-        etag = hashlib.sha256(
-            f"{model.source_sha256}:{occurrence_id}:{mode}:{step or 'complete'}:v2".encode("ascii")
-        ).hexdigest()
+        etag = hashlib.sha256(content).hexdigest()
         return Response(
             content=content,
             media_type="text/plain; charset=utf-8",
             headers={
-                "Cache-Control": "private, max-age=3600",
+                "Cache-Control": (
+                    "private, max-age=31536000, immutable"
+                    if delivery == "packed"
+                    else "private, max-age=3600"
+                ),
                 "ETag": f'"{etag}"',
                 "X-Content-Type-Options": "nosniff",
             },
@@ -1229,6 +1565,7 @@ def create_models_router(
         session.execute(delete(ImportedModel).where(ImportedModel.id == model.id))
         session.commit()
         clear_playback_cache()
+        PACKED_SOURCE_CACHE.clear()
         if model_directory is not None and model_directory.is_dir():
             shutil.rmtree(model_directory)
         return Response(status_code=204)

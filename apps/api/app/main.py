@@ -5,6 +5,7 @@ from pathlib import Path
 import psycopg
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -65,6 +66,7 @@ def create_app(
         os.environ.get("LDRAW_LIBRARY_ROOT", "/data/ldraw/official")
     )
     application = FastAPI(title="Bricky API")
+    application.add_middleware(GZipMiddleware, minimum_size=1_024)
     active_session_factory = session_factory or SessionFactory
     resolved_model_storage_root = model_storage_root or Path(
         os.environ.get("MODEL_STORAGE_ROOT", "/data/models")

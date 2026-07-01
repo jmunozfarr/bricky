@@ -7,6 +7,7 @@ import {
   isPlaybackEntryVisible,
   localStepBoundaries,
   localRenderNotice,
+  occurrenceRequestKey,
   parentOccurrenceId,
   repeatedDefinitionLabel,
   rootOccurrenceId,
@@ -53,6 +54,11 @@ const occurrence: InstructionPlaybackOccurrence = {
 };
 
 describe("hierarchical playback helpers", () => {
+  it("isolates occurrence request caches by model identity", () => {
+    expect(occurrenceRequestKey("model-a", "occ-000001", 2, 0)).not.toBe(
+      occurrenceRequestKey("model-b", "occ-000001", 2, 0),
+    );
+  });
   it("selects hierarchical mode only for a valid summary", () => {
     expect(
       selectInitialViewerMode({
