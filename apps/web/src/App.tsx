@@ -24,7 +24,9 @@ export function App() {
 
   return (
     <BrowserRouter>
-      <a className="skip-link" href="#main-content">Skip to main content</a>
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       <div className="app-shell">
         <header className="app-header">
           <NavLink className="brand" to="/" aria-label="Bricky overview">
@@ -35,7 +37,9 @@ export function App() {
             </span>
           </NavLink>
           <nav className="primary-nav" aria-label="Primary navigation">
-            <NavLink to="/" end>Overview</NavLink>
+            <NavLink to="/" end>
+              Overview
+            </NavLink>
             <NavLink to="/catalog">Catalog</NavLink>
             <NavLink to="/inventory">Inventory</NavLink>
             <NavLink to="/models">Models</NavLink>
@@ -58,16 +62,78 @@ export function App() {
 
         <main id="main-content" tabIndex={-1}>
           <h1 className="sr-only">Bricky local LEGO workspace</h1>
-          <Suspense fallback={<div className="page-message" role="status" aria-live="polite">Loading page…</div>}>
+          <Suspense
+            fallback={
+              <div className="page-message" role="status" aria-live="polite">
+                Loading page…
+              </div>
+            }
+          >
             <Routes>
-              <Route path="/" element={<TitledRoute title="Overview"><OverviewPage /></TitledRoute>} />
-              <Route path="/catalog" element={<TitledRoute title="Catalog"><CatalogPage /></TitledRoute>} />
-              <Route path="/inventory" element={<TitledRoute title="Inventory"><InventoryPage /></TitledRoute>} />
-              <Route path="/models" element={<TitledRoute title="Models"><ModelsPage /></TitledRoute>} />
-              <Route path="/models/:modelId" element={<TitledRoute title="Model details"><ModelDetailPage /></TitledRoute>} />
-              <Route path="/models/:modelId/build" element={<TitledRoute title="Visual builder"><VisualBuilderPage /></TitledRoute>} />
-              <Route path="/viewer-demo" element={<TitledRoute title="Viewer demo"><ViewerDemoPage /></TitledRoute>} />
-              <Route path="*" element={<TitledRoute title="Page not found"><NotFoundPage /></TitledRoute>} />
+              <Route
+                path="/"
+                element={
+                  <TitledRoute title="Overview">
+                    <OverviewPage />
+                  </TitledRoute>
+                }
+              />
+              <Route
+                path="/catalog"
+                element={
+                  <TitledRoute title="Catalog">
+                    <CatalogPage />
+                  </TitledRoute>
+                }
+              />
+              <Route
+                path="/inventory"
+                element={
+                  <TitledRoute title="Inventory">
+                    <InventoryPage />
+                  </TitledRoute>
+                }
+              />
+              <Route
+                path="/models"
+                element={
+                  <TitledRoute title="Models">
+                    <ModelsPage />
+                  </TitledRoute>
+                }
+              />
+              <Route
+                path="/models/:modelId"
+                element={
+                  <TitledRoute title="Model details">
+                    <ModelDetailPage />
+                  </TitledRoute>
+                }
+              />
+              <Route
+                path="/models/:modelId/build"
+                element={
+                  <TitledRoute title="Visual builder">
+                    <VisualBuilderPage />
+                  </TitledRoute>
+                }
+              />
+              <Route
+                path="/viewer-demo"
+                element={
+                  <TitledRoute title="Viewer demo">
+                    <ViewerDemoPage />
+                  </TitledRoute>
+                }
+              />
+              <Route
+                path="*"
+                element={
+                  <TitledRoute title="Page not found">
+                    <NotFoundPage />
+                  </TitledRoute>
+                }
+              />
             </Routes>
           </Suspense>
         </main>

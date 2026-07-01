@@ -62,11 +62,7 @@ export function BuildingStepControls({
       </label>
 
       <div className="viewer-secondary-actions">
-        <button
-          type="button"
-          onClick={() => onStepChange(stepCount - 1)}
-          disabled={isLastStep}
-        >
+        <button type="button" onClick={() => onStepChange(stepCount - 1)} disabled={isLastStep}>
           Show complete model
         </button>
         <button type="button" onClick={onResetCamera}>

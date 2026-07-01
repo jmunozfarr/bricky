@@ -42,7 +42,7 @@ export class SceneLruCache<Value> {
     this.values.delete(key);
     this.values.set(key, value);
     while (this.values.size > this.maximumSize) {
-      const oldestKey = this.values.keys().next().value as string | undefined;
+      const oldestKey = this.values.keys().next().value;
       if (oldestKey === undefined) break;
       const oldest = this.values.get(oldestKey);
       this.values.delete(oldestKey);
@@ -55,7 +55,7 @@ export class SceneLruCache<Value> {
     this.values.clear();
   }
 
-  entries(): Array<[string, Value]> {
+  entries(): [string, Value][] {
     return [...this.values.entries()];
   }
 }
@@ -124,7 +124,7 @@ export class LatestScopeLoader<Input, Value> {
     }
   }
 
-  cachedEntries(): Array<[string, Value]> {
+  cachedEntries(): [string, Value][] {
     return this.cache.entries();
   }
 

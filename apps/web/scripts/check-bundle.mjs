@@ -2,9 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 
 const assetsDirectory = new URL("../dist/assets/", import.meta.url);
-const javascriptFiles = (await readdir(assetsDirectory)).filter((name) =>
-  name.endsWith(".js"),
-);
+const javascriptFiles = (await readdir(assetsDirectory)).filter((name) => name.endsWith(".js"));
 const sizes = await Promise.all(
   javascriptFiles.map(async (name) => ({
     name,

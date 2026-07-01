@@ -4,22 +4,17 @@ import { Link } from "react-router-dom";
 import { CatalogStatus, getCatalogStatus } from "../api/catalog";
 import { fetchJson } from "../api/client";
 import { getInventorySummary, InventorySummary } from "../api/inventory";
-import {
-  getModelsReadinessSummary,
-  ModelsReadinessSummary,
-} from "../api/models";
+import { getModelsReadinessSummary, ModelsReadinessSummary } from "../api/models";
 import { useLibraryStatus } from "../components/ldraw/useLibraryStatus";
 import { subscribeInventoryChanged } from "../inventory/events";
 
 interface HealthResponse {
-  status: "ok";
-  database: "ok";
+  status: string;
+  database: string;
 }
 
 type AsyncState<T> =
-  | { kind: "loading" }
-  | { kind: "ready"; data: T }
-  | { kind: "error"; message: string };
+  { kind: "loading" } | { kind: "ready"; data: T } | { kind: "error"; message: string };
 
 export default function OverviewPage() {
   const [health, setHealth] = useState<AsyncState<HealthResponse>>({ kind: "loading" });
@@ -62,14 +57,20 @@ export default function OverviewPage() {
         .then((data) => setInventory({ kind: "ready", data }))
         .catch((error: unknown) => {
           if (!(error instanceof DOMException && error.name === "AbortError")) {
-            setInventory({ kind: "error", message: error instanceof Error ? error.message : "Unknown inventory error" });
+            setInventory({
+              kind: "error",
+              message: error instanceof Error ? error.message : "Unknown inventory error",
+            });
           }
         });
       void getModelsReadinessSummary(controller.signal)
         .then((data) => setModels({ kind: "ready", data }))
         .catch((error: unknown) => {
           if (!(error instanceof DOMException && error.name === "AbortError")) {
-            setModels({ kind: "error", message: error instanceof Error ? error.message : "Unknown model readiness error" });
+            setModels({
+              kind: "error",
+              message: error instanceof Error ? error.message : "Unknown model readiness error",
+            });
           }
         });
     };
@@ -118,12 +119,24 @@ export default function OverviewPage() {
         <StatusCard label="Frontend" value="Online" tone="ok" />
         <StatusCard
           label="API"
-          value={health.kind === "ready" ? "Online" : health.kind === "loading" ? "Checking…" : "Unavailable"}
+          value={
+            health.kind === "ready"
+              ? "Online"
+              : health.kind === "loading"
+                ? "Checking…"
+                : "Unavailable"
+          }
           tone={health.kind === "ready" ? "ok" : health.kind === "error" ? "error" : "pending"}
         />
         <StatusCard
           label="PostgreSQL"
-          value={health.kind === "ready" && health.data.database === "ok" ? "Online" : health.kind === "loading" ? "Checking…" : "Unavailable"}
+          value={
+            health.kind === "ready" && health.data.database === "ok"
+              ? "Online"
+              : health.kind === "loading"
+                ? "Checking…"
+                : "Unavailable"
+          }
           tone={health.kind === "ready" ? "ok" : health.kind === "error" ? "error" : "pending"}
         />
         <StatusCard
@@ -131,13 +144,19 @@ export default function OverviewPage() {
           value={
             library.kind === "ready"
               ? library.status.installed
-                ? `${library.status.fileCounts?.dat.toLocaleString() ?? 0} DAT files`
+                ? `${library.status.fileCounts?.dat.toLocaleString() ?? "0"} DAT files`
                 : "Not installed"
               : library.kind === "loading"
                 ? "Checking…"
                 : "Unavailable"
           }
-          tone={library.kind === "ready" && library.status.installed ? "ok" : library.kind === "loading" ? "pending" : "error"}
+          tone={
+            library.kind === "ready" && library.status.installed
+              ? "ok"
+              : library.kind === "loading"
+                ? "pending"
+                : "error"
+          }
         />
         <StatusCard
           label="Parts catalog"
@@ -152,13 +171,25 @@ export default function OverviewPage() {
                 ? "Checking…"
                 : "Unavailable"
           }
-          tone={catalog.kind === "ready" && catalog.data.indexed && !catalog.data.stale ? "ok" : catalog.kind === "loading" ? "pending" : "error"}
+          tone={
+            catalog.kind === "ready" && catalog.data.indexed && !catalog.data.stale
+              ? "ok"
+              : catalog.kind === "loading"
+                ? "pending"
+                : "error"
+          }
         />
       </div>
       {(health.kind === "error" || catalog.kind === "error") && (
         <div className="error" role="alert">
           <strong>Some status checks failed.</strong>
-          <span>{health.kind === "error" ? health.message : catalog.kind === "error" ? catalog.message : ""}</span>
+          <span>
+            {health.kind === "error"
+              ? health.message
+              : catalog.kind === "error"
+                ? catalog.message
+                : ""}
+          </span>
         </div>
       )}
     </section>

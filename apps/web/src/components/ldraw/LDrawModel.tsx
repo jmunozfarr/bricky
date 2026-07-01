@@ -1,20 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import {
-  BufferGeometry,
-  Group,
-  LineSegments,
-  Material,
-  Mesh,
-  Points,
-} from "three";
+import { BufferGeometry, Group, LineSegments, Material, Mesh, Object3D, Points } from "three";
 import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
 import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
 
 import { applyBuildingStepVisibility } from "./buildingSteps";
-import {
-  LatestScopeLoader,
-  ScopeLoadSupersededError,
-} from "./boundedSceneLoader";
+import { LatestScopeLoader, ScopeLoadSupersededError } from "./boundedSceneLoader";
 import {
   createInstructionSceneIndex,
   InstructionSceneIndex,
@@ -137,21 +127,19 @@ async function loadInstructionScopeSource(
   return parseInstructionScopeText(await response.text(), loader);
 }
 
+function isRenderObject(object: Object3D): object is Mesh | LineSegments | Points {
+  return object instanceof Mesh || object instanceof LineSegments || object instanceof Points;
+}
+
 export function disposeLDrawModel(model: Group): void {
   model.removeFromParent();
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
 
   model.traverse((object) => {
-    if (
-      object instanceof Mesh ||
-      object instanceof LineSegments ||
-      object instanceof Points
-    ) {
+    if (isRenderObject(object)) {
       geometries.add(object.geometry);
-      const objectMaterials = Array.isArray(object.material)
-        ? object.material
-        : [object.material];
+      const objectMaterials = Array.isArray(object.material) ? object.material : [object.material];
       objectMaterials.forEach((material) => materials.add(material));
     }
   });
@@ -170,14 +158,11 @@ export function clearInstructionSceneCache(): void {
   instructionSceneLoader.clear();
 }
 
-export function cachedInstructionScenes(): Array<[string, LoadedLDrawModel]> {
+export function cachedInstructionScenes(): [string, LoadedLDrawModel][] {
   return instructionSceneLoader.cachedEntries();
 }
 
-export function useLDrawModel(
-  source: LDrawModelSource,
-  retryVersion = 0,
-): LDrawLoadState {
+export function useLDrawModel(source: LDrawModelSource, retryVersion = 0): LDrawLoadState {
   const [state, setState] = useState<LDrawLoadState>({ kind: "loading" });
 
   useEffect(() => {
@@ -187,8 +172,7 @@ export function useLDrawModel(
     let ownedModel: Group | null = null;
 
     setState((current) =>
-      isInstructionScope &&
-      (current.kind === "ready" || current.kind === "refreshing")
+      isInstructionScope && (current.kind === "ready" || current.kind === "refreshing")
         ? {
             kind: "refreshing",
             model: current.model,
@@ -219,8 +203,7 @@ export function useLDrawModel(
           model,
           sceneIndex: loaded.sceneIndex,
           sourceKey: source.key,
-          fitKey:
-            source.kind === "instruction-scope" ? source.scopeId : source.key,
+          fitKey: source.kind === "instruction-scope" ? source.scopeId : source.key,
         });
       } catch (error: unknown) {
         if (

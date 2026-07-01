@@ -54,20 +54,14 @@ export function searchInventory(
   input: InventoryQuery,
   signal?: AbortSignal,
 ): Promise<InventoryPage> {
-  return fetchJson<InventoryPage>(
-    `/api/inventory/items?${serializeInventoryQuery(input)}`,
-    signal,
-  );
+  return fetchJson<InventoryPage>(`/api/inventory/items?${serializeInventoryQuery(input)}`, signal);
 }
 
 export function getInventoryVariants(
   partId: string,
   signal?: AbortSignal,
 ): Promise<InventoryItem[]> {
-  return fetchJson<InventoryItem[]>(
-    `/api/inventory/items/${encodeURIComponent(partId)}`,
-    signal,
-  );
+  return fetchJson<InventoryItem[]>(`/api/inventory/items/${encodeURIComponent(partId)}`, signal);
 }
 
 export function setInventoryQuantity(
@@ -87,8 +81,7 @@ export function setInventoryQuantity(
 }
 
 export function deleteInventoryItem(partId: string, colorCode: number): Promise<void> {
-  return fetchNoContent(
-    `/api/inventory/items/${encodeURIComponent(partId)}/${colorCode}`,
-    { method: "DELETE" },
-  );
+  return fetchNoContent(`/api/inventory/items/${encodeURIComponent(partId)}/${colorCode}`, {
+    method: "DELETE",
+  });
 }

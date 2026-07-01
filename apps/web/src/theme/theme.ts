@@ -13,11 +13,7 @@ export function resolveTheme(
   preference: ThemePreference,
   systemPrefersDark: boolean,
 ): ResolvedTheme {
-  return preference === "system"
-    ? systemPrefersDark
-      ? "dark"
-      : "light"
-    : preference;
+  return preference === "system" ? (systemPrefersDark ? "dark" : "light") : preference;
 }
 
 function readThemePreference(): ThemePreference {
@@ -43,9 +39,7 @@ export function useThemePreference(): {
   preference: ThemePreference;
   setPreference: (preference: ThemePreference) => void;
 } {
-  const [preference, setPreferenceState] = useState<ThemePreference>(() =>
-    readThemePreference(),
-  );
+  const [preference, setPreferenceState] = useState<ThemePreference>(() => readThemePreference());
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");

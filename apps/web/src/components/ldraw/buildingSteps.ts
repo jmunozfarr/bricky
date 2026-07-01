@@ -3,17 +3,13 @@ import { Group, Object3D } from "three";
 const DEFAULT_STEP_COUNT = 1;
 
 function readPositiveInteger(value: unknown): number | null {
-  return typeof value === "number" &&
-    Number.isInteger(value) &&
-    value >= DEFAULT_STEP_COUNT
+  return typeof value === "number" && Number.isInteger(value) && value >= DEFAULT_STEP_COUNT
     ? value
     : null;
 }
 
 function readNonNegativeInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0
-    ? value
-    : null;
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
 export function getBuildingStepCount(model: Object3D): number {
@@ -21,10 +17,7 @@ export function getBuildingStepCount(model: Object3D): number {
   return readPositiveInteger(userData.numBuildingSteps) ?? DEFAULT_STEP_COUNT;
 }
 
-export function applyBuildingStepVisibility(
-  model: Object3D,
-  selectedStep: number,
-): void {
+export function applyBuildingStepVisibility(model: Object3D, selectedStep: number): void {
   const stepCount = getBuildingStepCount(model);
 
   if (stepCount <= DEFAULT_STEP_COUNT) {

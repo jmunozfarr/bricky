@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  disposeLDrawModel,
-  parseInstructionScopeText,
-} from "./LDrawModel";
+import { disposeLDrawModel, parseInstructionScopeText } from "./LDrawModel";
 
 function occurrenceId(index: number): string {
   return `occ-${String(index).padStart(6, "0")}`;
@@ -57,12 +54,7 @@ function generatedDerivedSource(physicalParts: number): string {
       "1 16 0 0 0 1 0 0 0 1 0 0 0 1 triangle.dat",
     );
   }
-  lines.push(
-    "0 FILE triangle.dat",
-    "0 !LDRAW_ORG Part",
-    "3 16 0 0 0 10 0 0 0 10 0",
-    "0 NOFILE",
-  );
+  lines.push("0 FILE triangle.dat", "0 !LDRAW_ORG Part", "3 16 0 0 0 10 0 0 0 10 0", "0 NOFILE");
   return `${lines.join("\n")}\n`;
 }
 
@@ -74,10 +66,7 @@ describe("hierarchical rendering diagnostics", () => {
       const started = performance.now();
       const loaded = await parseInstructionScopeText(source);
       const initialLoadMs = performance.now() - started;
-      const approximateHeapDeltaBytes = Math.max(
-        0,
-        process.memoryUsage().heapUsed - heapBefore,
-      );
+      const approximateHeapDeltaBytes = Math.max(0, process.memoryUsage().heapUsed - heapBefore);
 
       const scopeSource = generatedDerivedSource(1);
       const scopeStarted = performance.now();

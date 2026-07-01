@@ -14,15 +14,11 @@ import {
 import { getCatalogAvailability } from "../catalog/catalogState";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
 
-const LIBRARY_COMMAND =
-  "docker compose run --rm api python -m app.cli.ldraw_library install";
-const REBUILD_COMMAND =
-  "docker compose exec api python -m app.cli.ldraw_catalog rebuild";
+const LIBRARY_COMMAND = "docker compose run --rm api python -m app.cli.ldraw_library install";
+const REBUILD_COMMAND = "docker compose exec api python -m app.cli.ldraw_catalog rebuild";
 
 type AsyncState<T> =
-  | { kind: "loading" }
-  | { kind: "ready"; data: T }
-  | { kind: "error"; message: string };
+  { kind: "loading" } | { kind: "ready"; data: T } | { kind: "error"; message: string };
 
 export default function CatalogPage() {
   const [params, setParams] = useSearchParams();
@@ -101,12 +97,7 @@ export default function CatalogPage() {
     return <CatalogSetupState availability={availability} />;
   }
   if (selectedPartId) {
-    return (
-      <CatalogPartDetail
-        partId={selectedPartId}
-        onBack={() => updateParam("part", "")}
-      />
-    );
+    return <CatalogPartDetail partId={selectedPartId} onBack={() => updateParam("part", "")} />;
   }
 
   return (
@@ -192,20 +183,41 @@ export default function CatalogPage() {
   );
 }
 
-function CatalogSetupState({ availability }: { availability: ReturnType<typeof getCatalogAvailability> }) {
+function CatalogSetupState({
+  availability,
+}: {
+  availability: ReturnType<typeof getCatalogAvailability>;
+}) {
   const missing = availability === "not-installed";
   return (
     <section className="page-panel setup-state">
       <p className="eyebrow">Catalog unavailable</p>
-      <h2>{missing ? "Official library not installed" : availability === "stale" ? "Catalog index is stale" : "Catalog not indexed"}</h2>
-      <p>{missing ? "Install the official library explicitly before indexing." : "Rebuild the database catalog explicitly; the browser never starts indexing."}</p>
-      <pre><code>{missing ? LIBRARY_COMMAND : REBUILD_COMMAND}</code></pre>
+      <h2>
+        {missing
+          ? "Official library not installed"
+          : availability === "stale"
+            ? "Catalog index is stale"
+            : "Catalog not indexed"}
+      </h2>
+      <p>
+        {missing
+          ? "Install the official library explicitly before indexing."
+          : "Rebuild the database catalog explicitly; the browser never starts indexing."}
+      </p>
+      <pre>
+        <code>{missing ? LIBRARY_COMMAND : REBUILD_COMMAND}</code>
+      </pre>
     </section>
   );
 }
 
 function ErrorPanel({ message }: { message: string }) {
-  return <div className="error" role="alert"><strong>Catalog request failed.</strong><span>{message}</span></div>;
+  return (
+    <div className="error" role="alert">
+      <strong>Catalog request failed.</strong>
+      <span>{message}</span>
+    </div>
+  );
 }
 
 function setRequestError<T>(error: unknown, setter: (state: AsyncState<T>) => void) {

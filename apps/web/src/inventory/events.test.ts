@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { notifyInventoryChanged, subscribeInventoryChanged } from "./events";
 
-
 let originalWindow: Window & typeof globalThis;
 
 beforeEach(() => {

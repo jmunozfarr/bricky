@@ -1,13 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
-import {
-  Box3,
-  Group,
-  MathUtils,
-  PerspectiveCamera,
-  Sphere,
-  Vector3,
-} from "three";
+import { Box3, Group, MathUtils, PerspectiveCamera, Sphere, Vector3 } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import { CameraCommand, CameraPreset } from "./ViewerToolbar";

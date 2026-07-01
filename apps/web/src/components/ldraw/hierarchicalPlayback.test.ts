@@ -36,7 +36,12 @@ const occurrence: InstructionPlaybackOccurrence = {
   empty: false,
   repeatedDefinitionCount: 2,
   repeatedDefinitionIndex: 1,
-  stepSummary: { step: 1, localPartCount: 1, childAttachmentCount: 0, directGeometryCommandCount: 0 },
+  stepSummary: {
+    step: 1,
+    localPartCount: 1,
+    childAttachmentCount: 0,
+    directGeometryCommandCount: 0,
+  },
   children: [],
   childTotal: 0,
   childOffset: 0,
@@ -157,11 +162,7 @@ describe("hierarchical playback helpers", () => {
   });
 
   it("builds breadcrumbs and parent/root navigation", () => {
-    expect(breadcrumbLabels(occurrence.breadcrumbs)).toEqual([
-      "main",
-      "front axle",
-      "wheel hub",
-    ]);
+    expect(breadcrumbLabels(occurrence.breadcrumbs)).toEqual(["main", "front axle", "wheel hub"]);
     expect(parentOccurrenceId(occurrence)).toBe("occ-000002");
     expect(rootOccurrenceId(occurrence)).toBe("occ-000001");
   });

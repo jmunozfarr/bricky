@@ -21,17 +21,14 @@ export interface PlaybackVisibilityEntry {
   attachmentStep: number | null;
 }
 
-export function selectInitialViewerMode(
-  summary: InstructionPlaybackSummary,
-): ViewerModeSelection {
+export function selectInitialViewerMode(summary: InstructionPlaybackSummary): ViewerModeSelection {
   if (summary.available && summary.rootOccurrenceId !== null) {
     return { mode: "hierarchical", fallbackReason: null };
   }
   if (summary.flattenedRenderingAllowed) {
     return {
-        mode: "flattened",
-        fallbackReason:
-          summary.fallbackReason ?? "A valid instruction graph is unavailable.",
+      mode: "flattened",
+      fallbackReason: summary.fallbackReason ?? "A valid instruction graph is unavailable.",
     };
   }
   return {
@@ -56,10 +53,7 @@ export function localStepBoundaries(currentStep: number, stepCount: number) {
   };
 }
 
-export function isChildAttached(
-  attachmentStep: number,
-  currentParentStep: number,
-): boolean {
+export function isChildAttached(attachmentStep: number, currentParentStep: number): boolean {
   return attachmentStep <= currentParentStep;
 }
 
@@ -71,33 +65,21 @@ export function isPlaybackEntryVisible(
   if (entry.kind === "part" && entry.occurrenceId === activeOccurrenceId) {
     return entry.localStep !== null && entry.localStep <= currentStep;
   }
-  if (
-    entry.kind === "occurrence" &&
-    entry.parentOccurrenceId === activeOccurrenceId
-  ) {
-    return (
-      entry.attachmentStep !== null &&
-      isChildAttached(entry.attachmentStep, currentStep)
-    );
+  if (entry.kind === "occurrence" && entry.parentOccurrenceId === activeOccurrenceId) {
+    return entry.attachmentStep !== null && isChildAttached(entry.attachmentStep, currentStep);
   }
   return true;
 }
 
-export function breadcrumbLabels(
-  breadcrumbs: PlaybackBreadcrumb[],
-): string[] {
+export function breadcrumbLabels(breadcrumbs: PlaybackBreadcrumb[]): string[] {
   return breadcrumbs.map((item) => displaySubmodelName(item.sourceSubmodelName));
 }
 
-export function parentOccurrenceId(
-  occurrence: InstructionPlaybackOccurrence,
-): string | null {
+export function parentOccurrenceId(occurrence: InstructionPlaybackOccurrence): string | null {
   return occurrence.parentOccurrenceId;
 }
 
-export function rootOccurrenceId(
-  occurrence: InstructionPlaybackOccurrence,
-): string {
+export function rootOccurrenceId(occurrence: InstructionPlaybackOccurrence): string {
   return occurrence.breadcrumbs[0]?.occurrenceId ?? occurrence.occurrenceId;
 }
 

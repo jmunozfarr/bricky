@@ -347,9 +347,7 @@ export function getModelCoverage(
   );
 }
 
-export function getModelsReadinessSummary(
-  signal?: AbortSignal,
-): Promise<ModelsReadinessSummary> {
+export function getModelsReadinessSummary(signal?: AbortSignal): Promise<ModelsReadinessSummary> {
   return fetchJson<ModelsReadinessSummary>("/api/models/readiness-summary", signal);
 }
 

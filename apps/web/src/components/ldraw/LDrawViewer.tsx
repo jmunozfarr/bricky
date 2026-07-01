@@ -59,10 +59,7 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
   });
   const viewerRef = useRef<HTMLElement>(null);
   const model = loadState.kind === "ready" ? loadState.model : null;
-  const stepCount = useMemo(
-    () => (model === null ? 1 : getBuildingStepCount(model)),
-    [model],
-  );
+  const stepCount = useMemo(() => (model === null ? 1 : getBuildingStepCount(model)), [model]);
 
   useEffect(() => setSelectedStep(0), [model]);
 
@@ -91,12 +88,12 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
     else if (key === "f" && document.fullscreenEnabled) {
       if (document.fullscreenElement === viewerRef.current) void document.exitFullscreen();
       else void viewerRef.current?.requestFullscreen();
-    }
-    else return;
+    } else return;
     event.preventDefault();
   }
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Shortcuts bubble up from the focusable viewer frame below; the section itself never takes focus.
     <section
       ref={viewerRef}
       className="viewer-section"
@@ -113,6 +110,7 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
       <ViewerToolbar containerRef={viewerRef} onCameraCommand={issueCameraCommand} />
       <div
         className="viewer-frame"
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- The frame hosts the 3D canvas and receives focus for the documented keyboard camera/step controls.
         tabIndex={0}
         aria-label={`Keyboard controls for ${title}`}
       >
@@ -136,14 +134,8 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
           <ambientLight intensity={1.45} />
           <directionalLight position={[100, 150, 100]} intensity={2.2} />
           <directionalLight position={[-80, 60, -100]} intensity={1.1} />
-          {model !== null && (
-              <LDrawModel model={model} selectedStep={selectedStep} />
-          )}
-          <ViewerCamera
-            model={model}
-            fitVersion={source.key}
-            command={cameraCommand}
-          />
+          {model !== null && <LDrawModel model={model} selectedStep={selectedStep} />}
+          <ViewerCamera model={model} fitVersion={source.key} command={cameraCommand} />
         </Canvas>
         {loadState.kind === "loading" && (
           <div className="viewer-message" role="status">
@@ -175,9 +167,7 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
             selectedStep={selectedStep}
             stepCount={stepCount}
             onStepChange={selectStep}
-            onResetCamera={() =>
-              issueCameraCommand({ kind: "fit", preset: "isometric" })
-            }
+            onResetCamera={() => issueCameraCommand({ kind: "fit", preset: "isometric" })}
           />
         </>
       )}
@@ -189,8 +179,8 @@ export function LDrawAttribution() {
   return (
     <aside className="ldraw-attribution" aria-label="LDraw attribution">
       <strong>This software uses the LDraw Parts Library.</strong>{" "}
-      <a href="https://www.ldraw.org/">LDraw.org</a> is community-run and is not
-      sponsored, endorsed, or authorized by the LEGO Group. See the{" "}
+      <a href="https://www.ldraw.org/">LDraw.org</a> is community-run and is not sponsored,
+      endorsed, or authorized by the LEGO Group. See the{" "}
       <a href="https://www.ldraw.org/legal-info">LDraw legal information</a>.
     </aside>
   );

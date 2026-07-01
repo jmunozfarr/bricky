@@ -17,9 +17,7 @@ function status(overrides: Partial<CatalogStatus>): CatalogStatus {
 
 describe("catalog availability", () => {
   it("distinguishes unavailable, unindexed, stale, and ready states", () => {
-    expect(getCatalogAvailability(status({ libraryInstalled: false }))).toBe(
-      "not-installed",
-    );
+    expect(getCatalogAvailability(status({ libraryInstalled: false }))).toBe("not-installed");
     expect(getCatalogAvailability(status({ indexed: false }))).toBe("not-indexed");
     expect(getCatalogAvailability(status({ stale: true }))).toBe("stale");
     expect(getCatalogAvailability(status({}))).toBe("ready");

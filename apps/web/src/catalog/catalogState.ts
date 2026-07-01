@@ -1,10 +1,6 @@
 import { CatalogStatus } from "../api/catalog";
 
-export type CatalogAvailability =
-  | "not-installed"
-  | "not-indexed"
-  | "stale"
-  | "ready";
+export type CatalogAvailability = "not-installed" | "not-indexed" | "stale" | "ready";
 
 export function getCatalogAvailability(status: CatalogStatus): CatalogAvailability {
   if (!status.libraryInstalled) {

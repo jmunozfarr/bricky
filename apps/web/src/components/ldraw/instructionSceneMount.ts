@@ -25,10 +25,7 @@ export function instructionSceneDiagnostic(
     cacheKey: scene.cacheKey,
     uuid: scene.model.uuid,
     name: scene.model.name,
-    parent:
-      scene.model.parent === null
-        ? null
-        : scene.model.parent.name || scene.model.parent.uuid,
+    parent: scene.model.parent === null ? null : scene.model.parent.name || scene.model.parent.uuid,
     childCount: scene.model.children.length,
     indexedNodeIds: scene.sceneIndex.entries.flatMap((entry) =>
       entry.instructionNodeId === null ? [] : [entry.instructionNodeId],

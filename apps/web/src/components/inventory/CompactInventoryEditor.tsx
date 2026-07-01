@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 
-import {
-  deleteInventoryItem,
-  setInventoryQuantity,
-} from "../../api/inventory";
+import { deleteInventoryItem, setInventoryQuantity } from "../../api/inventory";
 import { notifyInventoryChanged } from "../../inventory/events";
 import {
   incrementQuantity,
@@ -48,9 +45,7 @@ export function CompactInventoryEditor({
       }
       notifyInventoryChanged();
     } catch (caught: unknown) {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to update inventory quantity.",
-      );
+      setError(caught instanceof Error ? caught.message : "Unable to update inventory quantity.");
     } finally {
       setBusy(false);
     }
@@ -114,8 +109,16 @@ export function CompactInventoryEditor({
       {!catalogAvailable && (
         <small>Catalog metadata is unavailable; only removal is allowed.</small>
       )}
-      {message && <small className="success-message" role="status">{message}</small>}
-      {error && <small className="inline-error" role="alert">{error}</small>}
+      {message && (
+        <small className="success-message" role="status">
+          {message}
+        </small>
+      )}
+      {error && (
+        <small className="inline-error" role="alert">
+          {error}
+        </small>
+      )}
     </div>
   );
 }
