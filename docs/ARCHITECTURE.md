@@ -50,7 +50,11 @@ sequenceDiagram
     API-->>Browser: public UUID and import summary
 ```
 
-Imported source can also be parsed on demand into a bounded hierarchical instruction graph. Playback requests use bounded occurrence metadata and ephemeral occurrence-scoped MPD source; neither representation is persisted or participates in the BOM transaction. The original flattened Three.js mode remains available. See [`INSTRUCTION_GRAPH.md`](INSTRUCTION_GRAPH.md).
+Imported source can also be parsed on demand into a bounded hierarchical instruction graph. Playback requests use bounded occurrence metadata and ephemeral, step-aware MPD source. Definition-local type-2 through type-5 geometry remains rendering content and never enters the physical BOM transaction. A centralized complexity policy chooses complete `subtree` or child-omitting `local` source; unsafe roots cannot automatically launch flattened parsing. Neither graph nor derived source is persisted. See [`INSTRUCTION_GRAPH.md`](INSTRUCTION_GRAPH.md).
+
+The frontend serializes bounded Three.js parses because parsing cannot be cancelled once underway. Only the newest waiting scope is retained, stale results are disposed, and a three-scene LRU is cleared at model boundaries. The LRU owns memory only; a stable canvas host holds at most one parsed root and synchronously detaches it during replacement. API metadata/source fetches retain normal abort cancellation.
+
+Imported and instruction-scope scenes use normal `LDrawLoader` material and depth behavior. Bricky preserves authored transforms, BFC winding, colors, transparency, and depth settings; it does not add placement offsets or renderer compensation for defective model geometry.
 
 Source bytes are never normalized. Only derived rows are canonicalized.
 

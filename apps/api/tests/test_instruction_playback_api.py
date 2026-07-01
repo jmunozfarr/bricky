@@ -22,6 +22,7 @@ VALID_FIXTURES = (
     "repeated_submodel.mpd",
     "transformed_occurrences.mpd",
     "explicit_attachment_steps.mpd",
+    "direct_geometry_flex.mpd",
 )
 
 
@@ -185,3 +186,30 @@ def test_large_occurrence_navigation_payload_is_paginated(
     assert len(occurrence.content) < 20_000
     assert occurrence.json()["childTotal"] == 1_000
     assert len(occurrence.json()["children"]) == 50
+    assert summary.json()["recommendedRenderStrategy"] == "local"
+    assert summary.json()["flattenedRenderingAllowed"] is False
+    assert occurrence.json()["renderStrategy"] == "local"
+    assert "mode=local" in occurrence.json()["sceneSourceUrl"]
+
+
+def test_local_source_excludes_child_geometry_and_invalid_modes_are_typed(
+    catalog_session_factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    client, model_id, _source = imported_fixture(
+        catalog_session_factory, tmp_path, "direct_geometry_flex.mpd"
+    )
+    metadata = client.get(
+        f"/api/models/{model_id}/instruction-occurrences/occ-000001?step=1&renderStrategy=local"
+    )
+    source = client.get(
+        f"/api/models/{model_id}/instruction-occurrences/occ-000001/source?mode=local&step=1"
+    )
+    invalid = client.get(
+        f"/api/models/{model_id}/instruction-occurrences/occ-000001/source?mode=invalid&step=1"
+    )
+
+    assert metadata.status_code == source.status_code == 200
+    assert metadata.json()["children"][0]["occurrenceId"] == "occ-000002"
+    assert metadata.json()["renderStrategy"] == "local"
+    assert b"__bricky_occ_000002.ldr" not in source.content
+    assert invalid.status_code == 422

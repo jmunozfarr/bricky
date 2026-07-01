@@ -13,9 +13,10 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 interface ViewerCameraProps {
   model: Group;
   resetVersion: number;
+  fitVersion?: string | number;
 }
 
-export function ViewerCamera({ model, resetVersion }: ViewerCameraProps) {
+export function ViewerCamera({ model, resetVersion, fitVersion = 0 }: ViewerCameraProps) {
   const { camera, gl, invalidate } = useThree();
   const controlsRef = useRef<OrbitControls | null>(null);
 
@@ -62,7 +63,7 @@ export function ViewerCamera({ model, resetVersion }: ViewerCameraProps) {
     controls.maxDistance = Math.max(sphere.radius * 12, distance * 2);
     controls.update();
     invalidate();
-  }, [camera, invalidate, model, resetVersion]);
+  }, [camera, fitVersion, invalidate, model, resetVersion]);
 
   useFrame(() => {
     controlsRef.current?.update();

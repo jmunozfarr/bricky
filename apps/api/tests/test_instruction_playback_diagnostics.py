@@ -32,18 +32,14 @@ def test_playback_api_diagnostics(
     root = client.get(
         f"/api/models/{model_id}/instruction-occurrences/occ-000001?step=1"
     )
-    source = client.get(
-        f"/api/models/{model_id}/instruction-occurrences/occ-000001/source"
-    )
+    source = client.get(root.json()["sceneSourceUrl"])
     initial_api_ms = (perf_counter() - started) * 1_000
 
     scope_started = perf_counter()
     child = client.get(
         f"/api/models/{model_id}/instruction-occurrences/occ-000002?step=1"
     )
-    child_source = client.get(
-        f"/api/models/{model_id}/instruction-occurrences/occ-000002/source"
-    )
+    child_source = client.get(child.json()["sceneSourceUrl"])
     scope_api_ms = (perf_counter() - scope_started) * 1_000
     diagnostics = {
         "physicalPartOccurrences": physical_parts,

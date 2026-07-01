@@ -19,6 +19,13 @@ from app.services.instruction_graph import (
     InstructionGraphLimits,
 )
 from app.services.ldraw_library import get_library_status
+from app.services.instruction_playback import (
+    DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES,
+    DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS,
+    DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES,
+    DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES,
+    RenderComplexityLimits,
+)
 from app.services.model_import import DEFAULT_MAX_UPLOAD_BYTES
 
 
@@ -52,6 +59,7 @@ def create_app(
     model_storage_root: Path | None = None,
     model_max_upload_bytes: int | None = None,
     instruction_graph_limits: InstructionGraphLimits | None = None,
+    render_complexity_limits: RenderComplexityLimits | None = None,
 ) -> FastAPI:
     resolved_library_root = library_root or Path(
         os.environ.get("LDRAW_LIBRARY_ROOT", "/data/ldraw/official")
@@ -82,6 +90,35 @@ def create_app(
                 str(DEFAULT_MAX_INSTRUCTION_NODES),
             )
         ),
+    )
+    resolved_render_complexity_limits = (
+        render_complexity_limits
+        or RenderComplexityLimits(
+            max_expanded_instruction_nodes=int(
+                os.environ.get(
+                    "RENDER_MAX_EXPANDED_INSTRUCTION_NODES",
+                    str(DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES),
+                )
+            ),
+            max_expanded_occurrences=int(
+                os.environ.get(
+                    "RENDER_MAX_EXPANDED_OCCURRENCES",
+                    str(DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES),
+                )
+            ),
+            max_direct_geometry_commands=int(
+                os.environ.get(
+                    "RENDER_MAX_DIRECT_GEOMETRY_COMMANDS",
+                    str(DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS),
+                )
+            ),
+            max_derived_source_bytes=int(
+                os.environ.get(
+                    "RENDER_MAX_DERIVED_SOURCE_BYTES",
+                    str(DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES),
+                )
+            ),
+        )
     )
 
     def catalog_session() -> Iterator[Session]:
@@ -128,6 +165,7 @@ def create_app(
             resolved_model_storage_root,
             resolved_model_max_upload_bytes,
             resolved_instruction_graph_limits,
+            resolved_render_complexity_limits,
         )
     )
 

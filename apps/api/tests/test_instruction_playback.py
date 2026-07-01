@@ -7,10 +7,12 @@ import pytest
 
 from app.services.instruction_graph import InstructionGraphLimits, parse_instruction_graph
 from app.services.instruction_playback import (
+    RenderComplexityLimits,
     build_playback_data,
     derive_occurrence_source,
     playback_breadcrumbs,
     playback_occurrence,
+    select_render_strategy,
 )
 from instruction_fixture_factory import generated_large_repeated_model
 
@@ -137,3 +139,124 @@ def test_unknown_occurrence_and_step_boundaries_are_rejected() -> None:
         playback_breadcrumbs(playback, "occ-999999")
     with pytest.raises(ValueError, match="between 1 and 3"):
         playback_occurrence(playback, "occ-000001", current_step=4)
+
+
+def test_direct_geometry_is_step_aware_and_keeps_occurrence_color_context() -> None:
+    playback = data("direct_geometry_flex.mpd")
+
+    child_step_one = derive_occurrence_source(
+        playback, "occ-000002", current_step=1, strategy="local"
+    ).decode()
+    child_step_two = derive_occurrence_source(
+        playback, "occ-000002", current_step=2, strategy="local"
+    ).decode()
+    parent = derive_occurrence_source(
+        playback, "occ-000001", current_step=1, strategy="subtree"
+    ).decode()
+
+    assert "1 4 0 0 0 1 0 0 0 1 0 0 0 1 __bricky_occ_000002.ldr" in child_step_one
+    assert "2 24 0 0 0 10 0 0" in child_step_one
+    assert "3 16 0 0 0 10 0 0 0 10 0" in child_step_one
+    assert "4 16 0 0 0 0 10 0 10 10 0 10 0 0" not in child_step_one
+    assert "4 16 0 0 0 0 10 0 10 10 0 10 0 0" in child_step_two
+    assert "5 24 0 0 0 10 0 0 0 10 0 10 10 0" in child_step_two
+    assert "1 4 10 20 30 0 -1 0 1 0 0 0 0 1 __bricky_occ_000002.ldr" in parent
+    assert "5 24 0 0 0 10 0 0 0 10 0 10 10 0" in parent
+    assert child_step_one.index("0 BFC CERTIFY CCW") < child_step_one.index(
+        "__bricky_node_000002.ldr"
+    ) < child_step_one.index("2 24 0 0 0 10 0 0")
+
+
+def test_local_strategy_excludes_children_but_retains_navigation_metadata() -> None:
+    playback = data("direct_geometry_flex.mpd")
+    root = playback_occurrence(playback, "occ-000001", current_step=1)
+    source = derive_occurrence_source(
+        playback, "occ-000001", current_step=1, strategy="local"
+    ).decode()
+
+    assert root.children[0].occurrence_id == "occ-000002"
+    assert "__bricky_occ_000002.ldr" not in source
+    assert "0 !BRICKY RENDER_STRATEGY local" in source
+
+
+def test_render_strategy_policy_is_deterministic_at_each_boundary() -> None:
+    small = data("direct_geometry_flex.mpd")
+    selection = select_render_strategy(small, "occ-000001")
+    assert selection.recommended_strategy == "subtree"
+
+    exact = RenderComplexityLimits(
+        max_expanded_instruction_nodes=selection.complexity.expanded_instruction_node_count,
+        max_expanded_occurrences=selection.complexity.expanded_occurrence_count,
+        max_direct_geometry_commands=selection.complexity.direct_geometry_command_count,
+        max_derived_source_bytes=selection.complexity.estimated_derived_source_bytes,
+    )
+    assert select_render_strategy(small, "occ-000001", exact).recommended_strategy == "subtree"
+    over = RenderComplexityLimits(
+        max_expanded_instruction_nodes=selection.complexity.expanded_instruction_node_count,
+        max_expanded_occurrences=selection.complexity.expanded_occurrence_count,
+        max_direct_geometry_commands=selection.complexity.direct_geometry_command_count,
+        max_derived_source_bytes=selection.complexity.estimated_derived_source_bytes - 1,
+    )
+    assert select_render_strategy(small, "occ-000001", over).recommended_strategy == "local"
+
+
+def test_generated_small_and_large_scopes_select_expected_strategies() -> None:
+    small = build_playback_data(parse_instruction_graph(generated_large_repeated_model(100)))
+    large = build_playback_data(parse_instruction_graph(generated_large_repeated_model(1_000)))
+    assert select_render_strategy(small, "occ-000001").recommended_strategy == "subtree"
+    assert select_render_strategy(large, "occ-000001").recommended_strategy == "local"
+
+
+def test_local_step_two_contains_each_cumulative_root_part_exactly_once() -> None:
+    # These extracted placements reproduce an authored overlap in an independent
+    # LDraw editor. This fixture validates source structure, not visual accuracy.
+    source = (FIXTURE_ROOT / "falcon_step_02_isolated.ldr").read_bytes()
+    playback = build_playback_data(parse_instruction_graph(source))
+    step_one = derive_occurrence_source(
+        playback, "occ-000001", current_step=1, strategy="local"
+    ).decode()
+    step_two = derive_occurrence_source(
+        playback, "occ-000001", current_step=2, strategy="local"
+    ).decode()
+
+    assert step_one.count("0 !BRICKY PART ") == 2
+    assert step_one.count("0 FILE __bricky_node_") == 2
+    assert "32531.dat" in step_one and "6558.dat" in step_one
+    assert "3703.dat" not in step_one and "32532.dat" not in step_one
+
+    manifest_ids = [
+        line.split()[3]
+        for line in step_two.splitlines()
+        if line.startswith("0 !BRICKY PART ")
+    ]
+    wrapper_definitions = [
+        line.split()[2]
+        for line in step_two.splitlines()
+        if line.startswith("0 FILE __bricky_node_")
+    ]
+    placement_lines = [
+        line
+        for line in step_two.splitlines()
+        if line.startswith("1 ") and "__bricky_node_" in line
+    ]
+    assert manifest_ids == [
+        "node-000001",
+        "node-000002",
+        "node-000003",
+        "node-000004",
+    ]
+    assert len(set(manifest_ids)) == len(set(wrapper_definitions)) == 4
+    assert len(placement_lines) == 4
+    assert placement_lines == [
+        "1 0 0 0 0 1 0 0 0 1 0 0 0 1 __bricky_node_000001.ldr",
+        "1 0 0 10 -50 0 0 1 0 1 0 -1 0 0 __bricky_node_000002.ldr",
+        "1 72 -140 0 -50 -1 0 0 0 1 0 0 0 -1 __bricky_node_000003.ldr",
+        "1 0 0 0 -120 -1 0 0 0 1 0 0 0 -1 __bricky_node_000004.ldr",
+    ]
+    for filename in ("32531.dat", "6558.dat", "3703.dat", "32532.dat"):
+        assert step_two.count(filename) == 1
+        assert (
+            f"1 16 0 0 0 1 0 0 0 1 0 0 0 1 {filename}" in step_two
+        )
+    assert step_two.count("0 !BRICKY OCCURRENCE ") == 1
+    assert "__bricky_occ_000002" not in step_two

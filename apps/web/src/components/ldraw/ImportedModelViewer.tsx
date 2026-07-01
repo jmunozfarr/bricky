@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 
 import { getInstructionPlayback, InstructionPlaybackSummary } from "../../api/models";
 import { HierarchicalLDrawViewer } from "./HierarchicalLDrawViewer";
-import { ImportedViewerMode, selectInitialViewerMode } from "./hierarchicalPlayback";
+import { ViewerModeSelection, selectInitialViewerMode } from "./hierarchicalPlayback";
 import { importedModelSource, LDrawAttribution, LDrawViewer } from "./LDrawViewer";
 
 export default function ImportedModelViewer({ modelId, sourceUrl, title }: { modelId: string; sourceUrl: string; title: string }) {
   const [summary, setSummary] = useState<InstructionPlaybackSummary | null>(null);
-  const [mode, setMode] = useState<ImportedViewerMode | null>(null);
+  const [mode, setMode] = useState<ViewerModeSelection["mode"] | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function ImportedModelViewer({ modelId, sourceUrl, title }: { mod
         setSummaryError(
           error instanceof Error ? error.message : "Instruction playback check failed.",
         );
-        setMode("flattened");
+        setMode("blocked");
       });
     return () => controller.abort();
   }, [modelId]);
@@ -52,13 +52,24 @@ export default function ImportedModelViewer({ modelId, sourceUrl, title }: { mod
           <button
             type="button"
             aria-pressed={mode === "flattened"}
+            disabled={!summary?.flattenedRenderingAllowed}
             onClick={() => setMode("flattened")}
           >
             Flattened
           </button>
         </div>
         {mode === null && <p role="status">Checking hierarchical playback…</p>}
-        {fallbackReason && <p className="metadata-warning" role="status">Flattened fallback: {fallbackReason}</p>}
+        {fallbackReason && (
+          <p className="metadata-warning" role="status">
+            {mode === "blocked" ? "Full-model rendering blocked: " : "Flattened fallback: "}
+            {fallbackReason}
+          </p>
+        )}
+        {summary?.recommendedRenderStrategy === "local" && (
+          <p className="metadata-warning" role="status">
+            This model exceeds the complete-scope safety policy. Use bounded hierarchical navigation; flattened rendering is disabled.
+          </p>
+        )}
       </section>
       {mode === "hierarchical" && summary?.rootOccurrenceId ? (
         <HierarchicalLDrawViewer
@@ -72,6 +83,12 @@ export default function ImportedModelViewer({ modelId, sourceUrl, title }: { mod
           eyebrow="Flattened source steps"
           title={title}
         />
+      ) : mode === "blocked" ? (
+        <div className="viewer-frame">
+          <div className="viewer-message" role="status">
+            Bounded hierarchical metadata is required before geometry can be loaded safely.
+          </div>
+        </div>
       ) : null}
       <LDrawAttribution />
     </>

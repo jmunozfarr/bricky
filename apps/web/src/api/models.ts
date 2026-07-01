@@ -79,11 +79,22 @@ export interface LocalInstructionNode {
   sourceFilename: string;
   colorCode: number;
   localTransform: InstructionTransform;
+  sourceOrder: number;
+}
+
+export interface LocalDirectGeometry {
+  commandType: 2 | 3 | 4 | 5;
+  colorToken: string;
+  coordinates: number[];
+  localStep: number;
+  sourceOrder: number;
+  sourceSubmodelName: string;
 }
 
 export interface LocalStepDefinition {
   step: number;
   nodes: LocalInstructionNode[];
+  directGeometry: LocalDirectGeometry[];
 }
 
 export interface InstructionModelDefinition {
@@ -101,6 +112,7 @@ export interface ExpandedInstructionNode {
   effectiveColor: number | null;
   localTransform: InstructionTransform;
   childOccurrenceId: string | null;
+  sourceOrder: number;
 }
 
 export interface InstructionGraphIssue {
@@ -144,6 +156,19 @@ export interface InstructionPlaybackSummary {
   rootOccurrenceId: string | null;
   fallbackReason: string | null;
   issues: InstructionPlaybackIssue[];
+  recommendedRenderStrategy: RenderStrategy | null;
+  renderStrategyReason: string;
+  complexity: RenderComplexity | null;
+  flattenedRenderingAllowed: boolean;
+}
+
+export type RenderStrategy = "subtree" | "local";
+
+export interface RenderComplexity {
+  expandedInstructionNodeCount: number;
+  expandedOccurrenceCount: number;
+  directGeometryCommandCount: number;
+  estimatedDerivedSourceBytes: number;
 }
 
 export interface PlaybackBreadcrumb {
@@ -181,12 +206,17 @@ export interface InstructionPlaybackOccurrence {
     step: number;
     localPartCount: number;
     childAttachmentCount: number;
+    directGeometryCommandCount: number;
   };
   children: PlaybackChild[];
   childTotal: number;
   childOffset: number;
   childLimit: number;
   sceneSourceUrl: string;
+  renderStrategy: RenderStrategy;
+  recommendedRenderStrategy: RenderStrategy;
+  renderStrategyReason: string;
+  complexity: RenderComplexity;
 }
 
 export interface ModelsPage {

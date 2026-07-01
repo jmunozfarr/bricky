@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, cast
 
 from app.services.ldraw_model_parser import (
     _STEP_DIRECTIVE,
@@ -51,12 +51,33 @@ class LocalInstructionNode:
     source_filename: str
     color_code: int
     local_transform: LocalTransform
+    source_order: int
+
+
+@dataclass(frozen=True)
+class LocalDirectGeometry:
+    command_type: Literal[2, 3, 4, 5]
+    color_token: str
+    coordinates: tuple[float, ...]
+    coordinate_tokens: tuple[str, ...]
+    local_step: int
+    source_order: int
+    source_submodel_name: str
+
+
+@dataclass(frozen=True)
+class LocalRenderMeta:
+    text: str
+    local_step: int
+    source_order: int
 
 
 @dataclass(frozen=True)
 class LocalStepDefinition:
     step: int
     nodes: tuple[LocalInstructionNode, ...]
+    direct_geometry: tuple[LocalDirectGeometry, ...]
+    render_meta: tuple[LocalRenderMeta, ...]
 
 
 @dataclass(frozen=True)
@@ -89,6 +110,7 @@ class ExpandedInstructionNode:
     effective_color: int | None
     local_transform: LocalTransform
     child_occurrence_id: str | None
+    source_order: int
 
 
 @dataclass(frozen=True)
@@ -123,6 +145,7 @@ class _SourceNode:
     normalized_filename: str | None
     color_code: int
     local_transform: LocalTransform
+    source_order: int
 
 
 @dataclass(frozen=True)
@@ -189,6 +212,48 @@ def _effective_color(color_code: int, inherited_color: int | None) -> int | None
     return inherited_color if color_code == 16 else color_code
 
 
+_DIRECT_COORDINATE_COUNTS: dict[int, int] = {2: 6, 3: 9, 4: 12, 5: 12}
+
+
+def _parse_direct_geometry(
+    line: str,
+    *,
+    local_step: int,
+    source_order: int,
+    source_submodel_name: str,
+) -> LocalDirectGeometry:
+    tokens = line.split()
+    try:
+        command_type = int(tokens[0])
+    except (IndexError, ValueError) as error:
+        raise ValueError("malformed direct geometry") from error
+    coordinate_count = _DIRECT_COORDINATE_COUNTS.get(command_type)
+    if coordinate_count is None or len(tokens) != coordinate_count + 2:
+        raise ValueError("direct geometry has an invalid field count")
+    coordinates = tuple(float(token) for token in tokens[2:])
+    if not all(math.isfinite(value) for value in coordinates):
+        raise ValueError("direct geometry numeric fields must be finite")
+    return LocalDirectGeometry(
+        command_type=cast(Literal[2, 3, 4, 5], command_type),
+        color_token=tokens[1],
+        coordinates=coordinates,
+        coordinate_tokens=tuple(tokens[2:]),
+        local_step=local_step,
+        source_order=source_order,
+        source_submodel_name=source_submodel_name,
+    )
+
+
+def _safe_render_meta(line: str) -> bool:
+    upper = line.upper()
+    return (
+        upper.startswith("0 BFC ")
+        or upper == "0 BFC"
+        or upper.startswith("0 !LDCAD")
+        or upper.startswith("0 !LDRAW_ORG")
+    )
+
+
 def parse_instruction_graph(
     content: bytes,
     *,
@@ -198,7 +263,7 @@ def parse_instruction_graph(
     """Build a bounded source-definition and expanded-occurrence graph.
 
     This parser is deliberately independent from BOM/catalog resolution. It recognizes
-    MPD FILE sections, type-1 references, and STEP/ROTSTEP boundaries only.
+    MPD sections, type-1 references, direct drawable geometry, and local step boundaries.
     """
 
     active_limits = limits or InstructionGraphLimits()
@@ -240,14 +305,45 @@ def parse_instruction_graph(
         nodes_in_step = 0
         source_nodes: list[_SourceNode] = []
         steps: list[list[LocalInstructionNode]] = [[]]
-        for line in section.lines:
+        direct_steps: list[list[LocalDirectGeometry]] = [[]]
+        meta_steps: list[list[LocalRenderMeta]] = [[]]
+        for source_order, line in enumerate(section.lines, start=1):
             stripped = line.strip()
             if _STEP_DIRECTIVE.match(stripped):
                 step += 1
                 nodes_in_step = 0
                 steps.append([])
+                direct_steps.append([])
+                meta_steps.append([])
                 continue
-            if not stripped or stripped.split(maxsplit=1)[0] != "1":
+            if not stripped:
+                continue
+            line_type = stripped.split(maxsplit=1)[0]
+            if line_type in {"2", "3", "4", "5"}:
+                try:
+                    direct_steps[-1].append(
+                        _parse_direct_geometry(
+                            stripped,
+                            local_step=step,
+                            source_order=source_order,
+                            source_submodel_name=section_name,
+                        )
+                    )
+                except (ValueError, OverflowError):
+                    add_issue(
+                        "malformed_direct_geometry",
+                        "Malformed direct geometry was excluded from hierarchical rendering",
+                        source_model=section_name,
+                    )
+                continue
+            if line_type == "0" and _safe_render_meta(stripped):
+                meta_steps[-1].append(
+                    LocalRenderMeta(
+                        text=stripped, local_step=step, source_order=source_order
+                    )
+                )
+                continue
+            if line_type != "1":
                 continue
             try:
                 color_code, transform, filename = _parse_type_one(stripped)
@@ -271,6 +367,7 @@ def parse_instruction_graph(
                 source_filename=normalized or filename,
                 color_code=color_code,
                 local_transform=transform,
+                source_order=source_order,
             )
             steps[-1].append(public_node)
             source_nodes.append(
@@ -282,10 +379,16 @@ def parse_instruction_graph(
                     normalized_filename=normalized,
                     color_code=color_code,
                     local_transform=transform,
+                    source_order=source_order,
                 )
             )
         local_steps = tuple(
-            LocalStepDefinition(step=index, nodes=tuple(step_nodes))
+            LocalStepDefinition(
+                step=index,
+                nodes=tuple(step_nodes),
+                direct_geometry=tuple(direct_steps[index - 1]),
+                render_meta=tuple(meta_steps[index - 1]),
+            )
             for index, step_nodes in enumerate(steps, start=1)
         )
         definition = _SourceDefinition(
@@ -412,6 +515,7 @@ def parse_instruction_graph(
                 effective_color=node_color,
                 local_transform=source_node.local_transform,
                 child_occurrence_id=child_id,
+                source_order=source_node.source_order,
             )
         )
         if child_frame is not None:

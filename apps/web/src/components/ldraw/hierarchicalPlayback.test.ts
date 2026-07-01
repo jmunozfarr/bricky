@@ -6,6 +6,7 @@ import {
   isChildAttached,
   isPlaybackEntryVisible,
   localStepBoundaries,
+  localRenderNotice,
   parentOccurrenceId,
   repeatedDefinitionLabel,
   rootOccurrenceId,
@@ -34,12 +35,21 @@ const occurrence: InstructionPlaybackOccurrence = {
   empty: false,
   repeatedDefinitionCount: 2,
   repeatedDefinitionIndex: 1,
-  stepSummary: { step: 1, localPartCount: 1, childAttachmentCount: 0 },
+  stepSummary: { step: 1, localPartCount: 1, childAttachmentCount: 0, directGeometryCommandCount: 0 },
   children: [],
   childTotal: 0,
   childOffset: 0,
   childLimit: 50,
   sceneSourceUrl: "/source",
+  renderStrategy: "subtree",
+  recommendedRenderStrategy: "subtree",
+  renderStrategyReason: "within_scope_complexity_limits",
+  complexity: {
+    expandedInstructionNodeCount: 3,
+    expandedOccurrenceCount: 2,
+    directGeometryCommandCount: 0,
+    estimatedDerivedSourceBytes: 1024,
+  },
 };
 
 describe("hierarchical playback helpers", () => {
@@ -51,6 +61,10 @@ describe("hierarchical playback helpers", () => {
         rootOccurrenceId: "occ-000001",
         fallbackReason: null,
         issues: [],
+        recommendedRenderStrategy: "subtree",
+        renderStrategyReason: "within_scope_complexity_limits",
+        complexity: occurrence.complexity,
+        flattenedRenderingAllowed: true,
       }),
     ).toEqual({ mode: "hierarchical", fallbackReason: null });
     expect(
@@ -60,8 +74,43 @@ describe("hierarchical playback helpers", () => {
         rootOccurrenceId: null,
         fallbackReason: "Cycle detected",
         issues: [],
+        recommendedRenderStrategy: null,
+        renderStrategyReason: "instruction_graph_unavailable",
+        complexity: null,
+        flattenedRenderingAllowed: true,
       }),
     ).toEqual({ mode: "flattened", fallbackReason: "Cycle detected" });
+  });
+
+  it("blocks unsafe flattened fallback and describes local canvas omissions", () => {
+    expect(
+      selectInitialViewerMode({
+        modelId: "model",
+        available: true,
+        rootOccurrenceId: "occ-000001",
+        fallbackReason: null,
+        issues: [],
+        recommendedRenderStrategy: "local",
+        renderStrategyReason: "scope_complexity_limit",
+        complexity: occurrence.complexity,
+        flattenedRenderingAllowed: false,
+      }),
+    ).toEqual({ mode: "hierarchical", fallbackReason: null });
+    expect(
+      selectInitialViewerMode({
+        modelId: "model",
+        available: false,
+        rootOccurrenceId: null,
+        fallbackReason: "Scope exceeds safety limits",
+        issues: [],
+        recommendedRenderStrategy: "local",
+        renderStrategyReason: "scope_complexity_limit",
+        complexity: occurrence.complexity,
+        flattenedRenderingAllowed: false,
+      }),
+    ).toEqual({ mode: "blocked", fallbackReason: "Scope exceeds safety limits" });
+    expect(localRenderNotice("local")).toContain("geometry is omitted");
+    expect(localRenderNotice("subtree")).toBeNull();
   });
 
   it("calculates direct local-step boundaries", () => {

@@ -1,5 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Group } from "three";
 
 import {
   getInstructionOccurrence,
@@ -7,6 +8,7 @@ import {
 } from "../../api/models";
 import {
   displaySubmodelName,
+  localRenderNotice,
   repeatedDefinitionLabel,
 } from "./hierarchicalPlayback";
 import {
@@ -86,7 +88,9 @@ export function HierarchicalLDrawViewer({
       occurrence
         ? {
             kind: "instruction-scope",
-            key: `instruction-${modelId}-${occurrence.occurrenceId}`,
+            key: `instruction-${modelId}-${occurrence.sceneSourceUrl}`,
+            modelId,
+            scopeId: occurrence.occurrenceId,
             url: occurrence.sceneSourceUrl,
             materialsUrl: "/api/ldraw/LDConfig.ldr",
             partsLibraryPath: "/api/ldraw/",
@@ -138,6 +142,12 @@ export function HierarchicalLDrawViewer({
             ))}
           </ol>
         </nav>
+      )}
+
+      {occurrence && localRenderNotice(occurrence.renderStrategy) && (
+        <div className="metadata-warning local-render-notice" role="status">
+          {localRenderNotice(occurrence.renderStrategy)}
+        </div>
       )}
 
       {sceneSource ? (
@@ -216,11 +226,14 @@ export function HierarchicalLDrawViewer({
               <span>Updating step information…</span>
             ) : occurrence.empty ? (
               <strong>This subassembly has no instruction nodes.</strong>
+            ) : occurrence.complete && occurrence.renderStrategy === "local" ? (
+              <strong>Local definition steps complete; attached child geometry is not displayed.</strong>
             ) : occurrence.complete ? (
               <strong>Subassembly complete.</strong>
             ) : (
               <span>
                 {occurrence.stepSummary.localPartCount} local part references and{" "}
+                {occurrence.stepSummary.directGeometryCommandCount} direct geometry commands and{" "}
                 {occurrence.stepSummary.childAttachmentCount} child attachments at this step.
               </span>
             )}
@@ -243,6 +256,9 @@ export function HierarchicalLDrawViewer({
                     <div>
                       <strong>Build subassembly: {displaySubmodelName(child.sourceSubmodelName)}</strong>
                       {repeatedDefinitionLabel(child) && <span>{repeatedDefinitionLabel(child)}</span>}
+                      {occurrence.renderStrategy === "local" && (
+                        <span>Attached here; geometry omitted from the current canvas.</span>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -299,8 +315,17 @@ function HierarchicalScene({
   title: string;
 }) {
   const loadState = useLDrawModel(source);
-  const model = loadState.kind === "ready" ? loadState.model : null;
-  const sceneIndex = loadState.kind === "ready" ? loadState.sceneIndex : null;
+  const sceneHost = useMemo(() => {
+    const host = new Group();
+    host.name = "__bricky_active_instruction_scene";
+    return host;
+  }, []);
+  const loaded =
+    loadState.kind === "ready" || loadState.kind === "refreshing"
+      ? loadState
+      : null;
+  const model = loaded?.model ?? null;
+  const sceneIndex = loaded?.sceneIndex ?? null;
 
   return (
     <div className="viewer-frame">
@@ -315,19 +340,25 @@ function HierarchicalScene({
         <ambientLight intensity={1.4} />
         <directionalLight position={[100, 150, 100]} intensity={2.2} />
         <directionalLight position={[-80, 60, -100]} intensity={1.1} />
-        {model && sceneIndex && (
+        {loaded && model && sceneIndex && (
           <>
             <HierarchicalLDrawModel
+              host={sceneHost}
               model={model}
               sceneIndex={sceneIndex}
               activeOccurrenceId={activeOccurrenceId}
               selectedStep={selectedStep}
+              cacheKey={loaded.sourceKey}
             />
-            <ViewerCamera model={model} resetVersion={resetVersion} />
+            <ViewerCamera
+              model={sceneHost}
+              resetVersion={resetVersion}
+              fitVersion={loaded.fitKey}
+            />
           </>
         )}
       </Canvas>
-      {loadState.kind === "loading" && <div className="viewer-message" role="status">Loading subassembly geometry…</div>}
+      {(loadState.kind === "loading" || loadState.kind === "refreshing") && <div className="viewer-message" role="status">Loading subassembly geometry…</div>}
       {loadState.kind === "error" && (
         <div className="viewer-message viewer-message--error" role="alert">
           <strong>Unable to map the instruction scene.</strong><span>{loadState.message}</span>

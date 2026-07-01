@@ -19,7 +19,7 @@ For a concise presentation flow, use [`docs/DEMO.md`](docs/DEMO.md).
 - Track exact part/color inventory quantities in one hidden local workspace.
 - Import LDR/MPD sources up to a configurable limit and preserve original bytes.
 - Recursively resolve embedded MPD submodels, repeated quantities, and color inheritance.
-- Navigate MPD subassemblies with occurrence-local hierarchical steps, breadcrumbs, and an explicit flattened fallback.
+- Navigate MPD subassemblies with occurrence-local hierarchical steps, preserved direct geometry, and complexity-bounded subtree/local rendering.
 - Canonicalize validated official LDraw `Moved to` aliases during new imports.
 - Compare model BOM rows with current inventory by exact canonical part and physical color.
 - Derive build readiness and missing-parts views without persisted wishlist data.
@@ -299,6 +299,10 @@ Installed library files retain upstream headers, authors, `CAreadme.txt`, and li
 - No sets, prices, stores, marketplaces, scanning, or cloud synchronization.
 - No part substitutions, alternative-color matching, reservations, or inventory consumption.
 - No persisted/manual wishlist; missing parts are derived per model.
+- Large roots intentionally omit attached child geometry in local canvas mode; enter children through hierarchical navigation. Unsafe automatic flattened parsing is blocked by policy.
+- Three.js parsing cannot be cancelled once started; Bricky serializes bounded parses, coalesces pending navigation, disposes stale results, and retains only a small scene cache.
+- Imported models retain their authored transforms and normal LDraw material behavior. Bricky does not compensate for source-authored visual overlaps with renderer offsets.
+- The external Millennium Falcon audit model is useful for complexity and compatibility checks, not as a trusted visual-accuracy fixture; its step-2 overlap also reproduces in an independent LDraw editor.
 - Backup/restore is full replacement only, not incremental or point-in-time recovery.
 - Production-like packaging is for a trusted local workstation, not a public deployment.
 

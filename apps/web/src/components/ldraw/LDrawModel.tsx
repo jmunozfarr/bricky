@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   BufferGeometry,
   Group,
@@ -12,15 +12,33 @@ import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawCondit
 
 import { applyBuildingStepVisibility } from "./buildingSteps";
 import {
+  LatestScopeLoader,
+  ScopeLoadSupersededError,
+} from "./boundedSceneLoader";
+import {
   applyInstructionSceneVisibility,
   createInstructionSceneIndex,
   InstructionSceneIndex,
   parseInstructionSourceManifest,
 } from "./instructionSceneIndex";
+import { ExclusiveInstructionSceneMount } from "./instructionSceneMount";
 
 export type LDrawLoadState =
   | { kind: "loading" }
-  | { kind: "ready"; model: Group; sceneIndex: InstructionSceneIndex | null }
+  | {
+      kind: "refreshing";
+      model: Group;
+      sceneIndex: InstructionSceneIndex | null;
+      sourceKey: string;
+      fitKey: string;
+    }
+  | {
+      kind: "ready";
+      model: Group;
+      sceneIndex: InstructionSceneIndex | null;
+      sourceKey: string;
+      fitKey: string;
+    }
   | { kind: "error"; message: string };
 
 export type LDrawModelSource =
@@ -35,6 +53,8 @@ export type LDrawModelSource =
   | {
       kind: "instruction-scope";
       key: string;
+      modelId: string;
+      scopeId: string;
       url: string;
       materialsUrl: string;
       partsLibraryPath: string;
@@ -53,7 +73,7 @@ function parseLDraw(loader: LDrawLoader, text: string): Promise<Group> {
   });
 }
 
-interface LoadedLDrawModel {
+export interface LoadedLDrawModel {
   model: Group;
   sceneIndex: InstructionSceneIndex | null;
 }
@@ -64,7 +84,8 @@ export async function parseInstructionScopeText(
 ): Promise<LoadedLDrawModel> {
   const manifest = parseInstructionSourceManifest(text);
   const model = await parseLDraw(loader, text);
-  return { model, sceneIndex: createInstructionSceneIndex(model, manifest) };
+  const sceneIndex = createInstructionSceneIndex(model, manifest);
+  return { model, sceneIndex };
 }
 
 async function loadModelSource(
@@ -90,17 +111,31 @@ async function loadModelSource(
     loader.addMaterial(redMaterial);
   }
 
-  if (source.kind === "instruction-scope") {
-    const response = await fetch(source.url, { signal });
-    if (!response.ok) {
-      throw new Error(`Instruction scope request returned HTTP ${response.status}`);
-    }
-    return parseInstructionScopeText(await response.text(), loader);
-  }
   return { model: await loader.loadAsync(source.url), sceneIndex: null };
 }
 
+async function loadInstructionScopeSource(
+  source: Extract<LDrawModelSource, { kind: "instruction-scope" }>,
+  signal: AbortSignal,
+): Promise<LoadedLDrawModel> {
+  const loader = createLoader();
+  loader.setPartsLibraryPath(source.partsLibraryPath);
+  await loader.preloadMaterials(source.materialsUrl);
+  const redMaterial = loader.getMaterial("4");
+  if (redMaterial !== null) {
+    const materialData = redMaterial.userData as Record<string, unknown>;
+    materialData.code = "16";
+    loader.addMaterial(redMaterial);
+  }
+  const response = await fetch(source.url, { signal });
+  if (!response.ok) {
+    throw new Error(`Instruction scope request returned HTTP ${response.status}`);
+  }
+  return parseInstructionScopeText(await response.text(), loader);
+}
+
 export function disposeLDrawModel(model: Group): void {
+  model.removeFromParent();
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
 
@@ -122,31 +157,71 @@ export function disposeLDrawModel(model: Group): void {
   materials.forEach((material) => material.dispose());
 }
 
+const instructionSceneLoader = new LatestScopeLoader(
+  3,
+  loadInstructionScopeSource,
+  (loaded: LoadedLDrawModel) => disposeLDrawModel(loaded.model),
+);
+
+export function clearInstructionSceneCache(): void {
+  instructionSceneLoader.clear();
+}
+
+export function cachedInstructionScenes(): Array<[string, LoadedLDrawModel]> {
+  return instructionSceneLoader.cachedEntries();
+}
+
 export function useLDrawModel(source: LDrawModelSource): LDrawLoadState {
   const [state, setState] = useState<LDrawLoadState>({ kind: "loading" });
 
   useEffect(() => {
     const controller = new AbortController();
+    const isInstructionScope = source.kind === "instruction-scope";
     let active = true;
     let ownedModel: Group | null = null;
 
-    setState({ kind: "loading" });
+    setState((current) =>
+      isInstructionScope &&
+      (current.kind === "ready" || current.kind === "refreshing")
+        ? {
+            kind: "refreshing",
+            model: current.model,
+            sceneIndex: current.sceneIndex,
+            sourceKey: current.sourceKey,
+            fitKey: current.fitKey,
+          }
+        : { kind: "loading" },
+    );
 
     async function loadModel() {
       try {
-        const loaded = await loadModelSource(source, controller.signal);
+        if (isInstructionScope) instructionSceneLoader.setNamespace(source.modelId);
+        const loaded = isInstructionScope
+          ? await instructionSceneLoader.request(source.key, source)
+          : await loadModelSource(source, controller.signal);
         const model = loaded.model;
         model.rotation.x = Math.PI;
 
         if (!active) {
-          disposeLDrawModel(model);
+          if (!isInstructionScope) disposeLDrawModel(model);
           return;
         }
 
-        ownedModel = model;
-        setState({ kind: "ready", model, sceneIndex: loaded.sceneIndex });
+        ownedModel = isInstructionScope ? null : model;
+        setState({
+          kind: "ready",
+          model,
+          sceneIndex: loaded.sceneIndex,
+          sourceKey: source.key,
+          fitKey:
+            source.kind === "instruction-scope" ? source.scopeId : source.key,
+        });
       } catch (error: unknown) {
-        if (!active || (error instanceof DOMException && error.name === "AbortError")) {
+        if (
+          !active ||
+          error instanceof ScopeLoadSupersededError ||
+          (error instanceof DOMException && error.name === "AbortError")
+        ) {
           return;
         }
 
@@ -160,6 +235,9 @@ export function useLDrawModel(source: LDrawModelSource): LDrawLoadState {
     return () => {
       active = false;
       controller.abort();
+      if (source.kind === "instruction-scope") {
+        instructionSceneLoader.cancel(source.key);
+      }
       if (ownedModel !== null) {
         disposeLDrawModel(ownedModel);
       }
@@ -183,18 +261,23 @@ export function LDrawModel({ model, selectedStep }: LDrawModelProps) {
 }
 
 interface HierarchicalLDrawModelProps {
+  host: Group;
   model: Group;
   sceneIndex: InstructionSceneIndex;
   activeOccurrenceId: string;
   selectedStep: number;
+  cacheKey: string;
 }
 
 export function HierarchicalLDrawModel({
+  host,
   model,
   sceneIndex,
   activeOccurrenceId,
   selectedStep,
+  cacheKey,
 }: HierarchicalLDrawModelProps) {
+  const mount = useMemo(() => new ExclusiveInstructionSceneMount(host), [host]);
   useLayoutEffect(() => {
     applyInstructionSceneVisibility(
       model,
@@ -204,5 +287,10 @@ export function HierarchicalLDrawModel({
     );
   }, [activeOccurrenceId, model, sceneIndex, selectedStep]);
 
-  return <primitive object={model} />;
+  useLayoutEffect(() => {
+    mount.activate({ cacheKey, model, sceneIndex });
+    return () => mount.deactivate(model);
+  }, [cacheKey, model, mount, sceneIndex]);
+
+  return <primitive object={host} />;
 }

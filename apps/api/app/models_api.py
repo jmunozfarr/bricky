@@ -45,10 +45,13 @@ from app.services.instruction_playback import (
     PLAYBACK_CHILD_PAGE_SIZE,
     PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM,
     PlaybackData,
+    RenderComplexity,
+    RenderComplexityLimits,
     clear_playback_cache,
     derive_occurrence_source,
     parse_playback_data,
     playback_occurrence,
+    select_render_strategy,
 )
 from app.services.ldraw_model_parser import ModelParseError
 from app.services.local_workspace import resolve_local_workspace
@@ -196,11 +199,26 @@ class LocalInstructionNodeResponse(BaseModel):
     source_filename: str = Field(alias="sourceFilename")
     color_code: int = Field(alias="colorCode")
     local_transform: InstructionTransformResponse = Field(alias="localTransform")
+    source_order: int = Field(alias="sourceOrder")
+
+
+class LocalDirectGeometryResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    command_type: Literal[2, 3, 4, 5] = Field(alias="commandType")
+    color_token: str = Field(alias="colorToken")
+    coordinates: tuple[float, ...]
+    local_step: int = Field(alias="localStep")
+    source_order: int = Field(alias="sourceOrder")
+    source_submodel_name: str = Field(alias="sourceSubmodelName")
 
 
 class LocalStepDefinitionResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     step: int
     nodes: list[LocalInstructionNodeResponse]
+    direct_geometry: list[LocalDirectGeometryResponse] = Field(alias="directGeometry")
 
 
 class ModelDefinitionResponse(BaseModel):
@@ -236,6 +254,7 @@ class ExpandedInstructionNodeResponse(BaseModel):
     effective_color: int | None = Field(alias="effectiveColor")
     local_transform: InstructionTransformResponse = Field(alias="localTransform")
     child_occurrence_id: str | None = Field(alias="childOccurrenceId")
+    source_order: int = Field(alias="sourceOrder")
 
 
 class InstructionGraphIssueResponse(BaseModel):
@@ -289,6 +308,21 @@ class InstructionPlaybackSummaryResponse(BaseModel):
     root_occurrence_id: str | None = Field(alias="rootOccurrenceId")
     fallback_reason: str | None = Field(alias="fallbackReason")
     issues: list[InstructionPlaybackIssueResponse]
+    recommended_render_strategy: Literal["subtree", "local"] | None = Field(
+        alias="recommendedRenderStrategy"
+    )
+    render_strategy_reason: str = Field(alias="renderStrategyReason")
+    complexity: "RenderComplexityResponse | None"
+    flattened_rendering_allowed: bool = Field(alias="flattenedRenderingAllowed")
+
+
+class RenderComplexityResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    expanded_instruction_node_count: int = Field(alias="expandedInstructionNodeCount")
+    expanded_occurrence_count: int = Field(alias="expandedOccurrenceCount")
+    direct_geometry_command_count: int = Field(alias="directGeometryCommandCount")
+    estimated_derived_source_bytes: int = Field(alias="estimatedDerivedSourceBytes")
 
 
 class PlaybackBreadcrumbResponse(BaseModel):
@@ -315,6 +349,7 @@ class PlaybackStepSummaryResponse(BaseModel):
     step: int
     local_part_count: int = Field(alias="localPartCount")
     child_attachment_count: int = Field(alias="childAttachmentCount")
+    direct_geometry_command_count: int = Field(alias="directGeometryCommandCount")
 
 
 class InstructionPlaybackOccurrenceResponse(BaseModel):
@@ -342,6 +377,23 @@ class InstructionPlaybackOccurrenceResponse(BaseModel):
     child_offset: int = Field(alias="childOffset")
     child_limit: int = Field(alias="childLimit")
     scene_source_url: str = Field(alias="sceneSourceUrl")
+    render_strategy: Literal["subtree", "local"] = Field(alias="renderStrategy")
+    recommended_render_strategy: Literal["subtree", "local"] = Field(
+        alias="recommendedRenderStrategy"
+    )
+    render_strategy_reason: str = Field(alias="renderStrategyReason")
+    complexity: RenderComplexityResponse
+
+
+def _render_complexity_response(
+    complexity: RenderComplexity,
+) -> RenderComplexityResponse:
+    return RenderComplexityResponse(
+        expanded_instruction_node_count=complexity.expanded_instruction_node_count,
+        expanded_occurrence_count=complexity.expanded_occurrence_count,
+        direct_geometry_command_count=complexity.direct_geometry_command_count,
+        estimated_derived_source_bytes=complexity.estimated_derived_source_bytes,
+    )
 
 
 def _instruction_graph_response(
@@ -368,8 +420,20 @@ def _instruction_graph_response(
                                     translation=node.local_transform.translation,
                                     matrix=node.local_transform.matrix,
                                 ),
+                                source_order=node.source_order,
                             )
                             for node in step.nodes
+                        ],
+                        direct_geometry=[
+                            LocalDirectGeometryResponse(
+                                command_type=geometry.command_type,
+                                color_token=geometry.color_token,
+                                coordinates=geometry.coordinates,
+                                local_step=geometry.local_step,
+                                source_order=geometry.source_order,
+                                source_submodel_name=geometry.source_submodel_name,
+                            )
+                            for geometry in step.direct_geometry
                         ],
                     )
                     for step in definition.local_steps
@@ -408,6 +472,7 @@ def _instruction_graph_response(
                     matrix=node.local_transform.matrix,
                 ),
                 child_occurrence_id=node.child_occurrence_id,
+                source_order=node.source_order,
             )
             for node in graph.instruction_nodes
         ],
@@ -598,9 +663,11 @@ def create_models_router(
     storage_root: Path,
     maximum_upload_bytes: int,
     instruction_graph_limits: InstructionGraphLimits | None = None,
+    render_complexity_limits: RenderComplexityLimits | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/models")
     active_graph_limits = instruction_graph_limits or InstructionGraphLimits()
+    active_render_limits = render_complexity_limits or RenderComplexityLimits()
 
     @router.post("", response_model=ModelSummaryResponse, status_code=201)
     def upload_model(
@@ -903,6 +970,13 @@ def create_models_router(
         data = playback_data_for(model)
         session.commit()
         fallback_reason = None
+        selection = (
+            select_render_strategy(
+                data, data.graph.root_occurrence_id, active_render_limits
+            )
+            if data.available
+            else None
+        )
         if not data.available:
             fallback_reason = (
                 data.issues[0].message
@@ -922,6 +996,22 @@ def create_models_router(
                 )
                 for issue in data.issues
             ],
+            recommended_render_strategy=(
+                selection.recommended_strategy if selection is not None else None
+            ),
+            render_strategy_reason=(
+                selection.reason
+                if selection is not None
+                else "instruction_graph_unavailable"
+            ),
+            complexity=(
+                _render_complexity_response(selection.complexity)
+                if selection is not None
+                else None
+            ),
+            flattened_rendering_allowed=(
+                selection is None or selection.recommended_strategy == "subtree"
+            ),
         )
 
     @router.get(
@@ -938,6 +1028,9 @@ def create_models_router(
             alias="childLimit",
             ge=1,
             le=PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM,
+        ),
+        requested_strategy: Literal["recommended", "subtree", "local"] = Query(
+            default="recommended", alias="renderStrategy"
         ),
         session: Session = Depends(session_dependency),
     ) -> InstructionPlaybackOccurrenceResponse:
@@ -966,8 +1059,27 @@ def create_models_router(
                 child_offset=child_offset,
                 child_limit=child_limit,
             )
+            selection = select_render_strategy(
+                data, occurrence_id, active_render_limits
+            )
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+        render_strategy = (
+            selection.recommended_strategy
+            if requested_strategy == "recommended"
+            else requested_strategy
+        )
+        if (
+            render_strategy == "subtree"
+            and selection.recommended_strategy == "local"
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "scope_complexity_limit",
+                    "message": "Complete subtree rendering exceeds the configured safety policy",
+                },
+            )
         session.commit()
         occurrence = result.occurrence
         encoded_occurrence = quote(occurrence_id, safe="")
@@ -998,6 +1110,9 @@ def create_models_router(
                 step=result.step_summary.step,
                 local_part_count=result.step_summary.local_part_count,
                 child_attachment_count=result.step_summary.child_attachment_count,
+                direct_geometry_command_count=(
+                    result.step_summary.direct_geometry_command_count
+                ),
             ),
             children=[
                 PlaybackChildResponse(
@@ -1016,7 +1131,12 @@ def create_models_router(
             scene_source_url=(
                 f"/api/models/{quote(str(model.public_id), safe='')}/"
                 f"instruction-occurrences/{encoded_occurrence}/source"
+                f"?mode={render_strategy}&step={result.current_step}"
             ),
+            render_strategy=render_strategy,
+            recommended_render_strategy=selection.recommended_strategy,
+            render_strategy_reason=selection.reason,
+            complexity=_render_complexity_response(selection.complexity),
         )
 
     @router.get(
@@ -1026,6 +1146,8 @@ def create_models_router(
     def model_instruction_occurrence_source(
         model_id: uuid.UUID,
         occurrence_id: str,
+        mode: Literal["subtree", "local"] = Query(default="subtree"),
+        step: int | None = Query(default=None, ge=1),
         session: Session = Depends(session_dependency),
     ) -> Response:
         model = find_model(session, model_id)
@@ -1039,12 +1161,25 @@ def create_models_router(
                 status_code=409, detail="Hierarchical playback is unavailable"
             )
         try:
-            content = derive_occurrence_source(data, occurrence_id)
+            selection = select_render_strategy(
+                data, occurrence_id, active_render_limits
+            )
+            if mode == "subtree" and selection.recommended_strategy == "local":
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "scope_complexity_limit",
+                        "message": "Complete subtree rendering exceeds the configured safety policy",
+                    },
+                )
+            content = derive_occurrence_source(
+                data, occurrence_id, current_step=step, strategy=mode
+            )
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         session.commit()
         etag = hashlib.sha256(
-            f"{model.source_sha256}:{occurrence_id}:v1".encode("ascii")
+            f"{model.source_sha256}:{occurrence_id}:{mode}:{step or 'complete'}:v2".encode("ascii")
         ).hexdigest()
         return Response(
             content=content,

@@ -28,6 +28,7 @@ export interface InstructionSourceManifest {
   rootOccurrenceId: string;
   occurrences: Map<string, ManifestOccurrence>;
   parts: Map<string, ManifestPart>;
+  rootWrapped: boolean;
 }
 
 export interface SceneIndexEntry extends PlaybackVisibilityEntry {
@@ -67,6 +68,7 @@ export function parseInstructionSourceManifest(text: string): InstructionSourceM
   let rootOccurrenceId: string | null = null;
   const occurrences = new Map<string, ManifestOccurrence>();
   const parts = new Map<string, ManifestPart>();
+  let rootWrapped = false;
 
   for (const line of text.split(/\r?\n/)) {
     const tokens = line.trim().split(/\s+/);
@@ -74,6 +76,8 @@ export function parseInstructionSourceManifest(text: string): InstructionSourceM
       version = Number(tokens[3]);
     } else if (tokens.slice(0, 3).join(" ") === "0 !BRICKY ROOT") {
       rootOccurrenceId = tokens[3] ?? null;
+    } else if (tokens.slice(0, 3).join(" ") === "0 !BRICKY ROOT_WRAPPED") {
+      rootWrapped = tokens[3] === "1";
     } else if (tokens.slice(0, 3).join(" ") === "0 !BRICKY OCCURRENCE") {
       const [occurrenceId, parent, attachment, traversal, encodedName] = tokens.slice(3);
       if (!occurrenceId || !parent || !attachment || !traversal || !encodedName) {
@@ -125,10 +129,10 @@ export function parseInstructionSourceManifest(text: string): InstructionSourceM
       });
     }
   }
-  if (version !== 1 || rootOccurrenceId === null || !occurrences.has(rootOccurrenceId)) {
+  if ((version !== 1 && version !== 2) || rootOccurrenceId === null || !occurrences.has(rootOccurrenceId)) {
     throw new InstructionSceneIndexError("Derived source manifest is missing or unsupported.");
   }
-  return { version, rootOccurrenceId, occurrences, parts };
+  return { version, rootOccurrenceId, occurrences, parts, rootWrapped };
 }
 
 function occurrenceIdFromGroupName(name: string): string | null {
@@ -172,10 +176,9 @@ export function createInstructionSceneIndex(
     });
   };
 
-  addOccurrence(model, manifest.rootOccurrenceId);
   model.traverse((object) => {
     objectCount += 1;
-    if (!(object instanceof Group) || object === model) return;
+    if (!(object instanceof Group)) return;
     const occurrenceId = occurrenceIdFromGroupName(object.name);
     if (occurrenceId !== null) {
       addOccurrence(object, occurrenceId);
@@ -204,6 +207,10 @@ export function createInstructionSceneIndex(
       group: object,
     });
   });
+
+  if (!manifest.rootWrapped && !mappedOccurrences.has(manifest.rootOccurrenceId)) {
+    addOccurrence(model, manifest.rootOccurrenceId);
+  }
 
   if (mappedOccurrences.size !== manifest.occurrences.size) {
     throw new InstructionSceneIndexError(

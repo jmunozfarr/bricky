@@ -21,6 +21,7 @@ STATIC_FIXTURES = (
     "nested_stepped_submodels.mpd",
     "repeated_submodel.mpd",
     "transformed_occurrences.mpd",
+    "direct_geometry_flex.mpd",
     "explicit_attachment_steps.mpd",
     "recursion_cycle.mpd",
     "excessive_nesting.mpd",
@@ -174,3 +175,37 @@ def test_generated_large_repeated_fixture_is_part_of_the_corpus() -> None:
     assert len(result.occurrences) == 101
     assert len(result.instruction_nodes) == 200
     assert sum(item.quantity for item in bom.bom) == 100
+
+
+def test_direct_geometry_is_retained_by_step_without_becoming_nodes() -> None:
+    result = graph("direct_geometry_flex.mpd")
+    hose = next(
+        definition
+        for definition in result.model_definitions
+        if definition.source_submodel_name == "generated-hose.ldr"
+    )
+
+    assert [
+        geometry.command_type
+        for step in hose.local_steps
+        for geometry in step.direct_geometry
+    ] == [2, 3, 4, 5]
+    assert [geometry.color_token for geometry in hose.local_steps[0].direct_geometry] == [
+        "24",
+        "16",
+    ]
+    assert hose.local_steps[1].direct_geometry[0].local_step == 2
+    assert hose.local_steps[1].direct_geometry[0].source_submodel_name == "generated-hose.ldr"
+    assert len(result.instruction_nodes) == 2
+    assert len(result.occurrences) == 2
+
+
+def test_direct_geometry_does_not_change_physical_bom() -> None:
+    result = parse_ldraw_model(
+        fixture("direct_geometry_flex.mpd"),
+        official_part_ids=PARTS,
+        known_color_codes=COLORS,
+    )
+    assert [(item.part_id, item.color_code, item.quantity) for item in result.bom] == [
+        ("3001", 4, 1)
+    ]

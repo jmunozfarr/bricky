@@ -1,0 +1,14 @@
+0 FILE main.ldr
+0 Direct geometry fixture
+1 4 10 20 30 0 -1 0 1 0 0 0 0 1 generated-hose.ldr
+0 FILE generated-hose.ldr
+0 !LDRAW_ORG Unofficial_Model
+0 !LDCAD GENERATED [generator=path] [source=synthetic-test]
+0 BFC CERTIFY CCW
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat
+2 24 0 0 0 10 0 0
+3 16 0 0 0 10 0 0 0 10 0
+0 STEP
+4 16 0 0 0 0 10 0 10 10 0 10 0 0
+5 24 0 0 0 10 0 0 0 10 0 10 10 0
+0 NOFILE

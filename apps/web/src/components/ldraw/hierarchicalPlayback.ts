@@ -3,12 +3,13 @@ import {
   InstructionPlaybackSummary,
   PlaybackBreadcrumb,
   PlaybackChild,
+  RenderStrategy,
 } from "../../api/models";
 
 export type ImportedViewerMode = "hierarchical" | "flattened";
 
 export interface ViewerModeSelection {
-  mode: ImportedViewerMode;
+  mode: ImportedViewerMode | "blocked";
   fallbackReason: string | null;
 }
 
@@ -23,13 +24,22 @@ export interface PlaybackVisibilityEntry {
 export function selectInitialViewerMode(
   summary: InstructionPlaybackSummary,
 ): ViewerModeSelection {
-  return summary.available && summary.rootOccurrenceId !== null
-    ? { mode: "hierarchical", fallbackReason: null }
-    : {
+  if (summary.available && summary.rootOccurrenceId !== null) {
+    return { mode: "hierarchical", fallbackReason: null };
+  }
+  if (summary.flattenedRenderingAllowed) {
+    return {
         mode: "flattened",
         fallbackReason:
           summary.fallbackReason ?? "A valid instruction graph is unavailable.",
-      };
+    };
+  }
+  return {
+    mode: "blocked",
+    fallbackReason:
+      summary.fallbackReason ??
+      "This model exceeds the safe full-model rendering policy. Use bounded hierarchical navigation.",
+  };
 }
 
 export function clampLocalStep(step: number, stepCount: number): number {
@@ -101,5 +111,11 @@ export function repeatedDefinitionLabel(
 ): string | null {
   return item.repeatedDefinitionCount > 1
     ? `Occurrence ${item.repeatedDefinitionIndex} of ${item.repeatedDefinitionCount}`
+    : null;
+}
+
+export function localRenderNotice(strategy: RenderStrategy): string | null {
+  return strategy === "local"
+    ? "Memory-safe local rendering is active. Completed child assemblies remain attached in the instructions and navigation, but their geometry is omitted from this canvas."
     : null;
 }
