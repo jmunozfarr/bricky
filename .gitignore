@@ -12,6 +12,8 @@ venv/
 dist/
 build/
 coverage/
+test-results/
+playwright-report/
 .coverage
 *.tsbuildinfo
 

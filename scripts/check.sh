@@ -21,4 +21,10 @@ compose exec -T web npm run typecheck
 echo "Building frontend production assets"
 compose exec -T web npm run build
 
+echo "Checking frontend bundle budgets"
+compose exec -T web npm run check:bundle
+
+echo "Running browser and accessibility checks"
+"$SCRIPT_DIR/e2e.sh"
+
 echo "All Bricky checks passed."
