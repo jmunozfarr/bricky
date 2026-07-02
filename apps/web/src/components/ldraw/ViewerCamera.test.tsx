@@ -94,7 +94,7 @@ describe("ViewerCamera orbit controls lifecycle", () => {
     const { rerender } = render(<ViewerCamera model={null} fitVersion="demo" command={command} />);
 
     expect(harness.constructed).toHaveLength(1);
-    const controls = harness.constructed[0];
+    const controls = harness.constructed[0]!;
 
     // First change event of a drag gesture: regress() swaps the performance
     // object in the store, and the component re-renders.

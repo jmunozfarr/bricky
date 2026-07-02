@@ -70,7 +70,9 @@ describe("instruction scene presentation", () => {
     expect((second.group.children[0] as Mesh).material).toBe(second.fill);
     expect((second.group.children[1] as LineSegments).material).not.toBe(second.edge);
     const currentEdge = (second.group.children[1] as LineSegments).material as LineBasicMaterial;
-    expect(currentEdge.color.getHexString()).toBe(new Color(CURRENT_STEP_EDGE_COLOR).getHexString());
+    expect(currentEdge.color.getHexString()).toBe(
+      new Color(CURRENT_STEP_EDGE_COLOR).getHexString(),
+    );
     expect(third.group.visible).toBe(false);
 
     presentation.apply("occ-000001", 2, "inspect");

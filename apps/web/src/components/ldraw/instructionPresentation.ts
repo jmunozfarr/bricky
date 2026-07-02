@@ -88,7 +88,14 @@ export class InstructionPresentationController {
         classify(entry.group, step, currentStep, mode, desiredVariants, desiredHidden);
       }
       for (const fallback of this.fallbackGroups) {
-        classify(fallback.group, fallback.localStep, currentStep, mode, desiredVariants, desiredHidden);
+        classify(
+          fallback.group,
+          fallback.localStep,
+          currentStep,
+          mode,
+          desiredVariants,
+          desiredHidden,
+        );
       }
     }
 
