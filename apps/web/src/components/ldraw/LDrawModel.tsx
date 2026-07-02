@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useThree } from "@react-three/fiber";
 import { BufferGeometry, Group, LineSegments, Material, Mesh, Object3D, Points } from "three";
 import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
 import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
@@ -242,9 +243,14 @@ interface LDrawModelProps {
 }
 
 export function LDrawModel({ model, selectedStep }: LDrawModelProps) {
+  // Scene mutations happen outside the reconciler, so the demand frameloop
+  // must be told to draw a frame or the view goes stale until the next
+  // incidental render trigger (camera drag, resize).
+  const invalidate = useThree((state) => state.invalidate);
   useLayoutEffect(() => {
     applyBuildingStepVisibility(model, selectedStep);
-  }, [model, selectedStep]);
+    invalidate();
+  }, [invalidate, model, selectedStep]);
 
   return <primitive object={model} />;
 }
@@ -268,6 +274,9 @@ export function HierarchicalLDrawModel({
   cacheKey,
   presentationMode = "assembled",
 }: HierarchicalLDrawModelProps) {
+  // Presentation and mount changes mutate the scene outside the reconciler,
+  // so each one must explicitly schedule a frame on the demand frameloop.
+  const invalidate = useThree((state) => state.invalidate);
   const mount = useMemo(() => new ExclusiveInstructionSceneMount(host), [host]);
   const presentation = useMemo(
     () => new InstructionPresentationController(model, sceneIndex),
@@ -275,14 +284,16 @@ export function HierarchicalLDrawModel({
   );
   useLayoutEffect(() => {
     presentation.apply(activeOccurrenceId, selectedStep, presentationMode);
-  }, [activeOccurrenceId, presentation, presentationMode, selectedStep]);
+    invalidate();
+  }, [activeOccurrenceId, invalidate, presentation, presentationMode, selectedStep]);
 
   useEffect(() => () => presentation.dispose(), [presentation]);
 
   useLayoutEffect(() => {
     mount.activate({ cacheKey, model, sceneIndex });
+    invalidate();
     return () => mount.deactivate(model);
-  }, [cacheKey, model, mount, sceneIndex]);
+  }, [cacheKey, invalidate, model, mount, sceneIndex]);
 
   return <primitive object={host} />;
 }

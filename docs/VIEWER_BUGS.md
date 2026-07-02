@@ -30,6 +30,7 @@ pending from the user.
 | B2 | Drag-to-rotate responds only ~1 in 10 attempts | P1 | fixed | yes (`/viewer-demo`) | yes | all | Wait >300 ms idle, then click-drag; rotation dies after the first pointer move |
 | B3 | Ghosted parts barely distinguishable in step focus | P2 | fixed | n/a | yes | all | Open the visual builder past step 1 in "Step focus"; prior parts nearly invisible |
 | B4 | Rapid slider scrubbing lags and misses the target step | P1 | fixed | n/a | yes | all | Drag the builder step slider quickly across many steps on a large model |
+| B5 | 3D view does not repaint when advancing steps (Next) | P1 | fixed | intermittent | yes (2nd Next) | all | Open the Falcon builder, click Next twice; the second advance leaves the view stale |
 
 ## Audit suspects
 
@@ -103,3 +104,18 @@ to select the correct step".
   commit) was added next to Previous/Next; the slider remains as a coarse
   scrubber — commit `53f3c89`. Covered by `VisualBuilderPage.test.tsx` and
   `e2e/builder.spec.ts` (rapid scrub lands on the requested step).
+
+### B5 — 3D view does not repaint when advancing steps (reproduced on the Falcon)
+
+Step changes mutate the Three.js scene imperatively (visibility, materials)
+behind a stable `<primitive object={...}>`, which the `frameloop="demand"`
+reconciler cannot see — nothing scheduled a frame. Repaints only happened
+when an incidental trigger fired: reproduced on the UCS Falcon where the
+first Next repainted (parts-panel layout resize) but the second Next left
+the canvas stale until the camera was touched.
+
+- Fix: `LDrawModel` and `HierarchicalLDrawModel` now call `invalidate()`
+  after every step-visibility/presentation apply and scene mount.
+- Regression tests: `LDrawModel.test.tsx` (a step re-render must schedule a
+  frame) and consecutive Next-repaint screenshot assertions in
+  `e2e/builder.spec.ts`.

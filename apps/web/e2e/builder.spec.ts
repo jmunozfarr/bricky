@@ -71,6 +71,22 @@ test("guides a build task with step transport and camera interaction", async ({
     await expect(page.getByText("of 4")).toBeVisible();
     await expect(page.locator(".viewer-message")).toBeHidden({ timeout: 20_000 });
 
+    // Every step advance must repaint the 3D view without further
+    // interaction. Consecutive advances matter: the first one used to be
+    // repainted by an incidental layout resize while later ones went stale.
+    const buildCanvas = page.locator(".builder-viewport canvas");
+    let previousFrame = await buildCanvas.screenshot();
+    for (const step of [2, 3]) {
+      await page.getByRole("button", { name: "Next" }).click();
+      await expect(page.getByRole("heading", { name: `Step ${step}` })).toBeVisible();
+      await page.waitForTimeout(300);
+      const frame = await buildCanvas.screenshot();
+      expect(frame.equals(previousFrame), `step ${step} must repaint`).toBe(false);
+      previousFrame = frame;
+    }
+    await page.getByRole("button", { name: "Previous" }).click();
+    await page.getByRole("button", { name: "Previous" }).click();
+
     // Direct step entry jumps to the requested step.
     const stepInput = page.getByRole("spinbutton");
     await stepInput.fill("3");
