@@ -66,6 +66,21 @@ def test_repeated_definitions_keep_occurrence_identity_and_indices() -> None:
     assert [child.repeated_definition_count for child in root.children] == [2, 2]
 
 
+def test_occurrence_wrappers_always_declare_model_type() -> None:
+    playback = data("dat_typed_submodels.mpd")
+    source = derive_occurrence_source(playback, "occ-000001").decode()
+
+    # .dat-defined submodels carry a Part/Subpart !LDRAW_ORG header; if it
+    # leaked into an occurrence wrapper, LDrawLoader would flatten the wrapper
+    # into parent geometry and the scene index could not map the occurrence.
+    assert "SUBPART" not in source.upper()
+    for line in ("0 FILE __bricky_occ_000002.ldr", "0 FILE __bricky_occ_000003.ldr"):
+        assert f"{line}\n0 !LDRAW_ORG Model" in source
+    assert "0 Name: __bricky_occ_000001.ldr\n0 !LDRAW_ORG Model" in source
+    # Other safe render meta from the definition is still preserved.
+    assert "0 BFC CERTIFY CCW" in source
+
+
 def test_transformed_occurrences_have_unique_derived_sections() -> None:
     playback = data("transformed_occurrences.mpd")
     source = derive_occurrence_source(playback, "occ-000001").decode()

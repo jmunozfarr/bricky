@@ -23,10 +23,13 @@ from app.services.ldraw_model_parser import _normalize_reference
 PLAYBACK_CHILD_PAGE_SIZE = 50
 PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM = 100
 DERIVED_SOURCE_FORMAT_VERSION = 2
-DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES = 4_000
-DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES = 250
-DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS = 2_000
-DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES = 512 * 1_024
+# Calibrated against the UCS Millennium Falcon stress model (5 768 nodes,
+# 433 occurrences, 3 264 direct geometry commands, 1.18 MB derived source),
+# which must render as a complete subtree; see docs/VIEWER_BUGS.md B6.
+DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES = 8_000
+DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES = 600
+DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS = 5_000
+DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES = 2 * 1_024 * 1_024
 
 RenderStrategy = Literal["subtree", "local"]
 
@@ -507,6 +510,10 @@ def _serialize_occurrence_source(
             lines.append(f"0 Name: {_occurrence_filename(occurrence.occurrence_id)}")
         else:
             lines.append(f"0 FILE {_occurrence_filename(occurrence.occurrence_id)}")
+        # Occurrence wrappers must always parse to a named scene group. A
+        # Part/Subpart type inherited from a .dat-defined submodel would make
+        # LDrawLoader flatten the wrapper into parent geometry instead.
+        lines.append("0 !LDRAW_ORG Model")
         occurrence_nodes = tuple(
             node for node in nodes if node.occurrence_id == occurrence.occurrence_id
         )
@@ -519,7 +526,11 @@ def _serialize_occurrence_source(
                 occurrence.occurrence_id != occurrence_id or local_step.step <= current_step
             )
             if geometry_visible:
-                items.extend((meta.source_order, meta.text) for meta in local_step.render_meta)
+                items.extend(
+                    (meta.source_order, meta.text)
+                    for meta in local_step.render_meta
+                    if not meta.text.upper().startswith("0 !LDRAW_ORG")
+                )
                 items.extend(
                     (geometry.source_order, _direct_geometry_line(geometry))
                     for geometry in local_step.direct_geometry
