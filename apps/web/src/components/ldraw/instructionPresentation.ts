@@ -4,6 +4,17 @@ import { InstructionSceneIndex, SceneIndexEntry } from "./instructionSceneIndex"
 
 export type InstructionPresentationMode = "focus" | "assembled" | "inspect";
 
+/**
+ * Ghost presentation: already-built parts stay clearly recognizable (mostly
+ * original color, moderate transparency) while receding behind the current
+ * step. Values are validated against both themes' viewer backgrounds.
+ */
+export const GHOST_OPACITY = 0.45;
+export const GHOST_TINT = "#8d7f83";
+export const GHOST_TINT_STRENGTH = 0.3;
+/** Oxblood accent applied to the edge lines of parts added in the current step. */
+export const CURRENT_STEP_EDGE_COLOR = "#a62d43";
+
 type Renderable = Mesh | LineSegments | Points;
 
 function isRenderable(object: Object3D): object is Renderable {
@@ -129,13 +140,13 @@ export class InstructionPresentationController {
     const clone = material.clone();
     if (kind === "ghost") {
       clone.transparent = true;
-      clone.opacity = 0.22;
+      clone.opacity = GHOST_OPACITY;
       clone.depthWrite = false;
       const colored = clone as Material & { color?: Color };
-      colored.color?.lerp(new Color("#8d7f83"), 0.72);
+      colored.color?.lerp(new Color(GHOST_TINT), GHOST_TINT_STRENGTH);
     } else {
       const colored = clone as Material & { color?: Color };
-      colored.color?.set("#a62d43");
+      colored.color?.set(CURRENT_STEP_EDGE_COLOR);
       clone.transparent = false;
       clone.opacity = 1;
     }
