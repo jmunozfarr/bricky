@@ -103,7 +103,7 @@ export default function VisualBuilderPage() {
   }, [activeOccurrenceId, modelId]);
 
   function chooseStep(step: number) {
-    if (manifest.kind !== "ready") return;
+    if (manifest.kind !== "ready" || Number.isNaN(step)) return;
     const selected = Math.min(Math.max(Math.trunc(step), 1), manifest.data.steps.length);
     rememberedSteps.current.set(manifest.data.occurrenceId, selected);
     setSelectedStep(selected);
@@ -279,18 +279,25 @@ function BuilderWorkspace({
             >
               Previous
             </button>
-            <label>
-              <span>
-                Step {selectedStep} of {manifest.steps.length}
-              </span>
+            <div className="builder-step-selector">
+              <label className="builder-step-number">
+                <span>Step</span>
+                <StepNumberInput
+                  selectedStep={selectedStep}
+                  stepCount={manifest.steps.length}
+                  onStepChange={onStepChange}
+                />
+                <span>of {manifest.steps.length}</span>
+              </label>
               <input
                 type="range"
                 min={1}
                 max={manifest.steps.length}
                 value={selectedStep}
+                aria-label="Scrub through building steps"
                 onChange={(event) => onStepChange(event.currentTarget.valueAsNumber)}
               />
-            </label>
+            </div>
             <button
               type="button"
               disabled={selectedStep === manifest.steps.length}
@@ -398,6 +405,52 @@ function BuilderWorkspace({
         </aside>
       </div>
     </section>
+  );
+}
+
+function StepNumberInput({
+  selectedStep,
+  stepCount,
+  onStepChange,
+}: {
+  selectedStep: number;
+  stepCount: number;
+  onStepChange: (step: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  function commit(value: string) {
+    setDraft(null);
+    if (value.trim() === "") return;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) onStepChange(parsed);
+  }
+
+  return (
+    <input
+      type="number"
+      min={1}
+      max={stepCount}
+      inputMode="numeric"
+      value={draft ?? String(selectedStep)}
+      onChange={(event) => {
+        const value = event.currentTarget.value;
+        const parsed = Number(value);
+        if (Number.isInteger(parsed) && parsed >= 1 && parsed <= stepCount) {
+          setDraft(null);
+          onStepChange(parsed);
+        } else {
+          setDraft(value);
+        }
+      }}
+      onBlur={(event) => commit(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit(event.currentTarget.value);
+        }
+      }}
+    />
   );
 }
 

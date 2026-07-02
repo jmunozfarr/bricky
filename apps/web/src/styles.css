@@ -808,18 +808,30 @@ a:focus-visible {
   background: var(--surface);
 }
 
-.builder-step-transport label {
+.builder-step-selector {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.35rem;
+}
+
+.builder-step-selector input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.builder-step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   color: var(--text-muted);
   font-size: 0.78rem;
   font-weight: 700;
-  text-align: center;
 }
 
-.builder-step-transport input {
-  width: 100%;
-  accent-color: var(--accent);
+.builder-step-number input {
+  width: 4.2rem;
+  padding: 0.25rem 0.4rem;
+  text-align: center;
 }
 
 .builder-step-panel {
@@ -2087,7 +2099,7 @@ h1 {
     grid-template-columns: 1fr 1fr;
   }
 
-  .builder-step-transport label {
+  .builder-step-selector {
     grid-column: 1 / -1;
     grid-row: 1;
   }

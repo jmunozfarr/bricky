@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BuildManifest, ModelDetail } from "../api/models";
 import VisualBuilderPage from "./VisualBuilderPage";
@@ -96,6 +96,10 @@ describe("visual builder workspace", () => {
     getBuildManifest.mockResolvedValue(manifest);
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   it("presents exact current-step parts and switches modes without refetching", async () => {
     render(
       <MemoryRouter initialEntries={["/models/model-1/build"]}>
@@ -113,5 +117,34 @@ describe("visual builder workspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Inspect" }));
     expect(screen.getByText(/complete safe scope is shown/i)).toBeTruthy();
     await waitFor(() => expect(getBuildManifest).toHaveBeenCalledTimes(1));
+  });
+
+  it("jumps directly to a typed step number and clamps out-of-range input", async () => {
+    render(
+      <MemoryRouter initialEntries={["/models/model-1/build"]}>
+        <Routes>
+          <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText("1× Brick 2 x 4");
+
+    const stepInput = screen.getByRole("spinbutton");
+    fireEvent.change(stepInput, { target: { value: "2" } });
+    expect(screen.getByRole("heading", { name: "Step 2" })).toBeTruthy();
+
+    const slider = screen.getByRole("slider", { name: "Scrub through building steps" });
+    fireEvent.change(slider, { target: { value: "1" } });
+    expect(screen.getByRole("heading", { name: "Step 1" })).toBeTruthy();
+
+    // Out-of-range values are clamped to the last step when committed.
+    fireEvent.change(stepInput, { target: { value: "9" } });
+    fireEvent.keyDown(stepInput, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: "Step 2" })).toBeTruthy();
+
+    // Clearing the field never produces an invalid step.
+    fireEvent.change(stepInput, { target: { value: "" } });
+    fireEvent.blur(stepInput);
+    expect(screen.getByRole("heading", { name: "Step 2" })).toBeTruthy();
   });
 });
