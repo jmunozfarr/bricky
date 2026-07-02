@@ -11,6 +11,7 @@ import {
   getModel,
   ModelDetail,
 } from "../api/models";
+import { AdaptiveViewerDpr } from "../components/ldraw/AdaptiveViewerDpr";
 import {
   displaySubmodelName,
   repeatedDefinitionLabel,
@@ -492,7 +493,7 @@ function BuilderViewport({
         camera={{ fov: 40, near: 0.1, far: 10_000 }}
         dpr={[1, maximumViewerDpr(window.innerWidth, window.devicePixelRatio)]}
         frameloop="demand"
-        performance={{ min: 0.75, debounce: 300 }}
+        performance={{ min: 0.5, debounce: 300 }}
         role="img"
         aria-label={`Three-dimensional build view of ${manifest.sourceSubmodelName}`}
       >
@@ -503,6 +504,7 @@ function BuilderViewport({
             setCanvasVersion((value) => value + 1);
           }}
         />
+        <AdaptiveViewerDpr />
         <ambientLight intensity={1.4} />
         <directionalLight position={[100, 150, 100]} intensity={2.2} />
         <directionalLight position={[-80, 60, -100]} intensity={1.1} />
