@@ -1,0 +1,107 @@
+import { APIRequestContext, expect, Page, test } from "@playwright/test";
+
+const SYNTHETIC_MPD = [
+  "0 FILE main.ldr",
+  "0 Name: main.ldr",
+  "1 4 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat",
+  "0 STEP",
+  "1 14 0 -24 0 1 0 0 0 1 0 0 0 1 3001.dat",
+  "0 STEP",
+  "1 1 0 -48 0 1 0 0 0 1 0 0 0 1 3001.dat",
+  "0 STEP",
+  "1 16 60 0 0 1 0 0 0 1 0 0 0 1 wing.ldr",
+  "0 FILE wing.ldr",
+  "1 2 0 0 0 1 0 0 0 1 0 0 0 1 3020.dat",
+  "0 STEP",
+  "1 2 0 -8 0 1 0 0 0 1 0 0 0 1 3020.dat",
+  "0 NOFILE",
+  "",
+].join("\n");
+
+async function importSyntheticModel(request: APIRequestContext): Promise<string> {
+  const imported = await request.post("/api/models", {
+    multipart: {
+      name: "e2e-builder-smoke",
+      file: {
+        name: "e2e-builder-smoke.mpd",
+        mimeType: "text/plain",
+        buffer: Buffer.from(SYNTHETIC_MPD),
+      },
+    },
+  });
+  if (imported.status() === 409) {
+    const body = (await imported.json()) as { detail: { existingModelId: string } };
+    return body.detail.existingModelId;
+  }
+  expect(imported.status()).toBe(201);
+  const body = (await imported.json()) as { modelId: string };
+  return body.modelId;
+}
+
+async function dragAcrossCanvas(page: Page, deltaX: number, deltaY: number): Promise<void> {
+  const canvas = page.locator(".builder-viewport canvas");
+  const bounds = await canvas.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (!bounds) return;
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  await page.mouse.move(centerX, centerY);
+  await page.mouse.down();
+  await page.mouse.move(centerX + deltaX, centerY + deltaY, { steps: 12 });
+  await page.mouse.up();
+}
+
+test("guides a build task with step transport and camera interaction", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium-desktop",
+    "The builder flow runs once in Chromium.",
+  );
+  const library = await request.get("/api/ldraw/LDConfig.ldr");
+  test.skip(!library.ok(), "The builder flow requires an installed LDraw library.");
+  const models = await request.get("/api/models?page=1");
+  test.skip(!models.ok(), "The builder flow requires a migrated database.");
+
+  const modelId = await importSyntheticModel(request);
+  try {
+    await page.goto(`/models/${modelId}/build`);
+    await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
+    await expect(page.getByText("of 4")).toBeVisible();
+    await expect(page.locator(".viewer-message")).toBeHidden({ timeout: 20_000 });
+
+    // Direct step entry jumps to the requested step.
+    const stepInput = page.getByRole("spinbutton");
+    await stepInput.fill("3");
+    await expect(page.getByRole("heading", { name: "Step 3" })).toBeVisible();
+
+    // Rapid scrubbing always lands on the last requested step.
+    const slider = page.getByRole("slider", { name: "Scrub through building steps" });
+    for (const value of ["1", "2", "3", "4", "2", "1", "4"]) {
+      await slider.fill(value);
+    }
+    await expect(page.getByRole("heading", { name: "Step 4" })).toBeVisible();
+
+    // Two separate drag gestures must both rotate the model. The second one
+    // starts after the performance-regression debounce has expired, which is
+    // the case that previously disposed the controls mid-drag.
+    const canvas = page.locator(".builder-viewport canvas");
+    const initial = await canvas.screenshot();
+    await dragAcrossCanvas(page, 140, 40);
+    await page.waitForTimeout(500);
+    const afterFirstDrag = await canvas.screenshot();
+    expect(afterFirstDrag.equals(initial)).toBe(false);
+    await dragAcrossCanvas(page, -180, -60);
+    await page.waitForTimeout(500);
+    const afterSecondDrag = await canvas.screenshot();
+    expect(afterSecondDrag.equals(afterFirstDrag)).toBe(false);
+
+    // Subassembly tasks open their own local step timeline.
+    await page.getByRole("button", { name: "Open build task" }).click();
+    await expect(page.getByText("of 2")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
+  } finally {
+    await request.delete(`/api/models/${modelId}`);
+  }
+});

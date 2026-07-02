@@ -19,7 +19,13 @@ const presetDirections: Record<CameraPreset, Vector3> = {
 };
 
 export function ViewerCamera({ model, fitVersion, command }: ViewerCameraProps) {
-  const { camera, gl, invalidate, performance } = useThree();
+  // Subscribe to individual store fields: `performance.regress()` replaces the
+  // store's `performance` object, so depending on it (or on the whole store)
+  // recreates the controls mid-drag on the first change event of a gesture.
+  const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
+  const invalidate = useThree((state) => state.invalidate);
+  const regress = useThree((state) => state.performance.regress);
   const controlsRef = useRef<OrbitControls | null>(null);
   const fittedVersionRef = useRef<string | number | null>(null);
   const commandIdRef = useRef(-1);
@@ -27,7 +33,7 @@ export function ViewerCamera({ model, fitVersion, command }: ViewerCameraProps) 
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);
     const handleChange = () => {
-      performance.regress();
+      regress();
       invalidate();
     };
     controls.enableDamping = false;
@@ -40,7 +46,7 @@ export function ViewerCamera({ model, fitVersion, command }: ViewerCameraProps) 
       controls.dispose();
       controlsRef.current = null;
     };
-  }, [camera, gl, invalidate, performance]);
+  }, [camera, gl, invalidate, regress]);
 
   useEffect(() => {
     const controls = controlsRef.current;
