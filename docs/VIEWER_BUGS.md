@@ -31,6 +31,7 @@ pending from the user.
 | B3 | Ghosted parts barely distinguishable in step focus | P2 | fixed | n/a | yes | all | Open the visual builder past step 1 in "Step focus"; prior parts nearly invisible |
 | B4 | Rapid slider scrubbing lags and misses the target step | P1 | fixed | n/a | yes | all | Drag the builder step slider quickly across many steps on a large model |
 | B5 | 3D view does not repaint when advancing steps (Next) | P1 | fixed | intermittent | yes (2nd Next) | all | Open the Falcon builder, click Next twice; the second advance leaves the view stale |
+| B6 | Builder never shows the full construction ("subparts not added") | P1 | fixed | n/a | yes | all | Falcon root renders `local` (policy) and, with limits raised, `subtree` scenes failed outright on `.dat`-typed submodels |
 
 ## Audit suspects
 
@@ -119,3 +120,32 @@ the canvas stale until the camera was touched.
 - Regression tests: `LDrawModel.test.tsx` (a step re-render must schedule a
   frame) and consecutive Next-repaint screenshot assertions in
   `e2e/builder.spec.ts`.
+
+### B6 — the full construction never appears (reported as "subparts not added")
+
+Two stacked causes, found by testing the Falcon root at raised complexity
+limits:
+
+1. **Policy, not a bug, at default limits**: the Falcon root exceeds all
+   four `RENDER_MAX_*` limits (5 768 nodes / 433 occurrences / 3 264 direct
+   geometry commands / 1.18 MB), so the root scene uses child-omitting
+   `local` rendering: subassembly geometry is deliberately absent and the
+   final step only shows root-level parts. Build mode gave no indication of
+   this (only Inspect mode did) — a `builder-scope-note` now explains it.
+2. **A real serializer bug behind the policy**: with limits raised, the
+   `subtree` scene hard-failed ("Not every occurrence mapped to a scene
+   group"). Occurrence wrapper files copied the definition's
+   `0 !LDRAW_ORG` header; for `.dat`-defined submodels (the Falcon's 50
+   bent-hose segments, typed `Subpart`) LDrawLoader flattens such wrappers
+   into parent geometry instead of creating the named group the scene index
+   requires. Wrappers now always declare `0 !LDRAW_ORG Model` and drop the
+   inherited type line (BFC/LDCad meta is kept) — regression-tested in
+   `test_occurrence_wrappers_always_declare_model_type`.
+
+With the serializer fixed, the default `RENDER_MAX_*` limits were raised to
+8 000 nodes / 600 occurrences / 5 000 direct geometry commands / 2 MiB —
+calibrated so the Falcon root renders as a complete subtree. Stress numbers
+(headless Chromium, software WebGL, so pessimistic): 31 s one-time scene
+parse (then LRU-cached), ~1 s to jump to the last step showing the full
+construction, ~1.4 s per step back. Rotation of the full subtree remains
+the heaviest interaction; the three.js upgrade later in Phase 2 targets it.
