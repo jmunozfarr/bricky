@@ -12,6 +12,7 @@ import {
   ModelDetail,
 } from "../api/models";
 import { AdaptiveViewerDpr } from "../components/ldraw/AdaptiveViewerDpr";
+import { AdaptiveViewerLines } from "../components/ldraw/AdaptiveViewerLines";
 import {
   displaySubmodelName,
   repeatedDefinitionLabel,
@@ -565,6 +566,7 @@ function BuilderViewport({
           }}
         />
         <AdaptiveViewerDpr />
+        <AdaptiveViewerLines />
         <ambientLight intensity={1.4} />
         <directionalLight position={[100, 150, 100]} intensity={2.2} />
         <directionalLight position={[-80, 60, -100]} intensity={1.1} />

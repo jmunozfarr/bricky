@@ -33,6 +33,8 @@ pending from the user.
 | B5 | 3D view does not repaint when advancing steps (Next) | P1 | fixed | intermittent | yes (2nd Next) | all | Open the Falcon builder, click Next twice; the second advance leaves the view stale |
 | B6 | Builder never shows the full construction ("subparts not added") | P1 | fixed | n/a | yes | all | Falcon root renders `local` (policy) and, with limits raised, `subtree` scenes failed outright on `.dat`-typed submodels |
 | B7 | LDCad-exported Technic sets (8386, 42056, 42083) "not properly loading at all" | P1 | fixed | n/a | n/a (LDCad-specific) | all | Open the builder for 42056/42083: scene hangs forever on 404 storms; 42083 root shows an empty view; flex hoses never render anywhere |
+| B8 | Browser freezes while a large builder scene opens | P2 | mitigated | n/a | yes | all | Open the builder on any big model; the tab is unresponsive until the parse finishes (one ~14 s main-thread task for 3450 in software WebGL) |
+| B9 | Rotating full builds is very laggy on high part-count models | P2 | mitigated | n/a | yes | all | Open a full build (3450, 42056, Falcon) and drag; rotation frame times spike past 1 s |
 
 ## Audit suspects
 
@@ -181,3 +183,36 @@ loading at all". Two independent causes:
 
 Follow-up (A8): a scene-load failure must surface an error in the builder
 instead of an indefinite loading state.
+
+### B8 — the tab freezes while a large builder scene opens (mitigated)
+
+`LDrawLoader.parse` is synchronous: the whole derived source builds its
+Three.js graph in one main-thread task (~14 s for 3450's 2 874-part scene
+in headless software WebGL; shorter but still seconds on real hardware).
+Worse, the parse started before React could paint the loading state, so
+the tab froze with no feedback from the moment the builder opened.
+
+- Mitigation: `parseLDraw` now yields to the next paint before parsing, so
+  the loading/refreshing UI appears immediately; the freeze itself remains
+  but is visibly "preparing the scene" instead of a dead tab. Scenes stay
+  LRU-cached, so this is a first-open cost per scope.
+- Real fix (open): move parsing into a Web Worker. Belongs with the
+  three.js upgrade later in Phase 2.
+
+### B9 — rotating full builds is very laggy (mitigated)
+
+Rotation cost tracks part count, not triangle count: every part carries
+its own mesh plus edge and conditional-line `LineSegments`, so blocky
+models (3450, 42056, the Falcon) push thousands of draw calls while 8386 —
+fewer, geometry-heavy parts — stays smooth. DPR regression alone
+(`AdaptiveViewerDpr`) does not help the draw-call-bound case.
+
+- Mitigation: `AdaptiveViewerLines` hides every edge/conditional line
+  while a performance regression is active (drag, scrub) and restores them
+  on idle. LineSegments visibility is exclusively owned by this component;
+  step visibility and presentation variants only write `visible` on
+  Groups. Measured on 3450's full build (headless software WebGL, so
+  pessimistic): worst rotation stall 15.2 s → 1.2 s; on GPU hardware the
+  draw-call reduction is the dominant win.
+- Real fixes (open): three.js upgrade, then merged/batched static
+  geometry for as-built scenes.

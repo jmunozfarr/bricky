@@ -2,6 +2,7 @@ import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 
 import { AdaptiveViewerDpr } from "./AdaptiveViewerDpr";
+import { AdaptiveViewerLines } from "./AdaptiveViewerLines";
 import { getBuildingStepCount } from "./buildingSteps";
 import { BuildingStepControls } from "./BuildingStepControls";
 import { LDrawModel, LDrawModelSource, useLDrawModel } from "./LDrawModel";
@@ -133,6 +134,7 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
             }}
           />
           <AdaptiveViewerDpr />
+          <AdaptiveViewerLines />
           <ambientLight intensity={1.45} />
           <directionalLight position={[100, 150, 100]} intensity={2.2} />
           <directionalLight position={[-80, 60, -100]} intensity={1.1} />
