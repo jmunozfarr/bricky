@@ -571,9 +571,13 @@ def _serialize_occurrence_source(
             )
         )
     for definition in _referenced_embedded_definitions(data, render_leaf_nodes):
+        # Reference lines are normalized to forward slashes, but LDrawLoader
+        # keys embedded files by the exact FILE name; a raw backslash name
+        # (e.g. "s\42056s01.dat") would never match and the loader would fall
+        # back to fetching the file from the library, where it 404s.
         lines.extend(
             (
-                f"0 FILE {definition.source_submodel_name}",
+                f"0 FILE {definition.source_submodel_name.replace('\\', '/')}",
                 *_definition_render_lines(definition),
             )
         )
