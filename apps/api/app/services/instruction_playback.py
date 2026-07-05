@@ -24,12 +24,17 @@ PLAYBACK_CHILD_PAGE_SIZE = 50
 PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM = 100
 DERIVED_SOURCE_FORMAT_VERSION = 2
 # Calibrated against the UCS Millennium Falcon stress model (5 768 nodes,
-# 433 occurrences, 3 264 direct geometry commands, 1.18 MB derived source),
-# which must render as a complete subtree; see docs/VIEWER_BUGS.md B6.
-DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES = 8_000
+# 433 occurrences, 1.18 MB derived source) and LDCad-exported Technic
+# flagships (42083: 9 509 nodes; 8386: 239 246 direct geometry commands and
+# a 23.7 MB derived source from baked flex-part quads), all of which must
+# render as complete subtrees; see docs/VIEWER_BUGS.md B6/B7. A direct
+# geometry command is one quad/line — hundreds of times cheaper than a part
+# reference node, which expands into a full part mesh — so its budget is
+# far larger than the node budget.
+DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES = 12_000
 DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES = 600
-DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS = 5_000
-DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES = 2 * 1_024 * 1_024
+DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS = 300_000
+DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES = 32 * 1_024 * 1_024
 
 RenderStrategy = Literal["subtree", "local"]
 
