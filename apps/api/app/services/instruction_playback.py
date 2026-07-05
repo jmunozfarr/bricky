@@ -23,10 +23,18 @@ from app.services.ldraw_model_parser import _normalize_reference
 PLAYBACK_CHILD_PAGE_SIZE = 50
 PLAYBACK_CHILD_PAGE_SIZE_MAXIMUM = 100
 DERIVED_SOURCE_FORMAT_VERSION = 2
-DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES = 4_000
-DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES = 250
-DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS = 2_000
-DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES = 512 * 1_024
+# Calibrated against the UCS Millennium Falcon stress model (5 768 nodes,
+# 433 occurrences, 1.18 MB derived source) and LDCad-exported Technic
+# flagships (42083: 9 509 nodes; 8386: 239 246 direct geometry commands and
+# a 23.7 MB derived source from baked flex-part quads), all of which must
+# render as complete subtrees; see docs/VIEWER_BUGS.md B6/B7. A direct
+# geometry command is one quad/line — hundreds of times cheaper than a part
+# reference node, which expands into a full part mesh — so its budget is
+# far larger than the node budget.
+DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES = 12_000
+DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES = 600
+DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS = 300_000
+DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES = 32 * 1_024 * 1_024
 
 RenderStrategy = Literal["subtree", "local"]
 
@@ -507,6 +515,10 @@ def _serialize_occurrence_source(
             lines.append(f"0 Name: {_occurrence_filename(occurrence.occurrence_id)}")
         else:
             lines.append(f"0 FILE {_occurrence_filename(occurrence.occurrence_id)}")
+        # Occurrence wrappers must always parse to a named scene group. A
+        # Part/Subpart type inherited from a .dat-defined submodel would make
+        # LDrawLoader flatten the wrapper into parent geometry instead.
+        lines.append("0 !LDRAW_ORG Model")
         occurrence_nodes = tuple(
             node for node in nodes if node.occurrence_id == occurrence.occurrence_id
         )
@@ -519,7 +531,11 @@ def _serialize_occurrence_source(
                 occurrence.occurrence_id != occurrence_id or local_step.step <= current_step
             )
             if geometry_visible:
-                items.extend((meta.source_order, meta.text) for meta in local_step.render_meta)
+                items.extend(
+                    (meta.source_order, meta.text)
+                    for meta in local_step.render_meta
+                    if not meta.text.upper().startswith("0 !LDRAW_ORG")
+                )
                 items.extend(
                     (geometry.source_order, _direct_geometry_line(geometry))
                     for geometry in local_step.direct_geometry
@@ -560,9 +576,13 @@ def _serialize_occurrence_source(
             )
         )
     for definition in _referenced_embedded_definitions(data, render_leaf_nodes):
+        # Reference lines are normalized to forward slashes, but LDrawLoader
+        # keys embedded files by the exact FILE name; a raw backslash name
+        # (e.g. "s\42056s01.dat") would never match and the loader would fall
+        # back to fetching the file from the library, where it 404s.
         lines.extend(
             (
-                f"0 FILE {definition.source_submodel_name}",
+                f"0 FILE {definition.source_submodel_name.replace('\\', '/')}",
                 *_definition_render_lines(definition),
             )
         )

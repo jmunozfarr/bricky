@@ -886,6 +886,7 @@ a:focus-visible {
 }
 
 .builder-inventory-note,
+.builder-scope-note,
 .builder-inspect-summary {
   margin: 0;
   padding: 0.75rem;
@@ -895,6 +896,11 @@ a:focus-visible {
   background: var(--surface-muted);
   font-size: 0.8rem;
   line-height: 1.45;
+}
+
+.builder-scope-note {
+  border-color: var(--accent);
+  color: var(--text);
 }
 
 .builder-inspect-summary p:last-child {

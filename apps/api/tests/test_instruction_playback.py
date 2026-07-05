@@ -66,6 +66,46 @@ def test_repeated_definitions_keep_occurrence_identity_and_indices() -> None:
     assert [child.repeated_definition_count for child in root.children] == [2, 2]
 
 
+def test_occurrence_wrappers_always_declare_model_type() -> None:
+    playback = data("dat_typed_submodels.mpd")
+    source = derive_occurrence_source(playback, "occ-000001").decode()
+
+    # .dat-defined submodels carry a Part/Subpart !LDRAW_ORG header; if it
+    # leaked into an occurrence wrapper, LDrawLoader would flatten the wrapper
+    # into parent geometry and the scene index could not map the occurrence.
+    assert "SUBPART" not in source.upper()
+    for line in ("0 FILE __bricky_occ_000002.ldr", "0 FILE __bricky_occ_000003.ldr"):
+        assert f"{line}\n0 !LDRAW_ORG Model" in source
+    assert "0 Name: __bricky_occ_000001.ldr\n0 !LDRAW_ORG Model" in source
+    # Other safe render meta from the definition is still preserved.
+    assert "0 BFC CERTIFY CCW" in source
+
+
+def test_embedded_definition_headers_match_normalized_references() -> None:
+    playback = data("embedded_custom_subparts.mpd")
+    source = derive_occurrence_source(
+        playback, "occ-000001", current_step=1, strategy="local"
+    ).decode()
+
+    # References are normalized to forward slashes; the embedded FILE headers
+    # must match them, because LDrawLoader keys embedded files by the exact
+    # FILE name and otherwise falls back to (404ing) library fetches.
+    assert "0 FILE s/42056 - 32269s01.dat" in source
+    assert "1 16 0 0 0 1 0 0 0 1 0 0 0 1 s/42056 - 32269s01.dat" in source
+    assert "\\" not in source
+    embedded_names = {
+        line[7:].strip().lower()
+        for line in source.splitlines()
+        if line.startswith("0 FILE ") and "__bricky_" not in line
+    }
+    referenced_names = {
+        line.split(maxsplit=14)[14].lower()
+        for line in source.splitlines()
+        if line.startswith("1 ") and ("s/" in line.lower() or " - " in line)
+    }
+    assert referenced_names <= embedded_names
+
+
 def test_transformed_occurrences_have_unique_derived_sections() -> None:
     playback = data("transformed_occurrences.mpd")
     source = derive_occurrence_source(playback, "occ-000001").decode()

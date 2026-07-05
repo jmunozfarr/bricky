@@ -31,6 +31,8 @@ pending from the user.
 | B3 | Ghosted parts barely distinguishable in step focus | P2 | fixed | n/a | yes | all | Open the visual builder past step 1 in "Step focus"; prior parts nearly invisible |
 | B4 | Rapid slider scrubbing lags and misses the target step | P1 | fixed | n/a | yes | all | Drag the builder step slider quickly across many steps on a large model |
 | B5 | 3D view does not repaint when advancing steps (Next) | P1 | fixed | intermittent | yes (2nd Next) | all | Open the Falcon builder, click Next twice; the second advance leaves the view stale |
+| B6 | Builder never shows the full construction ("subparts not added") | P1 | fixed | n/a | yes | all | Falcon root renders `local` (policy) and, with limits raised, `subtree` scenes failed outright on `.dat`-typed submodels |
+| B7 | LDCad-exported Technic sets (8386, 42056, 42083) "not properly loading at all" | P1 | fixed | n/a | n/a (LDCad-specific) | all | Open the builder for 42056/42083: scene hangs forever on 404 storms; 42083 root shows an empty view; flex hoses never render anywhere |
 
 ## Audit suspects
 
@@ -119,3 +121,63 @@ the canvas stale until the camera was touched.
 - Regression tests: `LDrawModel.test.tsx` (a step re-render must schedule a
   frame) and consecutive Next-repaint screenshot assertions in
   `e2e/builder.spec.ts`.
+
+### B6 — the full construction never appears (reported as "subparts not added")
+
+Two stacked causes, found by testing the Falcon root at raised complexity
+limits:
+
+1. **Policy, not a bug, at default limits**: the Falcon root exceeds all
+   four `RENDER_MAX_*` limits (5 768 nodes / 433 occurrences / 3 264 direct
+   geometry commands / 1.18 MB), so the root scene uses child-omitting
+   `local` rendering: subassembly geometry is deliberately absent and the
+   final step only shows root-level parts. Build mode gave no indication of
+   this (only Inspect mode did) — a `builder-scope-note` now explains it.
+2. **A real serializer bug behind the policy**: with limits raised, the
+   `subtree` scene hard-failed ("Not every occurrence mapped to a scene
+   group"). Occurrence wrapper files copied the definition's
+   `0 !LDRAW_ORG` header; for `.dat`-defined submodels (the Falcon's 50
+   bent-hose segments, typed `Subpart`) LDrawLoader flattens such wrappers
+   into parent geometry instead of creating the named group the scene index
+   requires. Wrappers now always declare `0 !LDRAW_ORG Model` and drop the
+   inherited type line (BFC/LDCad meta is kept) — regression-tested in
+   `test_occurrence_wrappers_always_declare_model_type`.
+
+With the serializer fixed, the default `RENDER_MAX_*` limits were raised to
+8 000 nodes / 600 occurrences / 5 000 direct geometry commands / 2 MiB —
+calibrated so the Falcon root renders as a complete subtree. Stress numbers
+(headless Chromium, software WebGL, so pessimistic): 31 s one-time scene
+parse (then LRU-cached), ~1 s to jump to the last step showing the full
+construction, ~1.4 s per step back. Rotation of the full subtree remains
+the heaviest interaction; the three.js upgrade later in Phase 2 targets it.
+
+### B7 — LDCad Technic exports don't load (8386, 42056, 42083)
+
+Reported 2026-07-05 as "except Liberty Statue, the others all not properly
+loading at all". Two independent causes:
+
+1. **Backslash-named embedded subparts broke scene loads outright.**
+   Derived-source reference lines are normalized to forward slashes, but
+   embedded definition `0 FILE` headers kept the raw name (LDCad emits
+   `s\42056 - 32269s01.dat`). `LDrawLoader` keys embedded files by the
+   exact FILE name, so the reference never matched, the loader fell back
+   to the part library, 404ed on every search path, and the 42056/42083
+   builder scenes hung forever — with no error surfaced in the UI (see
+   audit suspect A8). Fixed by normalizing the emitted FILE headers;
+   regression-tested in
+   `test_embedded_definition_headers_match_normalized_references`.
+2. **The complexity policy priced baked flex geometry like part
+   references.** LDCad bakes flexible parts (hoses, flex axles) into the
+   MPD as raw quad/line commands: 8386 carries 239 246 of them (23.7 MB
+   estimated source) while being geometrically lighter than the Falcon,
+   whose triangles hide behind part reference nodes. Every scope containing
+   a flex part exceeded `RENDER_MAX_DIRECT_GEOMETRY_COMMANDS = 5000`, so
+   flex parts could never render at any level, 8386 showed only its root
+   skeleton, and the 42083 root (three subassemblies, zero root parts)
+   rendered a completely empty view. Budgets are now priced by real cost:
+   12 000 nodes / 600 occurrences / 300 000 direct geometry commands /
+   32 MiB, admitting 42083 (9 509 nodes, fewer physical parts than the
+   Falcon) and 8386 as complete subtrees.
+
+Follow-up (A8): a scene-load failure must surface an error in the builder
+instead of an indefinite loading state.

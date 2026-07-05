@@ -1,0 +1,13 @@
+0 FILE main.ldr
+1 71 0 0 0 1 0 0 0 1 0 0 0 1 hose_bended.dat
+0 STEP
+1 4 0 -24 0 1 0 0 0 1 0 0 0 1 3001.dat
+0 FILE hose_bended.dat
+0 !LDRAW_ORG Subpart UPDATE 2011-02
+0 BFC CERTIFY CCW
+1 16 0 0 0 1 0 0 0 1 0 0 0 1 hose_segment.dat
+1 16 0 0 20 1 0 0 0 1 0 0 0 1 hose_segment.dat
+0 FILE hose_segment.dat
+0 !LDRAW_ORG Subpart UPDATE 2011-02
+4 16 -2 0 -2 -2 0 2 2 0 2 2 0 -2
+0 NOFILE
