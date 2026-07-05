@@ -2,10 +2,17 @@ import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useThree } from "@react-three/fiber";
 import { BufferGeometry, Group, LineSegments, Material, Mesh, Object3D, Points } from "three";
 import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
-import { LDrawConditionalLineMaterial } from "three/addons/materials/LDrawConditionalLineMaterial.js";
 
 import { applyBuildingStepVisibility } from "./buildingSteps";
 import { LatestScopeLoader, ScopeLoadSupersededError } from "./boundedSceneLoader";
+import { createLDrawLoader, prepareOfficialLoader } from "./ldrawLoaderSetup";
+import {
+  isSharedLDrawMaterial,
+  loadOfficialUrlInWorker,
+  parseOfficialTextInWorker,
+  parseSyntheticInWorker,
+  workerParsingAvailable,
+} from "./ldrawWorkerClient";
 import {
   createInstructionSceneIndex,
   InstructionSceneIndex,
@@ -54,12 +61,6 @@ export type LDrawModelSource =
       partsLibraryPath: string;
     };
 
-function createLoader(): LDrawLoader {
-  const loader = new LDrawLoader();
-  loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);
-  return loader;
-}
-
 function afterNextPaint(): Promise<void> {
   return new Promise((resolve) => {
     // requestAnimationFrame is missing outside the browser (node-run tests).
@@ -72,9 +73,10 @@ function afterNextPaint(): Promise<void> {
 }
 
 async function parseLDraw(loader: LDrawLoader, text: string): Promise<Group> {
-  // The parse is synchronous and blocks the main thread for seconds on large
-  // derived sources; without this yield the loading state never paints and
-  // the whole tab appears frozen from the moment the user opens the builder.
+  // Fallback for environments without Worker: the parse is synchronous and
+  // blocks the main thread for seconds on large derived sources; without
+  // this yield the loading state never paints and the whole tab appears
+  // frozen from the moment the user opens the builder.
   await afterNextPaint();
   return new Promise((resolve, reject) => {
     loader.addDefaultMaterials();
@@ -89,7 +91,7 @@ export interface LoadedLDrawModel {
 
 export async function parseInstructionScopeText(
   text: string,
-  loader = createLoader(),
+  loader = createLDrawLoader(),
 ): Promise<LoadedLDrawModel> {
   const manifest = parseInstructionSourceManifest(text);
   const model = await parseLDraw(loader, text);
@@ -101,25 +103,30 @@ async function loadModelSource(
   source: LDrawModelSource,
   signal: AbortSignal,
 ): Promise<LoadedLDrawModel> {
-  const loader = createLoader();
   if (source.kind === "synthetic") {
     const response = await fetch(source.url, { signal });
     if (!response.ok) {
       throw new Error(`Model request returned HTTP ${response.status}`);
     }
-    return { model: await parseLDraw(loader, await response.text()), sceneIndex: null };
+    const text = await response.text();
+    if (workerParsingAvailable()) {
+      return { model: await parseSyntheticInWorker(text), sceneIndex: null };
+    }
+    return { model: await parseLDraw(createLDrawLoader(), text), sceneIndex: null };
   }
 
-  loader.setPartsLibraryPath(source.partsLibraryPath);
-  await loader.preloadMaterials(source.materialsUrl);
-
-  const redMaterial = loader.getMaterial("4");
-  if (redMaterial !== null) {
-    const materialData = redMaterial.userData as Record<string, unknown>;
-    materialData.code = "16";
-    loader.addMaterial(redMaterial);
+  if (workerParsingAvailable()) {
+    return {
+      model: await loadOfficialUrlInWorker(
+        source.url,
+        source.materialsUrl,
+        source.partsLibraryPath,
+      ),
+      sceneIndex: null,
+    };
   }
-
+  const loader = createLDrawLoader();
+  await prepareOfficialLoader(loader, source.materialsUrl, source.partsLibraryPath);
   return { model: await loader.loadAsync(source.url), sceneIndex: null };
 }
 
@@ -127,20 +134,23 @@ async function loadInstructionScopeSource(
   source: Extract<LDrawModelSource, { kind: "instruction-scope" }>,
   signal: AbortSignal,
 ): Promise<LoadedLDrawModel> {
-  const loader = createLoader();
-  loader.setPartsLibraryPath(source.partsLibraryPath);
-  await loader.preloadMaterials(source.materialsUrl);
-  const redMaterial = loader.getMaterial("4");
-  if (redMaterial !== null) {
-    const materialData = redMaterial.userData as Record<string, unknown>;
-    materialData.code = "16";
-    loader.addMaterial(redMaterial);
-  }
   const response = await fetch(source.url, { signal });
   if (!response.ok) {
     throw new Error(`Instruction scope request returned HTTP ${response.status}`);
   }
-  return parseInstructionScopeText(await response.text(), loader);
+  const text = await response.text();
+  if (workerParsingAvailable()) {
+    const manifest = parseInstructionSourceManifest(text);
+    const model = await parseOfficialTextInWorker(
+      text,
+      source.materialsUrl,
+      source.partsLibraryPath,
+    );
+    return { model, sceneIndex: createInstructionSceneIndex(model, manifest) };
+  }
+  const loader = createLDrawLoader();
+  await prepareOfficialLoader(loader, source.materialsUrl, source.partsLibraryPath);
+  return parseInstructionScopeText(text, loader);
 }
 
 function isRenderObject(object: Object3D): object is Mesh | LineSegments | Points {
@@ -161,7 +171,13 @@ export function disposeLDrawModel(model: Group): void {
   });
 
   geometries.forEach((geometry) => geometry.dispose());
-  materials.forEach((material) => material.dispose());
+  materials.forEach((material) => {
+    // Palette materials from worker-rebuilt scenes are shared across cached
+    // scenes; disposing them would drop GPU state under the others.
+    if (!isSharedLDrawMaterial(material)) {
+      material.dispose();
+    }
+  });
 }
 
 const instructionSceneLoader = new LatestScopeLoader(

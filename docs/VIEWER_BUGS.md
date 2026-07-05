@@ -33,7 +33,7 @@ pending from the user.
 | B5 | 3D view does not repaint when advancing steps (Next) | P1 | fixed | intermittent | yes (2nd Next) | all | Open the Falcon builder, click Next twice; the second advance leaves the view stale |
 | B6 | Builder never shows the full construction ("subparts not added") | P1 | fixed | n/a | yes | all | Falcon root renders `local` (policy) and, with limits raised, `subtree` scenes failed outright on `.dat`-typed submodels |
 | B7 | LDCad-exported Technic sets (8386, 42056, 42083) "not properly loading at all" | P1 | fixed | n/a | n/a (LDCad-specific) | all | Open the builder for 42056/42083: scene hangs forever on 404 storms; 42083 root shows an empty view; flex hoses never render anywhere |
-| B8 | Browser freezes while a large builder scene opens | P2 | mitigated | n/a | yes | all | Open the builder on any big model; the tab is unresponsive until the parse finishes (one ~14 s main-thread task for 3450 in software WebGL) |
+| B8 | Browser freezes while a large builder scene opens | P2 | fixed | n/a | yes | all | Open the builder on any big model; the tab is unresponsive until the parse finishes (one ~14 s main-thread task for 3450 in software WebGL) |
 | B9 | Rotating full builds is very laggy on high part-count models | P2 | mitigated | n/a | yes | all | Open a full build (3450, 42056, Falcon) and drag; rotation frame times spike past 1 s |
 
 ## Audit suspects
@@ -184,7 +184,7 @@ loading at all". Two independent causes:
 Follow-up (A8): a scene-load failure must surface an error in the builder
 instead of an indefinite loading state.
 
-### B8 — the tab freezes while a large builder scene opens (mitigated)
+### B8 — the tab freezes while a large builder scene opens (fixed)
 
 `LDrawLoader.parse` is synchronous: the whole derived source builds its
 Three.js graph in one main-thread task (~14 s for 3450's 2 874-part scene
@@ -192,12 +192,21 @@ in headless software WebGL; shorter but still seconds on real hardware).
 Worse, the parse started before React could paint the loading state, so
 the tab froze with no feedback from the moment the builder opened.
 
-- Mitigation: `parseLDraw` now yields to the next paint before parsing, so
-  the loading/refreshing UI appears immediately; the freeze itself remains
-  but is visibly "preparing the scene" instead of a dead tab. Scenes stay
-  LRU-cached, so this is a first-open cost per scope.
-- Real fix (open): move parsing into a Web Worker. Belongs with the
-  three.js upgrade later in Phase 2.
+- First mitigation: `parseLDraw` yields to the next paint before parsing
+  so the loading state shows immediately (kept as the no-Worker fallback).
+- Fix: parsing now runs in a Web Worker (`ldrawParse.worker.ts`). The
+  worker serializes the parsed graph (`ldrawSceneTransfer.ts`) with
+  transferable geometry buffers; the main thread rebuilds it against a
+  shared palette-preloaded loader, resolving materials by LDraw color code
+  and object variant (main/edge/conditional) so the result uses the same
+  material instances a main-thread parse would have produced. Shared
+  palette materials are exempted from `disposeLDrawModel` (scenes in the
+  LRU cache now share them). Measured on the same scenes (headless
+  Chromium): worst main-thread task during a builder open dropped from
+  14 034 ms (3450) to 266 ms, and 686 ms on 42083's full subtree — the tab
+  stays interactive for the whole "Preparing 3D scene" phase.
+- The worker bundles its own copy of three.js by design (workers cannot
+  share page chunks); `check-bundle.mjs` gives it its own budget.
 
 ### B9 — rotating full builds is very laggy (mitigated)
 
