@@ -351,6 +351,13 @@ function BuilderWorkspace({
             </div>
           ) : (
             <>
+              {manifest.scene.renderStrategy === "local" && (
+                <p className="builder-scope-note">
+                  This assembly exceeds the complete-rendering safety limit, so the 3D view shows
+                  only the parts placed at this level. Subassemblies are built as separate tasks and
+                  are not drawn here.
+                </p>
+              )}
               <p className="builder-inventory-note">
                 Inventory is model-wide; pieces are not reserved or consumed by earlier steps.
               </p>

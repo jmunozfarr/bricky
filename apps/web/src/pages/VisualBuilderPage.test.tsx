@@ -119,6 +119,22 @@ describe("visual builder workspace", () => {
     await waitFor(() => expect(getBuildManifest).toHaveBeenCalledTimes(1));
   });
 
+  it("explains child-omitting local rendering in build mode", async () => {
+    getBuildManifest.mockResolvedValue({
+      ...manifest,
+      scene: { ...manifest.scene, renderStrategy: "local" },
+    });
+    render(
+      <MemoryRouter initialEntries={["/models/model-1/build"]}>
+        <Routes>
+          <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText("1× Brick 2 x 4");
+    expect(screen.getByText(/subassemblies are built as separate tasks/i)).toBeTruthy();
+  });
+
   it("jumps directly to a typed step number and clamps out-of-range input", async () => {
     render(
       <MemoryRouter initialEntries={["/models/model-1/build"]}>
