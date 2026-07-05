@@ -81,6 +81,11 @@ touch the same code.
    phase): bump three r185 to current with `@types/three`, re-verify
    `LDrawLoader` internals (material handling, conditional-line material
    import path), and re-run the full matrix.
+   *Checked 2026-07-05: npm latest is three 0.185.1 / fiber 9.6.1 /
+   `@types/three` 0.185.0 — exactly what is installed, so there is nothing
+   to upgrade to yet. Re-check when a newer three lands; the interaction
+   perf work moved to worker parsing and geometry batching instead
+   (`docs/VIEWER_BUGS.md` B8/B9).*
 5. **Performance regression smoke**: assert the design targets from
    `VISUAL_BUILDER_DESIGN.md` in e2e (step transitions issue no scene or
    library requests; builder-ready budget) using request counting.
