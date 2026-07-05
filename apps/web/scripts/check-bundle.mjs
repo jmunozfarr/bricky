@@ -11,12 +11,20 @@ const sizes = await Promise.all(
 );
 sizes.sort((left, right) => right.gzipBytes - left.gzipBytes);
 
-const [viewer, application] = sizes;
+// Worker chunks bundle their own copy of three.js by design (workers cannot
+// share page chunks), so they get their own budget instead of masquerading
+// as the page bundles in the size ordering.
+const workers = sizes.filter(({ name }) => name.includes(".worker-"));
+const pageChunks = sizes.filter(({ name }) => !name.includes(".worker-"));
+const [viewer, application] = pageChunks;
+const parseWorker = workers.find(({ name }) => name.startsWith("ldrawParse.worker-"));
 if (!viewer || !application) throw new Error("Production JavaScript bundles were not found.");
+if (!parseWorker) throw new Error("The LDraw parse worker bundle was not found.");
 
 const budgets = [
   { label: "lazy viewer", bundle: viewer, maximum: 270 * 1024 },
   { label: "application entry", bundle: application, maximum: 85 * 1024 },
+  { label: "ldraw parse worker", bundle: parseWorker, maximum: 100 * 1024 },
 ];
 for (const budget of budgets) {
   const kib = (budget.bundle.gzipBytes / 1024).toFixed(2);
