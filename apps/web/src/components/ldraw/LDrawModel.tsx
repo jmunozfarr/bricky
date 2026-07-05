@@ -60,7 +60,22 @@ function createLoader(): LDrawLoader {
   return loader;
 }
 
-function parseLDraw(loader: LDrawLoader, text: string): Promise<Group> {
+function afterNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    // requestAnimationFrame is missing outside the browser (node-run tests).
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    } else {
+      setTimeout(resolve, 0);
+    }
+  });
+}
+
+async function parseLDraw(loader: LDrawLoader, text: string): Promise<Group> {
+  // The parse is synchronous and blocks the main thread for seconds on large
+  // derived sources; without this yield the loading state never paints and
+  // the whole tab appears frozen from the moment the user opens the builder.
+  await afterNextPaint();
   return new Promise((resolve, reject) => {
     loader.addDefaultMaterials();
     loader.parse(text, resolve, reject);
