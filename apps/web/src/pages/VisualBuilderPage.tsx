@@ -13,6 +13,7 @@ import {
 } from "../api/models";
 import { AdaptiveViewerDpr } from "../components/ldraw/AdaptiveViewerDpr";
 import { AdaptiveViewerLines } from "../components/ldraw/AdaptiveViewerLines";
+import { ViewerLoadingIndicator } from "../components/ldraw/ViewerLoadingIndicator";
 import {
   displaySubmodelName,
   repeatedDefinitionLabel,
@@ -588,10 +589,10 @@ function BuilderViewport({
         />
       </Canvas>
       {loadState.kind === "loading" && (
-        <div className="viewer-message" role="status">
-          <strong>Preparing 3D scene…</strong>
-          <span>Loading parts and building geometry.</span>
-        </div>
+        <ViewerLoadingIndicator
+          title="Preparing 3D scene…"
+          detail="Loading parts and building geometry."
+        />
       )}
       {loadState.kind === "refreshing" && (
         <div className="viewer-progress-badge" role="status">

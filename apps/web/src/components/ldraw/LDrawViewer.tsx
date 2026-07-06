@@ -3,6 +3,7 @@ import { Canvas } from "@react-three/fiber";
 
 import { AdaptiveViewerDpr } from "./AdaptiveViewerDpr";
 import { AdaptiveViewerLines } from "./AdaptiveViewerLines";
+import { ViewerLoadingIndicator } from "./ViewerLoadingIndicator";
 import { getBuildingStepCount } from "./buildingSteps";
 import { BuildingStepControls } from "./BuildingStepControls";
 import { LDrawModel, LDrawModelSource, useLDrawModel } from "./LDrawModel";
@@ -141,11 +142,7 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
           {model !== null && <LDrawModel model={model} selectedStep={selectedStep} />}
           <ViewerCamera model={model} fitVersion={source.key} command={cameraCommand} />
         </Canvas>
-        {loadState.kind === "loading" && (
-          <div className="viewer-message" role="status">
-            Loading LDraw model…
-          </div>
-        )}
+        {loadState.kind === "loading" && <ViewerLoadingIndicator title="Loading LDraw model…" />}
         {loadState.kind === "error" && (
           <div className="viewer-message viewer-message--error" role="alert">
             <strong>Unable to load the LDraw model.</strong>
