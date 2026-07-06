@@ -1,5 +1,11 @@
 import { APIRequestContext, expect, Page, test } from "@playwright/test";
 
+// Each of these tests drives a full WebGL builder session; running them in
+// parallel workers starves the software rasterizer and flakes first paints.
+// "default" keeps them sequential in one worker without serial-mode's
+// abort-following-tests behavior.
+test.describe.configure({ mode: "default" });
+
 const SYNTHETIC_MPD = [
   "0 FILE main.ldr",
   "0 Name: main.ldr",
@@ -136,6 +142,56 @@ test("guides a build task with step transport and camera interaction", async ({
     await page.getByRole("button", { name: "Open build task" }).click();
     await expect(page.getByText("of 2")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
+  } finally {
+    await request.delete(`/api/models/${modelId}`);
+  }
+});
+
+test("step transitions issue no scene or library requests", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium-desktop",
+    "The perf smoke runs once in Chromium.",
+  );
+  const library = await request.get("/api/ldraw/LDConfig.ldr");
+  test.skip(!library.ok(), "The builder flow requires an installed LDraw library.");
+  const models = await request.get("/api/models?page=1");
+  test.skip(!models.ok(), "The builder flow requires a migrated database.");
+
+  const modelId = await importSyntheticModel(
+    request,
+    "e2e-builder-perf",
+    SYNTHETIC_MPD.replace("0 Name: main.ldr", "0 Name: main.ldr\n0 // e2e-builder-perf variant"),
+  );
+  try {
+    await page.goto(`/models/${modelId}/build`);
+    await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
+    await expect(page.locator(".viewer-message")).toBeHidden({ timeout: 20_000 });
+
+    // VISUAL_BUILDER_DESIGN.md acceptance target: step selection changes
+    // visibility and presentation only — no scene URL change, no loader
+    // invocation, no library traffic.
+    const sceneOrLibraryRequests: string[] = [];
+    page.on("request", (issued) => {
+      const url = issued.url();
+      if (url.includes("/api/ldraw/") || url.includes("/source")) {
+        sceneOrLibraryRequests.push(url);
+      }
+    });
+
+    for (const step of [2, 3, 4]) {
+      await page.getByRole("button", { name: "Next" }).click();
+      await expect(page.getByRole("heading", { name: `Step ${step}` })).toBeVisible();
+    }
+    const stepInput = page.getByRole("spinbutton");
+    await stepInput.fill("1");
+    await stepInput.press("Enter");
+    await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
+    await page.waitForTimeout(500);
+
+    expect(sceneOrLibraryRequests).toEqual([]);
   } finally {
     await request.delete(`/api/models/${modelId}`);
   }
