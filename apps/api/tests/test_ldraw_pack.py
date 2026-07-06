@@ -79,3 +79,27 @@ def test_library_index_is_scanned_once_per_fingerprint(
 
     assert first.content == second.content
     assert scans == 1
+
+
+def test_packed_cache_evicts_by_group_and_stays_within_budget() -> None:
+    from app.services.ldraw_pack import PackedLDrawSource, PackedSourceCache
+
+    cache = PackedSourceCache(maximum_bytes=10)
+    cache.set("a1", PackedLDrawSource(content=b"aaaa", file_count=1), group="model-a")
+    cache.set("a2", PackedLDrawSource(content=b"aaaa", file_count=1), group="model-a")
+    cache.set("b1", PackedLDrawSource(content=b"bb", file_count=1), group="model-b")
+
+    cache.evict_group("model-a")
+    assert cache.get("a1") is None
+    assert cache.get("a2") is None
+    assert cache.get("b1") is not None
+
+    # Size accounting survives group eviction: the budget only evicts when
+    # genuinely exceeded.
+    cache.set("b2", PackedLDrawSource(content=b"bbbbbbbb", file_count=1), group="model-b")
+    assert cache.get("b1") is not None
+    cache.set("c1", PackedLDrawSource(content=b"cc", file_count=1), group="model-c")
+    # b1 was refreshed by the get above, so the least recently used entry
+    # (b2) is the one evicted once the budget is exceeded.
+    assert cache.get("b2") is None
+    assert cache.get("b1") is not None

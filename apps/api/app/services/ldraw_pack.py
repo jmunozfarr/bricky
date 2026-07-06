@@ -25,31 +25,54 @@ class PackedLDrawSource:
 
 
 class PackedSourceCache:
+    """LRU of packed scenes, safe for FastAPI's threadpool handlers."""
+
     def __init__(self, maximum_bytes: int = DEFAULT_PACK_CACHE_BYTES) -> None:
         self.maximum_bytes = maximum_bytes
+        self._lock = threading.Lock()
         self._values: OrderedDict[str, PackedLDrawSource] = OrderedDict()
+        self._groups: dict[str, str] = {}
         self._size = 0
 
     def get(self, key: str) -> PackedLDrawSource | None:
-        value = self._values.pop(key, None)
-        if value is None:
-            return None
-        self._values[key] = value
-        return value
+        with self._lock:
+            value = self._values.pop(key, None)
+            if value is None:
+                return None
+            self._values[key] = value
+            return value
 
-    def set(self, key: str, value: PackedLDrawSource) -> None:
-        replaced = self._values.pop(key, None)
-        if replaced is not None:
-            self._size -= len(replaced.content)
-        self._values[key] = value
-        self._size += len(value.content)
-        while self._size > self.maximum_bytes and self._values:
-            _old_key, old_value = self._values.popitem(last=False)
-            self._size -= len(old_value.content)
+    def set(self, key: str, value: PackedLDrawSource, group: str | None = None) -> None:
+        with self._lock:
+            replaced = self._values.pop(key, None)
+            if replaced is not None:
+                self._size -= len(replaced.content)
+            self._values[key] = value
+            self._size += len(value.content)
+            if group is None:
+                self._groups.pop(key, None)
+            else:
+                self._groups[key] = group
+            while self._size > self.maximum_bytes and self._values:
+                old_key, old_value = self._values.popitem(last=False)
+                self._groups.pop(old_key, None)
+                self._size -= len(old_value.content)
+
+    def evict_group(self, group: str) -> None:
+        """Drop every scene packed for one model (e.g. on model deletion)."""
+
+        with self._lock:
+            for key in [key for key, owner in self._groups.items() if owner == group]:
+                value = self._values.pop(key, None)
+                del self._groups[key]
+                if value is not None:
+                    self._size -= len(value.content)
 
     def clear(self) -> None:
-        self._values.clear()
-        self._size = 0
+        with self._lock:
+            self._values.clear()
+            self._groups.clear()
+            self._size = 0
 
 
 PACKED_SOURCE_CACHE = PackedSourceCache()
