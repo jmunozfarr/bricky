@@ -19,7 +19,5 @@ def resolve_local_workspace(session: Session) -> Workspace:
 
     workspace = session.scalar(select(Workspace).where(Workspace.slug == LOCAL_WORKSPACE_SLUG))
     if workspace is None:
-        raise RuntimeError(
-            "The local workspace is missing; run `alembic upgrade head` to seed it"
-        )
+        raise RuntimeError("The local workspace is missing; run `alembic upgrade head` to seed it")
     return workspace
