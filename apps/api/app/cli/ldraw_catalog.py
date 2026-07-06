@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
-from app.database import SessionFactory
+from app.core.config import get_settings
+from app.database import get_session_factory
 from app.services.ldraw_catalog import CatalogError, get_catalog_status, rebuild_catalog
 
 
 def _library_root() -> Path:
-    return Path(os.environ.get("LDRAW_LIBRARY_ROOT", "/data/ldraw/official"))
+    return get_settings().ldraw_library_root
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -21,7 +21,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _print_status() -> None:
-    with SessionFactory() as session:
+    with get_session_factory()() as session:
         status = get_catalog_status(session, _library_root())
     print(f"Library installed: {'yes' if status.library_installed else 'no'}")
     print(f"Catalog indexed: {'yes' if status.indexed else 'no'}")
@@ -41,7 +41,7 @@ def main() -> int:
 
     print("Parsing the installed official LDraw library…")
     try:
-        report = rebuild_catalog(SessionFactory, _library_root())
+        report = rebuild_catalog(get_session_factory(), _library_root())
     except CatalogError as error:
         print(f"Catalog rebuild failed: {error}")
         return 1

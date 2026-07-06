@@ -114,7 +114,6 @@ def create_inventory_router(session_dependency: SessionDependency) -> APIRouter:
                 func.count(func.distinct(InventoryItem.part_id)),
             ).where(InventoryItem.workspace_id == workspace.id)
         ).one()
-        session.commit()
         return InventorySummaryResponse(
             total_quantity=total_quantity,
             unique_items=unique_items,
@@ -177,7 +176,6 @@ def create_inventory_router(session_dependency: SessionDependency) -> APIRouter:
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).all()
-        session.commit()
         return InventoryPageResponse(
             items=[_response(item, part, color) for item, part, color in rows],
             page=page,
@@ -196,7 +194,6 @@ def create_inventory_router(session_dependency: SessionDependency) -> APIRouter:
             .where(func.lower(InventoryItem.part_id) == part_id.strip().lower())
             .order_by(InventoryItem.color_code)
         ).all()
-        session.commit()
         return [_response(item, part, color) for item, part, color in rows]
 
     @router.put("/items/{part_id}/{color_code}", response_model=InventoryItemResponse)

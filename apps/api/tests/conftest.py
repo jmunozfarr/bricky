@@ -8,7 +8,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import build_engine, sqlalchemy_database_url
-from app.models import Base
+from app.models import Base, Workspace
+from app.services.local_workspace import LOCAL_WORKSPACE_NAME, LOCAL_WORKSPACE_SLUG
 
 
 @pytest.fixture
@@ -24,6 +25,11 @@ def catalog_session_factory() -> Iterator[sessionmaker[Session]]:
     )
     Base.metadata.create_all(test_engine)
     factory = sessionmaker(bind=test_engine, expire_on_commit=False)
+    # Mirrors the alembic data migration: the local workspace is seeded, not
+    # lazily upserted by request handlers.
+    with factory() as session:
+        session.add(Workspace(slug=LOCAL_WORKSPACE_SLUG, name=LOCAL_WORKSPACE_NAME))
+        session.commit()
     try:
         yield factory
     finally:
