@@ -4,6 +4,7 @@ import { Box3, Group, MathUtils, PerspectiveCamera, Sphere, Vector3 } from "thre
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 import { CameraCommand, CameraPreset } from "./ViewerToolbar";
+import { visibleGeometryBounds } from "./viewerFit";
 
 interface ViewerCameraProps {
   model: Group | null;
@@ -69,8 +70,15 @@ export function ViewerCamera({ model, fitVersion, command }: ViewerCameraProps) 
       return;
     }
 
-    model.updateWorldMatrix(true, true);
-    const bounds = new Box3().setFromObject(model, true);
+    // Frame only what is currently visible: on entry that is the active
+    // step's assembly, not the finished model, and the toolbar presets
+    // reframe to the current visibility on demand. Step changes never move
+    // the camera (fitVersion tracks the scope, not the step).
+    let bounds = visibleGeometryBounds(model);
+    if (bounds.isEmpty()) {
+      model.updateWorldMatrix(true, true);
+      bounds = new Box3().setFromObject(model, true);
+    }
     if (bounds.isEmpty()) {
       return;
     }
