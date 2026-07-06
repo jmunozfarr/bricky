@@ -1,24 +1,14 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import {
-  Category,
-  CatalogStatus,
-  getCatalogStatus,
-  getCategories,
-  nextPage,
-  PartsPage,
-  previousPage,
-  searchParts,
-} from "../api/catalog";
+import { nextPage, previousPage } from "../api/catalog";
 import { getCatalogAvailability } from "../catalog/catalogState";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
+import { toAsyncState } from "../queries/async";
+import { useCatalogStatus, useCategories, usePartsSearch } from "../queries/hooks";
 
 const LIBRARY_COMMAND = "docker compose run --rm api python -m app.cli.ldraw_library install";
 const REBUILD_COMMAND = "docker compose exec api python -m app.cli.ldraw_catalog rebuild";
-
-type AsyncState<T> =
-  { kind: "loading" } | { kind: "ready"; data: T } | { kind: "error"; message: string };
 
 export default function CatalogPage() {
   const [params, setParams] = useSearchParams();
@@ -27,40 +17,14 @@ export default function CatalogPage() {
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const selectedPartId = params.get("part");
   const [searchInput, setSearchInput] = useState(query);
-  const [status, setStatus] = useState<AsyncState<CatalogStatus>>({ kind: "loading" });
-  const [categories, setCategories] = useState<AsyncState<Category[]>>({ kind: "loading" });
-  const [results, setResults] = useState<AsyncState<PartsPage>>({ kind: "loading" });
+  const status = toAsyncState(useCatalogStatus());
+  const ready = status.kind === "ready" && getCatalogAvailability(status.data) === "ready";
+  const categoriesQuery = useCategories(ready);
+  const resultsQuery = usePartsSearch({ query, category, page }, ready);
+  const categories = toAsyncState(categoriesQuery);
+  const results = toAsyncState(resultsQuery);
 
   useEffect(() => setSearchInput(query), [query]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void getCatalogStatus(controller.signal)
-      .then((data) => setStatus({ kind: "ready", data }))
-      .catch((error: unknown) => setRequestError(error, setStatus));
-    return () => controller.abort();
-  }, []);
-
-  const ready = status.kind === "ready" && getCatalogAvailability(status.data) === "ready";
-
-  useEffect(() => {
-    if (!ready) return;
-    const controller = new AbortController();
-    void getCategories(controller.signal)
-      .then((data) => setCategories({ kind: "ready", data }))
-      .catch((error: unknown) => setRequestError(error, setCategories));
-    return () => controller.abort();
-  }, [ready]);
-
-  useEffect(() => {
-    if (!ready) return;
-    const controller = new AbortController();
-    setResults({ kind: "loading" });
-    void searchParts({ query, category, page }, controller.signal)
-      .then((data) => setResults({ kind: "ready", data }))
-      .catch((error: unknown) => setRequestError(error, setResults));
-    return () => controller.abort();
-  }, [category, page, query, ready]);
 
   useEffect(() => {
     if (searchInput === query) return;
@@ -218,10 +182,4 @@ function ErrorPanel({ message }: { message: string }) {
       <span>{message}</span>
     </div>
   );
-}
-
-function setRequestError<T>(error: unknown, setter: (state: AsyncState<T>) => void) {
-  if (!(error instanceof DOMException && error.name === "AbortError")) {
-    setter({ kind: "error", message: error instanceof Error ? error.message : "Unknown error" });
-  }
 }

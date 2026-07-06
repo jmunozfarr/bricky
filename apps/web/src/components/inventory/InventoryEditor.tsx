@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getColors, LDrawColor } from "../../api/catalog";
 import {
-  deleteInventoryItem,
-  getInventoryVariants,
-  InventoryItem,
-  setInventoryQuantity,
-} from "../../api/inventory";
-import { notifyInventoryChanged } from "../../inventory/events";
+  useColors,
+  useDeleteInventoryItem,
+  useInventoryVariants,
+  useSetInventoryQuantity,
+} from "../../queries/hooks";
 import { colorSwatchValue, parseQuantityInput } from "../../inventory/helpers";
 
 interface InventoryEditorProps {
@@ -15,43 +13,40 @@ interface InventoryEditorProps {
 }
 
 export function InventoryEditor({ partId }: InventoryEditorProps) {
-  const [colors, setColors] = useState<LDrawColor[]>([]);
-  const [variants, setVariants] = useState<InventoryItem[]>([]);
+  const colorsQuery = useColors();
+  const variantsQuery = useInventoryVariants(partId);
+  const setQuantity = useSetInventoryQuantity();
+  const deleteItem = useDeleteInventoryItem();
+  const colors = useMemo(() => colorsQuery.data ?? [], [colorsQuery.data]);
+  const variants = useMemo(() => variantsQuery.data ?? [], [variantsQuery.data]);
   const [selectedCode, setSelectedCode] = useState<number | null>(null);
   const [quantityInput, setQuantityInput] = useState("1");
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
+  const loading = colorsQuery.isPending || variantsQuery.isPending;
+  const busy = setQuantity.isPending || deleteItem.isPending;
+  const loadError = colorsQuery.error ?? variantsQuery.error;
+  const mutationError = setQuantity.error ?? deleteItem.error;
+  const surfacedError = inputError ?? loadError ?? mutationError;
+  const error =
+    surfacedError === null
+      ? null
+      : typeof surfacedError === "string"
+        ? surfacedError
+        : surfacedError instanceof Error
+          ? surfacedError.message
+          : "Unable to load inventory data";
 
+  // Pick the default color once both lists are available.
   useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    void Promise.all([
-      getColors(controller.signal),
-      getInventoryVariants(partId, controller.signal),
-    ])
-      .then(([loadedColors, loadedVariants]) => {
-        setColors(loadedColors);
-        setVariants(loadedVariants);
-        const defaultColor = loadedColors.find((color) => color.code === 4) ?? loadedColors[0];
-        setSelectedCode(defaultColor?.code ?? null);
-        setQuantityInput(
-          String(
-            loadedVariants.find((variant) => variant.colorCode === defaultColor?.code)?.quantity ??
-              1,
-          ),
-        );
-        setLoading(false);
-      })
-      .catch((caught: unknown) => {
-        if (!(caught instanceof DOMException && caught.name === "AbortError")) {
-          setError(caught instanceof Error ? caught.message : "Unable to load inventory data");
-          setLoading(false);
-        }
-      });
-    return () => controller.abort();
-  }, [partId]);
+    if (selectedCode !== null || colors.length === 0 || variantsQuery.data === undefined) return;
+    const defaultColor = colors.find((color) => color.code === 4) ?? colors[0];
+    setSelectedCode(defaultColor?.code ?? null);
+    setQuantityInput(
+      String(variants.find((variant) => variant.colorCode === defaultColor?.code)?.quantity ?? 1),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colors, variantsQuery.data]);
 
   const selectedColor = useMemo(
     () => colors.find((color) => color.code === selectedCode) ?? null,
@@ -65,52 +60,39 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
   useEffect(() => {
     setQuantityInput(String(currentVariant?.quantity ?? 1));
     setMessage(null);
-    setError(null);
+    setInputError(null);
     // The input must reset only when the selected color changes; reacting to
     // quantity refreshes would clobber in-progress edits and saved messages.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCode]);
 
-  async function save() {
+  function save() {
     const quantity = parseQuantityInput(quantityInput);
     if (selectedCode === null || quantity === null) {
-      setError("Quantity must be a whole number from 1 through 999999.");
+      setInputError("Quantity must be a whole number from 1 through 999999.");
       return;
     }
-    setBusy(true);
-    setError(null);
+    setInputError(null);
     setMessage(null);
-    try {
-      const saved = await setInventoryQuantity(partId, selectedCode, quantity);
-      setVariants((current) => [
-        ...current.filter((item) => item.colorCode !== selectedCode),
-        saved,
-      ]);
-      setMessage("Inventory quantity saved.");
-      notifyInventoryChanged();
-    } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : "Unable to save quantity");
-    } finally {
-      setBusy(false);
-    }
+    setQuantity.mutate(
+      { partId, colorCode: selectedCode, quantity },
+      { onSuccess: () => setMessage("Inventory quantity saved.") },
+    );
   }
 
-  async function remove() {
+  function remove() {
     if (selectedCode === null) return;
-    setBusy(true);
-    setError(null);
+    setInputError(null);
     setMessage(null);
-    try {
-      await deleteInventoryItem(partId, selectedCode);
-      setVariants((current) => current.filter((item) => item.colorCode !== selectedCode));
-      setQuantityInput("1");
-      setMessage("Inventory item removed.");
-      notifyInventoryChanged();
-    } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : "Unable to remove item");
-    } finally {
-      setBusy(false);
-    }
+    deleteItem.mutate(
+      { partId, colorCode: selectedCode },
+      {
+        onSuccess: () => {
+          setQuantityInput("1");
+          setMessage("Inventory item removed.");
+        },
+      },
+    );
   }
 
   return (
@@ -164,11 +146,11 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
             />
           </label>
           <div className="inventory-editor-actions">
-            <button type="button" onClick={() => void save()} disabled={busy}>
+            <button type="button" onClick={save} disabled={busy}>
               Save quantity
             </button>
             {currentVariant && (
-              <button type="button" onClick={() => void remove()} disabled={busy}>
+              <button type="button" onClick={remove} disabled={busy}>
                 Remove
               </button>
             )}

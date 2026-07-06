@@ -3,14 +3,7 @@ import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Group } from "three";
 
-import {
-  BuildManifest,
-  BuildStep,
-  getBuildManifest,
-  getInstructionPlayback,
-  getModel,
-  ModelDetail,
-} from "../api/models";
+import { BuildManifest, BuildStep, ModelDetail } from "../api/models";
 import { AdaptiveViewerDpr } from "../components/ldraw/AdaptiveViewerDpr";
 import { AdaptiveViewerLines } from "../components/ldraw/AdaptiveViewerLines";
 import { ViewerLoadingIndicator } from "../components/ldraw/ViewerLoadingIndicator";
@@ -33,6 +26,8 @@ import {
 } from "../components/ldraw/ViewerToolbar";
 import { WebGlLifecycle } from "../components/ldraw/WebGlLifecycle";
 import { maximumViewerDpr } from "../components/ldraw/viewerQuality";
+import { errorMessage } from "../queries/async";
+import { useBuildManifest, useInstructionPlayback, useModelDetail } from "../queries/hooks";
 
 type BootstrapState =
   | { kind: "loading" }
@@ -46,63 +41,62 @@ type WorkspaceMode = "build" | "inspect";
 
 export default function VisualBuilderPage() {
   const { modelId = "" } = useParams();
-  const [bootstrap, setBootstrap] = useState<BootstrapState>({ kind: "loading" });
   const [activeOccurrenceId, setActiveOccurrenceId] = useState<string | null>(null);
-  const [manifest, setManifest] = useState<ManifestState>({ kind: "loading" });
   const [selectedStep, setSelectedStep] = useState(1);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("build");
   const [focusCurrentStep, setFocusCurrentStep] = useState(true);
   const rememberedSteps = useRef(new Map<string, number>());
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setBootstrap({ kind: "loading" });
-    void Promise.all([
-      getModel(modelId, controller.signal),
-      getInstructionPlayback(modelId, controller.signal),
-    ])
-      .then(([model, playback]) => {
-        if (!playback.available || playback.rootOccurrenceId === null) {
-          throw new Error(
-            playback.fallbackReason ?? "Guided building is unavailable for this model.",
-          );
-        }
-        setBootstrap({ kind: "ready", model, rootOccurrenceId: playback.rootOccurrenceId });
-        setActiveOccurrenceId(playback.rootOccurrenceId);
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setBootstrap({
+  const detailQuery = useModelDetail(modelId);
+  const playbackQuery = useInstructionPlayback(modelId);
+  const playback = playbackQuery.data;
+  const rootOccurrenceId = playback?.available ? playback.rootOccurrenceId : null;
+  const bootstrap: BootstrapState =
+    detailQuery.isError || playbackQuery.isError
+      ? {
           kind: "error",
-          message: error instanceof Error ? error.message : "Unable to prepare the visual builder.",
-        });
-      });
-    return () => controller.abort();
-  }, [modelId]);
+          message: errorMessage(
+            detailQuery.error ?? playbackQuery.error,
+            "Unable to prepare the visual builder.",
+          ),
+        }
+      : playback !== undefined && (!playback.available || playback.rootOccurrenceId === null)
+        ? {
+            kind: "error",
+            message: playback.fallbackReason ?? "Guided building is unavailable for this model.",
+          }
+        : detailQuery.data !== undefined && rootOccurrenceId !== null
+          ? { kind: "ready", model: detailQuery.data, rootOccurrenceId }
+          : { kind: "loading" };
 
   useEffect(() => {
-    if (activeOccurrenceId === null) return;
-    const controller = new AbortController();
-    setManifest({ kind: "loading" });
-    void getBuildManifest(modelId, activeOccurrenceId, controller.signal)
-      .then((data) => {
-        setManifest({ kind: "ready", data });
-        setSelectedStep(
-          Math.min(
-            rememberedSteps.current.get(activeOccurrenceId) ?? 1,
-            Math.max(1, data.steps.length),
-          ),
-        );
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setManifest({
-          kind: "error",
-          message: error instanceof Error ? error.message : "Unable to load this build task.",
-        });
-      });
-    return () => controller.abort();
-  }, [activeOccurrenceId, modelId]);
+    if (rootOccurrenceId !== null) {
+      setActiveOccurrenceId((current) => current ?? rootOccurrenceId);
+    }
+  }, [rootOccurrenceId]);
+
+  const manifestQuery = useBuildManifest(modelId, activeOccurrenceId);
+  const manifest: ManifestState = manifestQuery.isError
+    ? {
+        kind: "error",
+        message: errorMessage(manifestQuery.error, "Unable to load this build task."),
+      }
+    : manifestQuery.data !== undefined
+      ? { kind: "ready", data: manifestQuery.data }
+      : { kind: "loading" };
+
+  // Restore the remembered step whenever a (re)fetched manifest lands; the
+  // map is updated on every user step change, so refetches are no-ops.
+  const manifestData = manifestQuery.data;
+  useEffect(() => {
+    if (manifestData === undefined) return;
+    setSelectedStep(
+      Math.min(
+        rememberedSteps.current.get(manifestData.occurrenceId) ?? 1,
+        Math.max(1, manifestData.steps.length),
+      ),
+    );
+  }, [manifestData]);
 
   function chooseStep(step: number) {
     if (manifest.kind !== "ready" || Number.isNaN(step)) return;

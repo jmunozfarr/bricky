@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { deleteInventoryItem, setInventoryQuantity } from "../../api/inventory";
-import { notifyInventoryChanged } from "../../inventory/events";
+import { useDeleteInventoryItem, useSetInventoryQuantity } from "../../queries/hooks";
 import {
   incrementQuantity,
   MAX_INVENTORY_QUANTITY,
@@ -22,46 +21,52 @@ export function CompactInventoryEditor({
   catalogAvailable,
 }: CompactInventoryEditorProps) {
   const [input, setInput] = useState(String(ownedQuantity));
-  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
+  const setQuantity = useSetInventoryQuantity();
+  const deleteItem = useDeleteInventoryItem();
+  const busy = setQuantity.isPending || deleteItem.isPending;
+  const mutationError = setQuantity.error ?? deleteItem.error;
+  const error =
+    inputError ??
+    (mutationError === null
+      ? null
+      : mutationError instanceof Error
+        ? mutationError.message
+        : "Unable to update inventory quantity.");
 
   useEffect(() => {
     setInput(String(ownedQuantity));
   }, [ownedQuantity]);
 
-  async function mutate(quantity: number) {
+  function mutate(quantity: number) {
     if (busy) return;
-    setBusy(true);
     setMessage(null);
-    setError(null);
-    try {
-      if (quantity === 0) {
-        await deleteInventoryItem(partId, colorCode);
-        setMessage("Inventory entry removed.");
-      } else {
-        await setInventoryQuantity(partId, colorCode, quantity);
-        setMessage(`Total owned quantity set to ${quantity}.`);
-      }
-      notifyInventoryChanged();
-    } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : "Unable to update inventory quantity.");
-    } finally {
-      setBusy(false);
+    setInputError(null);
+    if (quantity === 0) {
+      deleteItem.mutate(
+        { partId, colorCode },
+        { onSuccess: () => setMessage("Inventory entry removed.") },
+      );
+    } else {
+      setQuantity.mutate(
+        { partId, colorCode, quantity },
+        { onSuccess: () => setMessage(`Total owned quantity set to ${quantity}.`) },
+      );
     }
   }
 
   function save() {
     if (input === "0") {
-      void mutate(0);
+      mutate(0);
       return;
     }
     const quantity = parseQuantityInput(input);
     if (quantity === null) {
-      setError("Enter a whole total quantity from 0 through 999999.");
+      setInputError("Enter a whole total quantity from 0 through 999999.");
       return;
     }
-    void mutate(quantity);
+    mutate(quantity);
   }
 
   const controlsDisabled = busy || !catalogAvailable;
@@ -73,7 +78,7 @@ export function CompactInventoryEditor({
           type="button"
           aria-label={`Decrease ${partId} in color ${colorCode}`}
           disabled={busy || ownedQuantity === 0 || (!catalogAvailable && ownedQuantity > 1)}
-          onClick={() => void mutate(Math.max(0, ownedQuantity - 1))}
+          onClick={() => mutate(Math.max(0, ownedQuantity - 1))}
         >
           −
         </button>
@@ -91,7 +96,7 @@ export function CompactInventoryEditor({
           type="button"
           aria-label={`Increase ${partId} in color ${colorCode}`}
           disabled={controlsDisabled || ownedQuantity >= MAX_INVENTORY_QUANTITY}
-          onClick={() => void mutate(incrementQuantity(ownedQuantity))}
+          onClick={() => mutate(incrementQuantity(ownedQuantity))}
         >
           +
         </button>
@@ -101,7 +106,7 @@ export function CompactInventoryEditor({
           Set total
         </button>
         {ownedQuantity > 0 && (
-          <button type="button" disabled={busy} onClick={() => void mutate(0)}>
+          <button type="button" disabled={busy} onClick={() => mutate(0)}>
             Remove
           </button>
         )}

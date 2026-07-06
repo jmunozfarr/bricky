@@ -1,19 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-import {
-  CoverageStatus,
-  deleteModel,
-  getInstructionGraph,
-  getModel,
-  getModelCoverage,
-  InstructionGraph,
-  ModelCoverage,
-  ModelCoverageItem,
-  ModelDetail,
-} from "../api/models";
+import { CoverageStatus, InstructionGraph, ModelCoverage, ModelCoverageItem } from "../api/models";
 import { CompactInventoryEditor } from "../components/inventory/CompactInventoryEditor";
-import { subscribeInventoryChanged } from "../inventory/events";
+import { toAsyncState } from "../queries/async";
+import {
+  useDeleteModel,
+  useInstructionGraph,
+  useModelCoverage,
+  useModelDetail,
+} from "../queries/hooks";
 import {
   coverageEmptyMessage,
   coverageProgressValue,
@@ -23,78 +19,38 @@ import {
   modelStatusLabel,
 } from "../models/helpers";
 
-type DetailState =
-  { kind: "loading" } | { kind: "ready"; data: ModelDetail } | { kind: "error"; message: string };
-
-type CoverageState =
-  { kind: "loading" } | { kind: "ready"; data: ModelCoverage } | { kind: "error"; message: string };
-
 type CoverageView = "all" | "wishlist";
 
 export default function ModelDetailPage() {
   const { modelId = "" } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [state, setState] = useState<DetailState>({ kind: "loading" });
-  const [coverage, setCoverage] = useState<CoverageState>({ kind: "loading" });
-  const [coverageRevision, setCoverageRevision] = useState(0);
   const [coverageView, setCoverageView] = useState<CoverageView>("all");
   const [coverageStatus, setCoverageStatus] = useState<CoverageStatus | "all">("all");
   const [coverageQuery, setCoverageQuery] = useState("");
-  const [deleting, setDeleting] = useState(false);
   const returnSearch = params.get("return");
   const returnTarget = `/models${returnSearch ? `?${returnSearch}` : ""}`;
+  // Coverage refetches automatically when inventory mutations invalidate the
+  // "models" queries — this replaces the old inventory-changed event bus.
+  const detailState = toAsyncState(useModelDetail(modelId), "Unable to load model.");
+  const coverage = toAsyncState(useModelCoverage(modelId, {}), "Unable to load coverage.");
+  const deletion = useDeleteModel();
+  const deleting = deletion.isPending;
+  const state =
+    deletion.error !== null
+      ? ({
+          kind: "error",
+          message: deletion.error instanceof Error ? deletion.error.message : "Delete failed.",
+        } as const)
+      : detailState;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    setState({ kind: "loading" });
-    void getModel(modelId, controller.signal)
-      .then((data) => setState({ kind: "ready", data }))
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setState({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load model.",
-          });
-        }
-      });
-    return () => controller.abort();
-  }, [modelId]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setCoverage({ kind: "loading" });
-    void getModelCoverage(modelId, {}, controller.signal)
-      .then((data) => setCoverage({ kind: "ready", data }))
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setCoverage({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load coverage.",
-          });
-        }
-      });
-    return () => controller.abort();
-  }, [coverageRevision, modelId]);
-
-  useEffect(
-    () => subscribeInventoryChanged(() => setCoverageRevision((current) => current + 1)),
-    [],
-  );
-
-  async function remove() {
+  function remove() {
     if (!window.confirm("Delete this imported model and its preserved source file?")) return;
-    setDeleting(true);
-    try {
-      await deleteModel(modelId);
-      await navigate(returnTarget);
-    } catch (error: unknown) {
-      setState({
-        kind: "error",
-        message: error instanceof Error ? error.message : "Delete failed.",
-      });
-      setDeleting(false);
-    }
+    deletion.mutate(modelId, {
+      onSuccess: () => {
+        void navigate(returnTarget);
+      },
+    });
   }
 
   const visibleCoverage = useMemo(
@@ -127,7 +83,7 @@ export default function ModelDetailPage() {
         <Link className="button-link" to={returnTarget}>
           Back to models
         </Link>
-        <button className="danger-button" disabled={deleting} onClick={() => void remove()}>
+        <button className="danger-button" disabled={deleting} onClick={remove}>
           {deleting ? "Deleting…" : "Delete model"}
         </button>
       </div>
@@ -287,27 +243,28 @@ type InstructionGraphState =
   | { kind: "error"; message: string };
 
 function InstructionGraphPanel({ modelId }: { modelId: string }) {
-  const [state, setState] = useState<InstructionGraphState>({ kind: "idle" });
-
-  function load() {
-    if (state.kind !== "idle") return;
-    setState({ kind: "loading" });
-    void getInstructionGraph(modelId)
-      .then((data) => setState({ kind: "ready", data }))
-      .catch((error: unknown) =>
-        setState({
+  const [opened, setOpened] = useState(false);
+  const query = useInstructionGraph(modelId, opened);
+  const state: InstructionGraphState = !opened
+    ? { kind: "idle" }
+    : query.isError
+      ? {
           kind: "error",
-          message: error instanceof Error ? error.message : "Unable to load instruction graph.",
-        }),
-      );
-  }
+          message:
+            query.error instanceof Error
+              ? query.error.message
+              : "Unable to load instruction graph.",
+        }
+      : query.data !== undefined
+        ? { kind: "ready", data: query.data }
+        : { kind: "loading" };
 
   const visibleOccurrenceLimit = 500;
   return (
     <details
       className="page-panel instruction-graph-panel"
       onToggle={(event) => {
-        if (event.currentTarget.open) load();
+        if (event.currentTarget.open) setOpened(true);
       }}
     >
       <summary>

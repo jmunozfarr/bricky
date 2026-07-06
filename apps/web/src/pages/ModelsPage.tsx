@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type { SubmitEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import { listModels, ModelsPage as ModelsPageData, uploadModel } from "../api/models";
 import {
   formatFileSize,
   formatCoveragePercentage,
@@ -10,11 +9,8 @@ import {
   modelUploadError,
   validateModelUpload,
 } from "../models/helpers";
-
-type ResultsState =
-  | { kind: "loading" }
-  | { kind: "ready"; data: ModelsPageData }
-  | { kind: "error"; message: string };
+import { toAsyncState } from "../queries/async";
+import { useModelsList, useUploadModel } from "../queries/hooks";
 
 export default function ModelsPage() {
   const [params, setParams] = useSearchParams();
@@ -23,29 +19,16 @@ export default function ModelsPage() {
   const status = params.get("status") ?? "";
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const [searchInput, setSearchInput] = useState(query);
-  const [results, setResults] = useState<ResultsState>({ kind: "loading" });
+  const results = toAsyncState(useModelsList({ query, status, page }), "Unable to load models.");
+  const upload = useUploadModel();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const uploading = upload.isPending;
+  const uploadError =
+    validationError ?? (upload.error !== null ? modelUploadError(upload.error) : null);
 
   useEffect(() => setSearchInput(query), [query]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setResults({ kind: "loading" });
-    void listModels({ query, status, page }, controller.signal)
-      .then((data) => setResults({ kind: "ready", data }))
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setResults({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unable to load models.",
-          });
-        }
-      });
-    return () => controller.abort();
-  }, [page, query, status]);
 
   useEffect(() => {
     if (searchInput === query) return;
@@ -72,24 +55,23 @@ export default function ModelsPage() {
     });
   }
 
-  async function submit(event: SubmitEvent<HTMLFormElement>) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const validation = validateModelUpload(file);
     if (validation !== null || file === null) {
-      setUploadError(validation);
+      setValidationError(validation);
       return;
     }
-    setUploading(true);
-    setUploadError(null);
-    try {
-      const created = await uploadModel(file, name);
-      const returnSearch = params.toString();
-      await navigate(`/models/${created.modelId}?return=${encodeURIComponent(returnSearch)}`);
-    } catch (error: unknown) {
-      setUploadError(modelUploadError(error));
-    } finally {
-      setUploading(false);
-    }
+    setValidationError(null);
+    upload.mutate(
+      { file, name },
+      {
+        onSuccess: (created) => {
+          const returnSearch = params.toString();
+          void navigate(`/models/${created.modelId}?return=${encodeURIComponent(returnSearch)}`);
+        },
+      },
+    );
   }
 
   const returnSearch = params.toString();
@@ -104,7 +86,7 @@ export default function ModelsPage() {
         <p>Original source bytes are preserved</p>
       </div>
 
-      <form className="model-upload" onSubmit={(event) => void submit(event)}>
+      <form className="model-upload" onSubmit={submit}>
         <label>
           <span>Model file</span>
           <input

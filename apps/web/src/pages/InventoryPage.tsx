@@ -1,25 +1,18 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import {
-  Category,
-  getCategories,
-  getColors,
-  LDrawColor,
-  nextPage,
-  previousPage,
-} from "../api/catalog";
-import {
-  deleteInventoryItem,
-  getInventorySummary,
-  InventoryItem,
-  InventoryPage as InventoryPageData,
-  InventorySummary,
-  searchInventory,
-  setInventoryQuantity,
-} from "../api/inventory";
+import { nextPage, previousPage } from "../api/catalog";
+import { InventoryItem } from "../api/inventory";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
-import { notifyInventoryChanged } from "../inventory/events";
+import { toAsyncState } from "../queries/async";
+import {
+  useCategories,
+  useColors,
+  useDeleteInventoryItem,
+  useInventorySearch,
+  useInventorySummary,
+  useSetInventoryQuantity,
+} from "../queries/hooks";
 import {
   colorSwatchValue,
   decrementQuantity,
@@ -27,9 +20,6 @@ import {
   inventoryEmptyMessage,
   parseQuantityInput,
 } from "../inventory/helpers";
-
-type AsyncState<T> =
-  { kind: "loading" } | { kind: "ready"; data: T } | { kind: "error"; message: string };
 
 export default function InventoryPage() {
   const [params, setParams] = useSearchParams();
@@ -44,41 +34,13 @@ export default function InventoryPage() {
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const selectedPartId = params.get("part");
   const [searchInput, setSearchInput] = useState(query);
-  const [summary, setSummary] = useState<AsyncState<InventorySummary>>({ kind: "loading" });
-  const [results, setResults] = useState<AsyncState<InventoryPageData>>({ kind: "loading" });
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [colors, setColors] = useState<LDrawColor[]>([]);
-  const [refreshVersion, setRefreshVersion] = useState(0);
+  const summary = toAsyncState(useInventorySummary());
+  const results = toAsyncState(useInventorySearch({ query, category, colorCode, page }));
+  // Filter options are best-effort decoration; failures fall back to empty.
+  const categories = useCategories().data ?? [];
+  const colors = useColors().data ?? [];
 
   useEffect(() => setSearchInput(query), [query]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void Promise.all([getCategories(controller.signal), getColors(controller.signal)])
-      .then(([loadedCategories, loadedColors]) => {
-        setCategories(loadedCategories);
-        setColors(loadedColors);
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void getInventorySummary(controller.signal)
-      .then((data) => setSummary({ kind: "ready", data }))
-      .catch((caught: unknown) => setAsyncError(caught, setSummary));
-    return () => controller.abort();
-  }, [refreshVersion]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setResults({ kind: "loading" });
-    void searchInventory({ query, category, colorCode, page }, controller.signal)
-      .then((data) => setResults({ kind: "ready", data }))
-      .catch((caught: unknown) => setAsyncError(caught, setResults));
-    return () => controller.abort();
-  }, [category, colorCode, page, query, refreshVersion]);
 
   useEffect(() => {
     if (searchInput === query) return;
@@ -121,11 +83,6 @@ export default function InventoryPage() {
       else next.delete("part");
       return next;
     });
-  }
-
-  function refreshInventory() {
-    setRefreshVersion((version) => version + 1);
-    notifyInventoryChanged();
   }
 
   if (selectedPartId) {
@@ -214,7 +171,6 @@ export default function InventoryPage() {
                 <InventoryCard
                   key={`${item.partId}-${item.colorCode}`}
                   item={item}
-                  onChanged={refreshInventory}
                   onInspect={() => inspectPart(item.partId)}
                 />
               ))}
@@ -241,45 +197,30 @@ export default function InventoryPage() {
   );
 }
 
-function InventoryCard({
-  item,
-  onChanged,
-  onInspect,
-}: {
-  item: InventoryItem;
-  onChanged: () => void;
-  onInspect: () => void;
-}) {
+function InventoryCard({ item, onInspect }: { item: InventoryItem; onInspect: () => void }) {
   const [input, setInput] = useState(String(item.quantity));
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const setQuantity = useSetInventoryQuantity();
+  const deleteItem = useDeleteInventoryItem();
+  const busy = setQuantity.isPending || deleteItem.isPending;
+  const mutationError = setQuantity.error ?? deleteItem.error;
+  const error =
+    mutationError === null
+      ? null
+      : mutationError instanceof Error
+        ? mutationError.message
+        : "Update failed";
 
   useEffect(() => setInput(String(item.quantity)), [item.quantity]);
 
-  async function save(quantity: number) {
-    setBusy(true);
-    setError(null);
-    try {
-      const saved = await setInventoryQuantity(item.partId, item.colorCode, quantity);
-      setInput(String(saved.quantity));
-      onChanged();
-    } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : "Update failed");
-    } finally {
-      setBusy(false);
-    }
+  function save(quantity: number) {
+    setQuantity.mutate(
+      { partId: item.partId, colorCode: item.colorCode, quantity },
+      { onSuccess: (saved) => setInput(String(saved.quantity)) },
+    );
   }
 
-  async function remove() {
-    setBusy(true);
-    setError(null);
-    try {
-      await deleteInventoryItem(item.partId, item.colorCode);
-      onChanged();
-    } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : "Removal failed");
-      setBusy(false);
-    }
+  function remove() {
+    deleteItem.mutate({ partId: item.partId, colorCode: item.colorCode });
   }
 
   const parsedInput = parseQuantityInput(input);
@@ -307,7 +248,7 @@ function InventoryCard({
           type="button"
           aria-label={`Decrease ${item.partId} quantity`}
           disabled={busy}
-          onClick={() => (decremented === null ? void remove() : void save(decremented))}
+          onClick={() => (decremented === null ? remove() : save(decremented))}
         >
           −
         </button>
@@ -324,7 +265,7 @@ function InventoryCard({
           type="button"
           aria-label={`Increase ${item.partId} quantity`}
           disabled={busy || item.quantity >= 999999}
-          onClick={() => void save(incrementQuantity(item.quantity))}
+          onClick={() => save(incrementQuantity(item.quantity))}
         >
           +
         </button>
@@ -333,11 +274,11 @@ function InventoryCard({
         <button
           type="button"
           disabled={busy || parsedInput === null}
-          onClick={() => parsedInput !== null && void save(parsedInput)}
+          onClick={() => parsedInput !== null && save(parsedInput)}
         >
           Update
         </button>
-        <button type="button" disabled={busy} onClick={() => void remove()}>
+        <button type="button" disabled={busy} onClick={() => remove()}>
           Remove
         </button>
         <button type="button" disabled={busy || !item.catalogAvailable} onClick={onInspect}>
@@ -369,10 +310,4 @@ function ErrorPanel({ message }: { message: string }) {
       <span>{message}</span>
     </div>
   );
-}
-
-function setAsyncError<T>(caught: unknown, setter: (state: AsyncState<T>) => void) {
-  if (!(caught instanceof DOMException && caught.name === "AbortError")) {
-    setter({ kind: "error", message: caught instanceof Error ? caught.message : "Unknown error" });
-  }
 }
