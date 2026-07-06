@@ -160,7 +160,6 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
                     )
                 )
         coverage_by_model = _coverage_by_model(session, workspace.id, requirements_by_model)
-        session.commit()
         return ModelsPageResponse(
             items=[_summary(model, coverage_by_model[model.id].summary) for model in models],
             page=page,
@@ -197,7 +196,6 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         coverages = _coverage_by_model(session, workspace.id, requirements_by_model)
         summaries = [coverage.summary for coverage in coverages.values()]
         fully_buildable = sum(summary.fully_buildable for summary in summaries)
-        session.commit()
         return ModelsReadinessResponse(
             total_models=len(model_ids),
             fully_buildable_models=fully_buildable,
@@ -261,7 +259,6 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
             ):
                 continue
             response_items.append(_coverage_item_response(item, part, color))
-        session.commit()
         return ModelCoverageResponse(
             model_id=model.public_id,
             summary=_coverage_summary(coverage.summary),
@@ -287,7 +284,6 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
             .where(ModelImportIssue.model_id == model.id)
             .order_by(ModelImportIssue.id)
         ).all()
-        session.commit()
         return ModelDetailResponse(
             **_summary(model).model_dump(),
             source_sha256=model.source_sha256,
@@ -313,7 +309,6 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         source_path = _managed_source_path(context.storage_root, model)
-        session.commit()
         if source_path is None or not source_path.is_file():
             raise HTTPException(status_code=404, detail="Model source not found")
         encoded_filename = quote(model.safe_filename, safe="")

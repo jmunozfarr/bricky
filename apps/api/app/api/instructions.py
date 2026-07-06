@@ -53,7 +53,6 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         data = context.playback_data_for(model)
-        session.commit()
         fallback_reason = None
         selection = (
             select_render_strategy(data, data.graph.root_occurrence_id, context.render_limits)
@@ -115,7 +114,6 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
             packed_scene_for=context.packed_scene_for,
             inventory_for_requirements=_inventory_for_requirements,
         )
-        session.commit()
         return manifest
 
     @router.get(
@@ -172,7 +170,6 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
         )
         if render_strategy == "subtree" and selection.recommended_strategy == "local":
             raise HTTPException(status_code=409, detail=SCOPE_COMPLEXITY_DETAIL)
-        session.commit()
         occurrence = result.occurrence
         encoded_occurrence = quote(occurrence_id, safe="")
         return InstructionPlaybackOccurrenceResponse(
@@ -271,7 +268,6 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
             raise HTTPException(status_code=422, detail=str(error)) from error
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
-        session.commit()
         etag = hashlib.sha256(content).hexdigest()
         return Response(
             content=content,
@@ -295,7 +291,6 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         source_path = _managed_source_path(context.storage_root, model)
-        session.commit()
         if source_path is None or not source_path.is_file():
             raise HTTPException(status_code=404, detail="Model source not found")
         try:

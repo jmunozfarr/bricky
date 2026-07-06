@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.models import Workspace
@@ -11,14 +10,16 @@ LOCAL_WORKSPACE_NAME = "Local workspace"
 
 
 def resolve_local_workspace(session: Session) -> Workspace:
-    """Resolve the hidden single-user workspace with a concurrency-safe upsert."""
+    """Resolve the hidden single-user workspace.
 
-    session.execute(
-        insert(Workspace)
-        .values(slug=LOCAL_WORKSPACE_SLUG, name=LOCAL_WORKSPACE_NAME)
-        .on_conflict_do_nothing(index_elements=[Workspace.slug])
-    )
+    The workspace is seeded by an Alembic data migration (and by the test
+    fixtures), so resolution is a plain read — request handlers no longer
+    upsert or commit to obtain it.
+    """
+
     workspace = session.scalar(select(Workspace).where(Workspace.slug == LOCAL_WORKSPACE_SLUG))
     if workspace is None:
-        raise RuntimeError("Unable to resolve the local workspace")
+        raise RuntimeError(
+            "The local workspace is missing; run `alembic upgrade head` to seed it"
+        )
     return workspace
