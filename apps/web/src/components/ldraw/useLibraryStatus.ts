@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 interface LibraryFileCounts {
   dat: number;
@@ -48,38 +48,31 @@ function isLibraryStatus(value: unknown): value is LibraryStatus {
   );
 }
 
+async function fetchLibraryStatus(signal: AbortSignal): Promise<LibraryStatus> {
+  const response = await fetch("/api/library/status", { signal });
+  if (!response.ok) {
+    throw new Error(`Library status returned HTTP ${response.status}`);
+  }
+  const status: unknown = await response.json();
+  if (!isLibraryStatus(status)) {
+    throw new Error("Library status returned an unexpected response");
+  }
+  return status;
+}
+
 export function useLibraryStatus(): LibraryStatusState {
-  const [state, setState] = useState<LibraryStatusState>({ kind: "loading" });
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadStatus() {
-      try {
-        const response = await fetch("/api/library/status", {
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          throw new Error(`Library status returned HTTP ${response.status}`);
-        }
-
-        const status: unknown = await response.json();
-        if (!isLibraryStatus(status)) {
-          throw new Error("Library status returned an unexpected response");
-        }
-        setState({ kind: "ready", status });
-      } catch (error: unknown) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return;
-        }
-        const message = error instanceof Error ? error.message : "Unknown status error";
-        setState({ kind: "error", message });
-      }
-    }
-
-    void loadStatus();
-    return () => controller.abort();
-  }, []);
-
-  return state;
+  const query = useQuery({
+    queryKey: ["library", "status"],
+    queryFn: ({ signal }) => fetchLibraryStatus(signal),
+  });
+  if (query.isError) {
+    return {
+      kind: "error",
+      message: query.error instanceof Error ? query.error.message : "Unknown status error",
+    };
+  }
+  if (query.data !== undefined) {
+    return { kind: "ready", status: query.data };
+  }
+  return { kind: "loading" };
 }

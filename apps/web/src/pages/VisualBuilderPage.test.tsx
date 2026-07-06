@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -102,11 +103,15 @@ describe("visual builder workspace", () => {
 
   it("presents exact current-step parts and switches modes without refetching", async () => {
     render(
-      <MemoryRouter initialEntries={["/models/model-1/build"]}>
-        <Routes>
-          <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
-        </Routes>
-      </MemoryRouter>,
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <MemoryRouter initialEntries={["/models/model-1/build"]}>
+          <Routes>
+            <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
 
     expect(await screen.findByText("1× Brick 2 x 4")).toBeTruthy();
@@ -125,11 +130,15 @@ describe("visual builder workspace", () => {
       scene: { ...manifest.scene, renderStrategy: "local" },
     });
     render(
-      <MemoryRouter initialEntries={["/models/model-1/build"]}>
-        <Routes>
-          <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
-        </Routes>
-      </MemoryRouter>,
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <MemoryRouter initialEntries={["/models/model-1/build"]}>
+          <Routes>
+            <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
     await screen.findByText("1× Brick 2 x 4");
     expect(screen.getByText(/subassemblies are built as separate tasks/i)).toBeTruthy();
@@ -137,11 +146,15 @@ describe("visual builder workspace", () => {
 
   it("jumps directly to a typed step number and clamps out-of-range input", async () => {
     render(
-      <MemoryRouter initialEntries={["/models/model-1/build"]}>
-        <Routes>
-          <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
-        </Routes>
-      </MemoryRouter>,
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <MemoryRouter initialEntries={["/models/model-1/build"]}>
+          <Routes>
+            <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
     await screen.findByText("1× Brick 2 x 4");
 

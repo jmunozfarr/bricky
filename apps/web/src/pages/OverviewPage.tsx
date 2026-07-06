@@ -1,86 +1,20 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { CatalogStatus, getCatalogStatus } from "../api/catalog";
-import { fetchJson } from "../api/client";
-import { getInventorySummary, InventorySummary } from "../api/inventory";
-import { getModelsReadinessSummary, ModelsReadinessSummary } from "../api/models";
 import { useLibraryStatus } from "../components/ldraw/useLibraryStatus";
-import { subscribeInventoryChanged } from "../inventory/events";
-
-interface HealthResponse {
-  status: string;
-  database: string;
-}
-
-type AsyncState<T> =
-  { kind: "loading" } | { kind: "ready"; data: T } | { kind: "error"; message: string };
+import { toAsyncState } from "../queries/async";
+import {
+  useCatalogStatus,
+  useHealth,
+  useInventorySummary,
+  useModelsReadiness,
+} from "../queries/hooks";
 
 export default function OverviewPage() {
-  const [health, setHealth] = useState<AsyncState<HealthResponse>>({ kind: "loading" });
-  const [catalog, setCatalog] = useState<AsyncState<CatalogStatus>>({ kind: "loading" });
-  const [inventory, setInventory] = useState<AsyncState<InventorySummary>>({ kind: "loading" });
-  const [models, setModels] = useState<AsyncState<ModelsReadinessSummary>>({ kind: "loading" });
+  const health = toAsyncState(useHealth(), "Unknown health error");
+  const catalog = toAsyncState(useCatalogStatus(), "Unknown catalog error");
+  const inventory = toAsyncState(useInventorySummary(), "Unknown inventory error");
+  const models = toAsyncState(useModelsReadiness(), "Unknown model readiness error");
   const library = useLibraryStatus();
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetchJson<HealthResponse>("/api/health", controller.signal)
-      .then((data) => setHealth({ kind: "ready", data }))
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setHealth({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unknown health error",
-          });
-        }
-      });
-    void getCatalogStatus(controller.signal)
-      .then((data) => setCatalog({ kind: "ready", data }))
-      .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
-          setCatalog({
-            kind: "error",
-            message: error instanceof Error ? error.message : "Unknown catalog error",
-          });
-        }
-      });
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    let controller = new AbortController();
-    const load = () => {
-      controller.abort();
-      controller = new AbortController();
-      void getInventorySummary(controller.signal)
-        .then((data) => setInventory({ kind: "ready", data }))
-        .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === "AbortError")) {
-            setInventory({
-              kind: "error",
-              message: error instanceof Error ? error.message : "Unknown inventory error",
-            });
-          }
-        });
-      void getModelsReadinessSummary(controller.signal)
-        .then((data) => setModels({ kind: "ready", data }))
-        .catch((error: unknown) => {
-          if (!(error instanceof DOMException && error.name === "AbortError")) {
-            setModels({
-              kind: "error",
-              message: error instanceof Error ? error.message : "Unknown model readiness error",
-            });
-          }
-        });
-    };
-    load();
-    const unsubscribe = subscribeInventoryChanged(load);
-    return () => {
-      controller.abort();
-      unsubscribe();
-    };
-  }, []);
 
   return (
     <section className="page-panel" aria-labelledby="overview-title">

@@ -19,6 +19,9 @@ compose exec -T api mypy app tests
 echo "Running API tests"
 compose exec -T api pytest -q
 
+echo "Checking generated API types against the running schema"
+compose exec -T web npm run check:api-types
+
 echo "Linting frontend sources"
 compose exec -T web npm run lint
 
