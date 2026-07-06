@@ -81,9 +81,9 @@ class ModelsRouterContext:
         try:
             return parse_playback_data(
                 model.source_sha256,
-                source_path.read_bytes(),
                 model.original_filename,
                 self.graph_limits,
+                source_path.read_bytes,
             )
         except ModelParseError as error:
             raise HTTPException(
@@ -114,7 +114,7 @@ class ModelsRouterContext:
             data, occurrence_id, current_step=None, strategy=render_strategy
         )
         packed = pack_ldraw_source(derived, self.library_root)
-        PACKED_SOURCE_CACHE.set(cache_key, packed)
+        PACKED_SOURCE_CACHE.set(cache_key, packed, group=model.source_sha256)
         return cache_key, packed
 
 

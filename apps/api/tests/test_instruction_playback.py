@@ -12,6 +12,7 @@ from app.services.instruction_playback import (
     RenderComplexityLimits,
     build_playback_data,
     derive_occurrence_source,
+    parse_playback_data,
     playback_breadcrumbs,
     playback_occurrence,
     select_render_strategy,
@@ -294,3 +295,33 @@ def test_local_step_two_contains_each_cumulative_root_part_exactly_once() -> Non
         assert f"1 16 0 0 0 1 0 0 0 1 0 0 0 1 {filename}" in step_two
     assert step_two.count("0 !BRICKY OCCURRENCE ") == 1
     assert "__bricky_occ_000002" not in step_two
+
+
+def test_playback_cache_hits_by_hash_without_reloading_bytes() -> None:
+    from app.services.instruction_playback import clear_playback_cache
+
+    source = (FIXTURE_ROOT / "flat_steps.mpd").read_bytes()
+    loads = 0
+
+    def load() -> bytes:
+        nonlocal loads
+        loads += 1
+        return source
+
+    limits = InstructionGraphLimits()
+    clear_playback_cache()
+    try:
+        first = parse_playback_data("sha-flat", "flat_steps.mpd", limits, load)
+        second = parse_playback_data("sha-flat", "flat_steps.mpd", limits, load)
+        assert second is first
+        assert loads == 1
+
+        other = parse_playback_data("sha-other", "flat_steps.mpd", limits, load)
+        assert other is not first
+        assert loads == 2
+
+        clear_playback_cache()
+        parse_playback_data("sha-flat", "flat_steps.mpd", limits, load)
+        assert loads == 3
+    finally:
+        clear_playback_cache()

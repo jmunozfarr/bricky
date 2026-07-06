@@ -149,3 +149,31 @@ def test_fixed_color_alias_resolves_but_subpart_target_is_not_physical(
     assert resolver.resolve("sticker-old").status == "resolved"
     assert resolver.resolve("sticker-old").canonical_part_id == "sticker-new"
     assert resolver.resolve("legacy-subpart").status == "missing_target"
+
+
+def test_cached_resolver_loads_parts_once_per_fingerprint(tmp_path: Path) -> None:
+    from app.services.ldraw_aliases import (
+        cached_moved_alias_resolver,
+        clear_alias_resolver_cache,
+    )
+
+    loads = 0
+
+    def load_parts() -> list[OfficialPartRecord]:
+        nonlocal loads
+        loads += 1
+        return []
+
+    clear_alias_resolver_cache()
+    try:
+        first = cached_moved_alias_resolver(tmp_path, "fingerprint-a", load_parts)
+        second = cached_moved_alias_resolver(tmp_path, "fingerprint-a", load_parts)
+        assert second is first
+        assert loads == 1
+
+        # A reinstall changes the fingerprint and retires the stale resolver.
+        third = cached_moved_alias_resolver(tmp_path, "fingerprint-b", load_parts)
+        assert third is not first
+        assert loads == 2
+    finally:
+        clear_alias_resolver_cache()

@@ -7,7 +7,7 @@ import uuid
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.helpers import (
@@ -233,6 +233,7 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
     def model_instruction_occurrence_source(
         model_id: uuid.UUID,
         occurrence_id: str,
+        request: Request,
         mode: Literal["subtree", "local"] = Query(default="subtree"),
         step: int | None = Query(default=None, ge=1),
         delivery: Literal["external", "packed"] = Query(default="external"),
@@ -269,15 +270,21 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         etag = hashlib.sha256(content).hexdigest()
+        cache_control = (
+            "private, max-age=31536000, immutable"
+            if delivery == "packed"
+            else "private, max-age=3600"
+        )
+        if request.headers.get("if-none-match") == f'"{etag}"':
+            return Response(
+                status_code=304,
+                headers={"Cache-Control": cache_control, "ETag": f'"{etag}"'},
+            )
         return Response(
             content=content,
             media_type="text/plain; charset=utf-8",
             headers={
-                "Cache-Control": (
-                    "private, max-age=31536000, immutable"
-                    if delivery == "packed"
-                    else "private, max-age=3600"
-                ),
+                "Cache-Control": cache_control,
                 "ETag": f'"{etag}"',
                 "X-Content-Type-Options": "nosniff",
             },

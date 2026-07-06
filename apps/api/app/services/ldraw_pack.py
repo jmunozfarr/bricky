@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -24,31 +25,54 @@ class PackedLDrawSource:
 
 
 class PackedSourceCache:
+    """LRU of packed scenes, safe for FastAPI's threadpool handlers."""
+
     def __init__(self, maximum_bytes: int = DEFAULT_PACK_CACHE_BYTES) -> None:
         self.maximum_bytes = maximum_bytes
+        self._lock = threading.Lock()
         self._values: OrderedDict[str, PackedLDrawSource] = OrderedDict()
+        self._groups: dict[str, str] = {}
         self._size = 0
 
     def get(self, key: str) -> PackedLDrawSource | None:
-        value = self._values.pop(key, None)
-        if value is None:
-            return None
-        self._values[key] = value
-        return value
+        with self._lock:
+            value = self._values.pop(key, None)
+            if value is None:
+                return None
+            self._values[key] = value
+            return value
 
-    def set(self, key: str, value: PackedLDrawSource) -> None:
-        replaced = self._values.pop(key, None)
-        if replaced is not None:
-            self._size -= len(replaced.content)
-        self._values[key] = value
-        self._size += len(value.content)
-        while self._size > self.maximum_bytes and self._values:
-            _old_key, old_value = self._values.popitem(last=False)
-            self._size -= len(old_value.content)
+    def set(self, key: str, value: PackedLDrawSource, group: str | None = None) -> None:
+        with self._lock:
+            replaced = self._values.pop(key, None)
+            if replaced is not None:
+                self._size -= len(replaced.content)
+            self._values[key] = value
+            self._size += len(value.content)
+            if group is None:
+                self._groups.pop(key, None)
+            else:
+                self._groups[key] = group
+            while self._size > self.maximum_bytes and self._values:
+                old_key, old_value = self._values.popitem(last=False)
+                self._groups.pop(old_key, None)
+                self._size -= len(old_value.content)
+
+    def evict_group(self, group: str) -> None:
+        """Drop every scene packed for one model (e.g. on model deletion)."""
+
+        with self._lock:
+            for key in [key for key, owner in self._groups.items() if owner == group]:
+                value = self._values.pop(key, None)
+                del self._groups[key]
+                if value is not None:
+                    self._size -= len(value.content)
 
     def clear(self) -> None:
-        self._values.clear()
-        self._size = 0
+        with self._lock:
+            self._values.clear()
+            self._groups.clear()
+            self._size = 0
 
 
 PACKED_SOURCE_CACHE = PackedSourceCache()
@@ -66,14 +90,53 @@ def _type_one_reference(line: str) -> str | None:
     return tokens[14] if len(tokens) == 15 and tokens[0] == "1" else None
 
 
+_LIBRARY_INDEX_LOCK = threading.Lock()
+_LIBRARY_INDEX: dict[tuple[str, str], dict[str, Path]] = {}
+
+
+def _scan_library(root: Path) -> dict[str, Path]:
+    return {
+        path.relative_to(root).as_posix().lower(): path
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".dat", ".ldr"}
+    }
+
+
+def _library_index(root: Path) -> dict[str, Path]:
+    """File index cached per (root, library fingerprint).
+
+    Scanning the installed library is tens of thousands of stat calls; a
+    reinstall changes the manifest fingerprint, which retires stale entries.
+    A manifest-less root is keyed by path only, so mutating such a library
+    in place without reinstalling keeps the old index — an unsupported
+    state, since installs always write the manifest.
+    """
+
+    from app.services.ldraw_library import get_library_status
+
+    fingerprint = get_library_status(root).archive_sha256 or "unversioned-library"
+    key = (str(root), fingerprint)
+    with _LIBRARY_INDEX_LOCK:
+        cached = _LIBRARY_INDEX.get(key)
+        if cached is not None:
+            return cached
+    paths = _scan_library(root)
+    with _LIBRARY_INDEX_LOCK:
+        for stale in [existing for existing in _LIBRARY_INDEX if existing[0] == key[0]]:
+            del _LIBRARY_INDEX[stale]
+        _LIBRARY_INDEX[key] = paths
+    return paths
+
+
+def clear_library_index() -> None:
+    with _LIBRARY_INDEX_LOCK:
+        _LIBRARY_INDEX.clear()
+
+
 class _LibraryResolver:
     def __init__(self, root: Path) -> None:
         self.root = root.resolve()
-        self.paths = {
-            path.relative_to(self.root).as_posix().lower(): path
-            for path in root.rglob("*")
-            if path.is_file() and path.suffix.lower() in {".dat", ".ldr"}
-        }
+        self.paths = _library_index(self.root)
 
     def resolve(self, reference: str, current_path: str | None) -> str | None:
         normalized = _normalized(reference)

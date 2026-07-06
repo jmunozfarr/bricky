@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 import re
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -285,3 +287,38 @@ class LDrawMovedAliasResolver:
     def _cache_resolution(self, normalized_id: str, resolution: AliasResolution) -> AliasResolution:
         self._resolution_cache[normalized_id] = resolution
         return resolution
+
+
+_RESOLVER_CACHE_LOCK = threading.Lock()
+_RESOLVER_CACHE: dict[tuple[str, str], LDrawMovedAliasResolver] = {}
+
+
+def cached_moved_alias_resolver(
+    library_root: Path,
+    library_fingerprint: str,
+    load_parts: Callable[[], list[OfficialPartRecord]],
+) -> LDrawMovedAliasResolver:
+    """Reuse one resolver per (root, library fingerprint).
+
+    Building a resolver requires the full official part list; caching it also
+    preserves its internal inspection/resolution caches across requests. A
+    reinstall or catalog rebuild changes the fingerprint and retires stale
+    entries.
+    """
+
+    key = (str(library_root.resolve()), library_fingerprint)
+    with _RESOLVER_CACHE_LOCK:
+        cached = _RESOLVER_CACHE.get(key)
+        if cached is not None:
+            return cached
+    resolver = LDrawMovedAliasResolver(library_root, load_parts())
+    with _RESOLVER_CACHE_LOCK:
+        for stale in [existing for existing in _RESOLVER_CACHE if existing[0] == key[0]]:
+            del _RESOLVER_CACHE[stale]
+        _RESOLVER_CACHE[key] = resolver
+    return resolver
+
+
+def clear_alias_resolver_cache() -> None:
+    with _RESOLVER_CACHE_LOCK:
+        _RESOLVER_CACHE.clear()

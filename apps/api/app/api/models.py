@@ -16,6 +16,7 @@ from fastapi import (
     Form,
     HTTPException,
     Query,
+    Request,
     Response,
     UploadFile,
     status,
@@ -303,19 +304,28 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
 
     @router.get("/{model_id}/source", response_class=FileResponse)
     def model_source(
-        model_id: uuid.UUID, session: Session = Depends(context.session_dependency)
-    ) -> FileResponse:
+        model_id: uuid.UUID,
+        request: Request,
+        session: Session = Depends(context.session_dependency),
+    ) -> Response:
         model = context.find_model(session, model_id)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         source_path = _managed_source_path(context.storage_root, model)
         if source_path is None or not source_path.is_file():
             raise HTTPException(status_code=404, detail="Model source not found")
+        # Imported sources are immutable, so the stored hash is the ETag.
+        etag = f'"{model.source_sha256}"'
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers={"ETag": etag})
         encoded_filename = quote(model.safe_filename, safe="")
         return FileResponse(
             source_path,
             media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}"},
+            headers={
+                "Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}",
+                "ETag": etag,
+            },
         )
 
     @router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -331,7 +341,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         session.execute(delete(ImportedModel).where(ImportedModel.id == model.id))
         session.commit()
         clear_playback_cache()
-        PACKED_SOURCE_CACHE.clear()
+        PACKED_SOURCE_CACHE.evict_group(model.source_sha256)
         if model_directory is not None and model_directory.is_dir():
             shutil.rmtree(model_directory)
         return Response(status_code=204)
