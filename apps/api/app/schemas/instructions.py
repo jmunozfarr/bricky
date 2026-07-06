@@ -3,260 +3,217 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from app.schemas import CamelModel
 from app.services.instruction_graph import InstructionGraph, InstructionGraphLimits
 from app.services.instruction_playback import RenderComplexity
 
 
-class InstructionTransformResponse(BaseModel):
+class InstructionTransformResponse(CamelModel):
     translation: tuple[float, float, float]
     matrix: tuple[float, float, float, float, float, float, float, float, float]
 
 
-class LocalInstructionNodeResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    node_index: int = Field(alias="nodeIndex")
+class LocalInstructionNodeResponse(CamelModel):
+    node_index: int
     kind: Literal["part_reference", "submodel_reference"]
-    source_filename: str = Field(alias="sourceFilename")
-    color_code: int = Field(alias="colorCode")
-    local_transform: InstructionTransformResponse = Field(alias="localTransform")
-    source_order: int = Field(alias="sourceOrder")
+    source_filename: str
+    color_code: int
+    local_transform: InstructionTransformResponse
+    source_order: int
 
 
-class LocalDirectGeometryResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    command_type: Literal[2, 3, 4, 5] = Field(alias="commandType")
-    color_token: str = Field(alias="colorToken")
+class LocalDirectGeometryResponse(CamelModel):
+    command_type: Literal[2, 3, 4, 5]
+    color_token: str
     coordinates: tuple[float, ...]
-    local_step: int = Field(alias="localStep")
-    source_order: int = Field(alias="sourceOrder")
-    source_submodel_name: str = Field(alias="sourceSubmodelName")
+    local_step: int
+    source_order: int
+    source_submodel_name: str
 
 
-class LocalStepDefinitionResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class LocalStepDefinitionResponse(CamelModel):
     step: int
     nodes: list[LocalInstructionNodeResponse]
-    direct_geometry: list[LocalDirectGeometryResponse] = Field(alias="directGeometry")
+    direct_geometry: list[LocalDirectGeometryResponse]
 
 
-class ModelDefinitionResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    source_submodel_name: str = Field(alias="sourceSubmodelName")
-    local_steps: list[LocalStepDefinitionResponse] = Field(alias="localSteps")
+class ModelDefinitionResponse(CamelModel):
+    source_submodel_name: str
+    local_steps: list[LocalStepDefinitionResponse]
 
 
-class ModelOccurrenceResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    occurrence_id: str = Field(alias="occurrenceId")
-    parent_occurrence_id: str | None = Field(alias="parentOccurrenceId")
-    source_submodel_name: str = Field(alias="sourceSubmodelName")
-    local_transform: InstructionTransformResponse = Field(alias="localTransform")
-    effective_color: int | None = Field(alias="effectiveColor")
-    attachment_step: int | None = Field(alias="attachmentStep")
+class ModelOccurrenceResponse(CamelModel):
+    occurrence_id: str
+    parent_occurrence_id: str | None
+    source_submodel_name: str
+    local_transform: InstructionTransformResponse
+    effective_color: int | None
+    attachment_step: int | None
     depth: int
-    traversal_order: int = Field(alias="traversalOrder")
-    child_occurrence_ids: list[str] = Field(alias="childOccurrenceIds")
+    traversal_order: int
+    child_occurrence_ids: list[str]
 
 
-class ExpandedInstructionNodeResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    instruction_node_id: str = Field(alias="instructionNodeId")
-    occurrence_id: str = Field(alias="occurrenceId")
-    local_step: int = Field(alias="localStep")
-    node_index: int = Field(alias="nodeIndex")
+class ExpandedInstructionNodeResponse(CamelModel):
+    instruction_node_id: str
+    occurrence_id: str
+    local_step: int
+    node_index: int
     kind: Literal["part_reference", "submodel_attachment"]
-    source_filename: str = Field(alias="sourceFilename")
-    effective_color: int | None = Field(alias="effectiveColor")
-    local_transform: InstructionTransformResponse = Field(alias="localTransform")
-    child_occurrence_id: str | None = Field(alias="childOccurrenceId")
-    source_order: int = Field(alias="sourceOrder")
+    source_filename: str
+    effective_color: int | None
+    local_transform: InstructionTransformResponse
+    child_occurrence_id: str | None
+    source_order: int
 
 
-class InstructionGraphIssueResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class InstructionGraphIssueResponse(CamelModel):
     severity: str
     code: str
     message: str
-    source_submodel_name: str | None = Field(alias="sourceSubmodelName")
-    source_filename: str | None = Field(alias="sourceFilename")
-    occurrence_id: str | None = Field(alias="occurrenceId")
-    configured_limit: int | None = Field(alias="configuredLimit")
+    source_submodel_name: str | None
+    source_filename: str | None
+    occurrence_id: str | None
+    configured_limit: int | None
 
 
-class InstructionGraphLimitsResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    maximum_nesting_depth: int = Field(alias="maximumNestingDepth")
-    maximum_expanded_occurrences: int = Field(alias="maximumExpandedOccurrences")
-    maximum_instruction_nodes: int = Field(alias="maximumInstructionNodes")
+class InstructionGraphLimitsResponse(CamelModel):
+    maximum_nesting_depth: int
+    maximum_expanded_occurrences: int
+    maximum_instruction_nodes: int
 
 
-class InstructionGraphResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    model_id: uuid.UUID = Field(alias="modelId")
-    root_occurrence_id: str = Field(alias="rootOccurrenceId")
-    model_definitions: list[ModelDefinitionResponse] = Field(alias="modelDefinitions")
+class InstructionGraphResponse(CamelModel):
+    model_id: uuid.UUID
+    root_occurrence_id: str
+    model_definitions: list[ModelDefinitionResponse]
     occurrences: list[ModelOccurrenceResponse]
-    instruction_nodes: list[ExpandedInstructionNodeResponse] = Field(alias="instructionNodes")
-    maximum_nesting_depth: int = Field(alias="maximumNestingDepth")
-    traversal_order: list[str] = Field(alias="traversalOrder")
-    model_definition_count: int = Field(alias="modelDefinitionCount")
-    expanded_occurrence_count: int = Field(alias="expandedOccurrenceCount")
-    instruction_node_count: int = Field(alias="instructionNodeCount")
+    instruction_nodes: list[ExpandedInstructionNodeResponse]
+    maximum_nesting_depth: int
+    traversal_order: list[str]
+    model_definition_count: int
+    expanded_occurrence_count: int
+    instruction_node_count: int
     issues: list[InstructionGraphIssueResponse]
     truncated: bool
     limits: InstructionGraphLimitsResponse
 
 
-class InstructionPlaybackIssueResponse(BaseModel):
+class InstructionPlaybackIssueResponse(CamelModel):
     code: str
     message: str
 
 
-class InstructionPlaybackSummaryResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    model_id: uuid.UUID = Field(alias="modelId")
+class InstructionPlaybackSummaryResponse(CamelModel):
+    model_id: uuid.UUID
     available: bool
-    root_occurrence_id: str | None = Field(alias="rootOccurrenceId")
-    fallback_reason: str | None = Field(alias="fallbackReason")
+    root_occurrence_id: str | None
+    fallback_reason: str | None
     issues: list[InstructionPlaybackIssueResponse]
-    recommended_render_strategy: Literal["subtree", "local"] | None = Field(
-        alias="recommendedRenderStrategy"
-    )
-    render_strategy_reason: str = Field(alias="renderStrategyReason")
+    recommended_render_strategy: Literal["subtree", "local"] | None
+    render_strategy_reason: str
     complexity: RenderComplexityResponse | None
-    flattened_rendering_allowed: bool = Field(alias="flattenedRenderingAllowed")
+    flattened_rendering_allowed: bool
 
 
-class RenderComplexityResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    expanded_instruction_node_count: int = Field(alias="expandedInstructionNodeCount")
-    expanded_occurrence_count: int = Field(alias="expandedOccurrenceCount")
-    direct_geometry_command_count: int = Field(alias="directGeometryCommandCount")
-    estimated_derived_source_bytes: int = Field(alias="estimatedDerivedSourceBytes")
+class RenderComplexityResponse(CamelModel):
+    expanded_instruction_node_count: int
+    expanded_occurrence_count: int
+    direct_geometry_command_count: int
+    estimated_derived_source_bytes: int
 
 
-class PlaybackBreadcrumbResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    occurrence_id: str = Field(alias="occurrenceId")
-    source_submodel_name: str = Field(alias="sourceSubmodelName")
+class PlaybackBreadcrumbResponse(CamelModel):
+    occurrence_id: str
+    source_submodel_name: str
 
 
-class PlaybackChildResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    occurrence_id: str = Field(alias="occurrenceId")
-    source_submodel_name: str = Field(alias="sourceSubmodelName")
-    attachment_step: int = Field(alias="attachmentStep")
-    traversal_order: int = Field(alias="traversalOrder")
-    repeated_definition_count: int = Field(alias="repeatedDefinitionCount")
-    repeated_definition_index: int = Field(alias="repeatedDefinitionIndex")
+class PlaybackChildResponse(CamelModel):
+    occurrence_id: str
+    source_submodel_name: str
+    attachment_step: int
+    traversal_order: int
+    repeated_definition_count: int
+    repeated_definition_index: int
 
 
-class PlaybackStepSummaryResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class PlaybackStepSummaryResponse(CamelModel):
     step: int
-    local_part_count: int = Field(alias="localPartCount")
-    child_attachment_count: int = Field(alias="childAttachmentCount")
-    direct_geometry_command_count: int = Field(alias="directGeometryCommandCount")
+    local_part_count: int
+    child_attachment_count: int
+    direct_geometry_command_count: int
 
 
-class InstructionPlaybackOccurrenceResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    model_id: uuid.UUID = Field(alias="modelId")
-    occurrence_id: str = Field(alias="occurrenceId")
-    parent_occurrence_id: str | None = Field(alias="parentOccurrenceId")
-    source_submodel_name: str = Field(alias="sourceSubmodelName")
-    attachment_step: int | None = Field(alias="attachmentStep")
+class InstructionPlaybackOccurrenceResponse(CamelModel):
+    model_id: uuid.UUID
+    occurrence_id: str
+    parent_occurrence_id: str | None
+    source_submodel_name: str
+    attachment_step: int | None
     depth: int
-    traversal_order: int = Field(alias="traversalOrder")
+    traversal_order: int
     breadcrumbs: list[PlaybackBreadcrumbResponse]
-    local_step_count: int = Field(alias="localStepCount")
-    current_step: int = Field(alias="currentStep")
-    previous_step: int | None = Field(alias="previousStep")
-    next_step: int | None = Field(alias="nextStep")
+    local_step_count: int
+    current_step: int
+    previous_step: int | None
+    next_step: int | None
     complete: bool
     empty: bool
-    repeated_definition_count: int = Field(alias="repeatedDefinitionCount")
-    repeated_definition_index: int = Field(alias="repeatedDefinitionIndex")
-    step_summary: PlaybackStepSummaryResponse = Field(alias="stepSummary")
+    repeated_definition_count: int
+    repeated_definition_index: int
+    step_summary: PlaybackStepSummaryResponse
     children: list[PlaybackChildResponse]
-    child_total: int = Field(alias="childTotal")
-    child_offset: int = Field(alias="childOffset")
-    child_limit: int = Field(alias="childLimit")
-    scene_source_url: str = Field(alias="sceneSourceUrl")
-    render_strategy: Literal["subtree", "local"] = Field(alias="renderStrategy")
-    recommended_render_strategy: Literal["subtree", "local"] = Field(
-        alias="recommendedRenderStrategy"
-    )
-    render_strategy_reason: str = Field(alias="renderStrategyReason")
+    child_total: int
+    child_offset: int
+    child_limit: int
+    scene_source_url: str
+    render_strategy: Literal["subtree", "local"]
+    recommended_render_strategy: Literal["subtree", "local"]
+    render_strategy_reason: str
     complexity: RenderComplexityResponse
 
 
-class BuildSceneResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class BuildSceneResponse(CamelModel):
     url: str
-    cache_key: str = Field(alias="cacheKey")
-    render_strategy: Literal["subtree", "local"] = Field(alias="renderStrategy")
+    cache_key: str
+    render_strategy: Literal["subtree", "local"]
     delivery: Literal["packed", "external"]
     complexity: RenderComplexityResponse
 
 
-class BuildStepPartResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    source_part_id: str = Field(alias="sourcePartId")
-    part_id: str = Field(alias="partId")
-    alias_applied: bool = Field(alias="aliasApplied")
-    instruction_node_ids: list[str] = Field(alias="instructionNodeIds")
-    part_name: str = Field(alias="partName")
-    color_code: int | None = Field(alias="colorCode")
-    color_name: str = Field(alias="colorName")
-    color_hex: str | None = Field(alias="colorHex")
-    quantity_this_step: int = Field(alias="quantityThisStep")
-    owned_quantity: int = Field(alias="ownedQuantity")
-    model_required_quantity: int = Field(alias="modelRequiredQuantity")
-    model_missing_quantity: int = Field(alias="modelMissingQuantity")
-    catalog_available: bool = Field(alias="catalogAvailable")
+class BuildStepPartResponse(CamelModel):
+    source_part_id: str
+    part_id: str
+    alias_applied: bool
+    instruction_node_ids: list[str]
+    part_name: str
+    color_code: int | None
+    color_name: str
+    color_hex: str | None
+    quantity_this_step: int
+    owned_quantity: int
+    model_required_quantity: int
+    model_missing_quantity: int
+    catalog_available: bool
 
 
-class BuildStepResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class BuildStepResponse(CamelModel):
     step: int
     parts: list[BuildStepPartResponse]
-    direct_geometry_command_count: int = Field(alias="directGeometryCommandCount")
+    direct_geometry_command_count: int
     attachments: list[PlaybackChildResponse]
 
 
-class BuildManifestResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    model_id: uuid.UUID = Field(alias="modelId")
-    model_name: str = Field(alias="modelName")
-    occurrence_id: str = Field(alias="occurrenceId")
-    parent_occurrence_id: str | None = Field(alias="parentOccurrenceId")
-    source_submodel_name: str = Field(alias="sourceSubmodelName")
-    attachment_step: int | None = Field(alias="attachmentStep")
+class BuildManifestResponse(CamelModel):
+    model_id: uuid.UUID
+    model_name: str
+    occurrence_id: str
+    parent_occurrence_id: str | None
+    source_submodel_name: str
+    attachment_step: int | None
     breadcrumbs: list[PlaybackBreadcrumbResponse]
-    repeated_definition_count: int = Field(alias="repeatedDefinitionCount")
-    repeated_definition_index: int = Field(alias="repeatedDefinitionIndex")
+    repeated_definition_count: int
+    repeated_definition_index: int
     scene: BuildSceneResponse
     steps: list[BuildStepResponse]
 

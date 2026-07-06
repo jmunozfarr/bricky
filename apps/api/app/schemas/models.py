@@ -3,115 +3,96 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
-
+from app.schemas import CamelModel
 from app.services.model_coverage import CoverageStatus
 
 
-class CoverageSummaryResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    total_required_quantity: int = Field(alias="totalRequiredQuantity")
-    total_available_quantity: int = Field(alias="totalAvailableQuantity")
-    total_missing_quantity: int = Field(alias="totalMissingQuantity")
-    unique_item_count: int = Field(alias="uniqueItemCount")
-    complete_item_count: int = Field(alias="completeItemCount")
-    partial_item_count: int = Field(alias="partialItemCount")
-    missing_item_count: int = Field(alias="missingItemCount")
-    piece_coverage_percentage: float = Field(alias="pieceCoveragePercentage")
-    fully_buildable: bool = Field(alias="fullyBuildable")
+class CoverageSummaryResponse(CamelModel):
+    total_required_quantity: int
+    total_available_quantity: int
+    total_missing_quantity: int
+    unique_item_count: int
+    complete_item_count: int
+    partial_item_count: int
+    missing_item_count: int
+    piece_coverage_percentage: float
+    fully_buildable: bool
 
 
-class ModelSummaryResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    model_id: uuid.UUID = Field(alias="modelId")
+class ModelSummaryResponse(CamelModel):
+    model_id: uuid.UUID
     name: str
-    original_filename: str = Field(alias="originalFilename")
-    source_format: str = Field(alias="sourceFormat")
-    import_status: str = Field(alias="importStatus")
-    declared_step_count: int = Field(alias="declaredStepCount")
-    total_part_quantity: int = Field(alias="totalPartQuantity")
-    unique_part_color_count: int = Field(alias="uniquePartColorCount")
-    unresolved_reference_count: int = Field(alias="unresolvedReferenceCount")
-    created_at: datetime = Field(alias="createdAt")
+    original_filename: str
+    source_format: str
+    import_status: str
+    declared_step_count: int
+    total_part_quantity: int
+    unique_part_color_count: int
+    unresolved_reference_count: int
+    created_at: datetime
     coverage: CoverageSummaryResponse | None = None
 
 
-class ModelsPageResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class ModelsPageResponse(CamelModel):
     items: list[ModelSummaryResponse]
     page: int
-    page_size: int = Field(alias="pageSize")
-    total_items: int = Field(alias="totalItems")
-    total_pages: int = Field(alias="totalPages")
+    page_size: int
+    total_items: int
+    total_pages: int
 
 
-class ModelBomItemResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    part_id: str = Field(alias="partId")
-    part_name: str = Field(alias="partName")
+class ModelBomItemResponse(CamelModel):
+    part_id: str
+    part_name: str
     category: str
-    color_code: int = Field(alias="colorCode")
-    color_name: str = Field(alias="colorName")
-    color_hex: str | None = Field(alias="colorHex")
+    color_code: int
+    color_name: str
+    color_hex: str | None
     quantity: int
-    catalog_available: bool = Field(alias="catalogAvailable")
-    render_asset_url: str | None = Field(alias="renderAssetUrl")
+    catalog_available: bool
+    render_asset_url: str | None
 
 
-class ModelIssueResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
+class ModelIssueResponse(CamelModel):
     severity: str
     code: str
     message: str
-    referenced_filename: str | None = Field(alias="referencedFilename")
+    referenced_filename: str | None
 
 
 class ModelDetailResponse(ModelSummaryResponse):
-    model_config = ConfigDict(populate_by_name=True)
-
-    source_sha256: str = Field(alias="sourceSha256")
-    source_url: str = Field(alias="sourceUrl")
-    updated_at: datetime = Field(alias="updatedAt")
+    source_sha256: str
+    source_url: str
+    updated_at: datetime
     bom: list[ModelBomItemResponse]
     issues: list[ModelIssueResponse]
 
 
-class ModelCoverageItemResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    part_id: str = Field(alias="partId")
-    part_name: str = Field(alias="partName")
+class ModelCoverageItemResponse(CamelModel):
+    part_id: str
+    part_name: str
     category: str
-    color_code: int = Field(alias="colorCode")
-    color_name: str = Field(alias="colorName")
-    color_hex: str | None = Field(alias="colorHex")
-    required_quantity: int = Field(alias="requiredQuantity")
-    owned_quantity: int = Field(alias="ownedQuantity")
-    available_quantity: int = Field(alias="availableQuantity")
-    missing_quantity: int = Field(alias="missingQuantity")
-    coverage_percentage: float = Field(alias="coveragePercentage")
+    color_code: int
+    color_name: str
+    color_hex: str | None
+    required_quantity: int
+    owned_quantity: int
+    available_quantity: int
+    missing_quantity: int
+    coverage_percentage: float
     status: CoverageStatus
-    catalog_available: bool = Field(alias="catalogAvailable")
-    render_asset_url: str | None = Field(alias="renderAssetUrl")
+    catalog_available: bool
+    render_asset_url: str | None
 
 
-class ModelCoverageResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    model_id: uuid.UUID = Field(alias="modelId")
+class ModelCoverageResponse(CamelModel):
+    model_id: uuid.UUID
     summary: CoverageSummaryResponse
     items: list[ModelCoverageItemResponse]
 
 
-class ModelsReadinessResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    total_models: int = Field(alias="totalModels")
-    fully_buildable_models: int = Field(alias="fullyBuildableModels")
-    incomplete_models: int = Field(alias="incompleteModels")
-    total_missing_quantity: int = Field(alias="totalMissingQuantity")
+class ModelsReadinessResponse(CamelModel):
+    total_models: int
+    fully_buildable_models: int
+    incomplete_models: int
+    total_missing_quantity: int
