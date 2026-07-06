@@ -176,6 +176,9 @@ export function disposeLDrawModel(model: Group): void {
     // Palette materials from worker-rebuilt scenes are shared across cached
     // scenes; disposing them would drop GPU state under the others.
     if (!isSharedLDrawMaterial(material)) {
+      // TEXMAP parts carry textures the material dispose does not release.
+      const textured = material as Material & { map?: { dispose(): void } | null };
+      textured.map?.dispose();
       material.dispose();
     }
   });

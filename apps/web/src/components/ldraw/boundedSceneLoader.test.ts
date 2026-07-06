@@ -53,6 +53,39 @@ describe("bounded instruction scene loader", () => {
     expect(disposed).toEqual(["scene-a"]);
   });
 
+  it("settles a cancel-then-rerequest of the same key instead of sticking (A5)", async () => {
+    const loads: { key: string; result: Deferred<string> }[] = [];
+    const disposed: string[] = [];
+    const loader = new LatestScopeLoader<string, string>(
+      3,
+      async (key) => {
+        const result = deferred<string>();
+        loads.push({ key, result });
+        return result.promise;
+      },
+      (value) => disposed.push(value),
+    );
+    loader.setNamespace("model");
+
+    // Unmount/remount (StrictMode shape): the first requester cancels, then
+    // a fresh requester asks for the same key while the old parse is still
+    // in flight. The new request must not join the stale task.
+    const first = loader.request("a", "a");
+    loader.cancel("a");
+    const second = loader.request("a", "a");
+    const firstResult = expect(first).rejects.toBeInstanceOf(ScopeLoadSupersededError);
+
+    // The uncancellable stale parse eventually settles; its result is
+    // disposed and the fresh request re-parses and resolves.
+    loads[0]!.result.resolve("scene-a-stale");
+    await firstResult;
+    await vi.waitFor(() => expect(loads).toHaveLength(2));
+    loads[1]!.result.resolve("scene-a-fresh");
+
+    await expect(second).resolves.toBe("scene-a-fresh");
+    expect(disposed).toEqual(["scene-a-stale"]);
+  });
+
   it("reuses successful scenes and evicts least-recently-used entries", async () => {
     const load = vi.fn((key: string) => Promise.resolve(`scene-${key}`));
     const dispose = vi.fn<(value: string) => void>();
