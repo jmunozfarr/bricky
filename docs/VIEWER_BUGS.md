@@ -223,5 +223,19 @@ fewer, geometry-heavy parts — stays smooth. DPR regression alone
   Groups. Measured on 3450's full build (headless software WebGL, so
   pessimistic): worst rotation stall 15.2 s → 1.2 s; on GPU hardware the
   draw-call reduction is the dominant win.
-- Real fixes (open): three.js upgrade, then merged/batched static
-  geometry for as-built scenes.
+- Fix for the static case (`inspectMergedView.ts`): inspect mode swaps in
+  a merged twin of the scene's meshes — transforms baked into geometry,
+  one mesh per distinct material — built lazily on first use (3450:
+  2 874 parts → 3 meshes, 4.3 M vertices, 234 ms build) and cached as a
+  child of the scene, so LRU disposal covers it. Only meshes are merged
+  and only Mesh visibility is toggled: Groups stay with the presentation
+  controller, LineSegments with AdaptiveViewerLines, keeping per-part
+  edge/conditional lines for at-rest quality. Note the software-WebGL e2e
+  environment cannot demonstrate the win — SwiftShader is vertex-bound
+  and per-part frustum culling is lost — but real GPUs are draw-call
+  bound, which is exactly what the user reported. Correctness verified in
+  the browser: full-color merged inspect view, per-part step playback
+  restored on mode exit.
+- Still open for step playback (build mode at high steps): three.js
+  upgrade when a newer release lands; possibly BatchedMesh with
+  per-instance visibility if per-part draw calls remain the bottleneck.
