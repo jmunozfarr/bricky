@@ -22,8 +22,8 @@ misleading rendering/state; **P3** cosmetic or recoverable annoyance.
 Collected 2026-07-02. All four were root-caused in code review rather than by
 timing measurements, so each fix ships with a regression test that fails on
 the pre-fix code. Field-confirmed 2026-07-06 on the user's hardware: the UCS
-Falcon builds fully and rotates smoothly with zero lag (Brave/Chromium;
-Firefox check pending on their side).
+Falcon builds fully and rotates smoothly with zero lag (Brave/Chromium
+and Firefox).
 
 | ID | Symptom | Priority | Status | Fixture | Falcon | Browsers | Repro steps |
 | --- | --- | --- | --- | --- | --- | --- | --- |
