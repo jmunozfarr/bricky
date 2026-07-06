@@ -50,7 +50,7 @@ either promote to a reproduced bug or mark not-reproduced with evidence.
 | A5 | Stale or stuck `refreshing` state on supersession | `boundedSceneLoader.ts` (`LatestScopeLoader`) | — | reported |
 | A6 | Color-16 material override (`getMaterial("4")` hack) wrong across models and themes | `LDrawModel.tsx` | — | reported |
 | A7 | Step-visibility edge cases: hierarchical presentation vs flattened `buildingSteps` fallback; ghosting on repeated submodel occurrences | `hierarchicalPlayback.ts`, `buildingSteps.ts`, `instructionPresentation.ts` | — | reported |
-| A8 | `subtree`/`local` strategy transitions surface HTTP 409 `scope_complexity_limit` as raw errors in the UI | viewer loaders / `VisualBuilderPage` | — | reported |
+| A8 | `subtree`/`local` strategy transitions surface HTTP 409 `scope_complexity_limit` as raw errors in the UI; scene-load failures showed an indefinite loading state (seen in B7) | viewer loaders / `VisualBuilderPage` | — | resolved — the 409 is unreachable (the client only requests recommended strategies; unavailable playback is guarded at bootstrap with a fallback message), and failed scene loads now reject into the error-with-retry state via the worker protocol and scene-index validation (~1.5 s on both failure shapes tried); regression-tested in `e2e/builder.spec.ts` |
 
 ## Reproduction notes
 

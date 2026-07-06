@@ -18,14 +18,33 @@ const SYNTHETIC_MPD = [
   "",
 ].join("\n");
 
-async function importSyntheticModel(request: APIRequestContext): Promise<string> {
+// An embedded custom part whose subpart exists nowhere: the scene source
+// parses, but the derived scene cannot be assembled (B7's failure shape).
+const BROKEN_SYNTHETIC_MPD = [
+  "0 FILE main.ldr",
+  "0 Name: main.ldr",
+  "1 4 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat",
+  "0 STEP",
+  "1 71 0 -24 0 1 0 0 0 1 0 0 0 1 custom-broken.dat",
+  "0 FILE custom-broken.dat",
+  "0 !LDRAW_ORG Unofficial_Part",
+  "1 16 0 0 0 1 0 0 0 1 0 0 0 1 s\\e2e-missing-subpart.dat",
+  "0 NOFILE",
+  "",
+].join("\n");
+
+async function importSyntheticModel(
+  request: APIRequestContext,
+  name = "e2e-builder-smoke",
+  content = SYNTHETIC_MPD,
+): Promise<string> {
   const imported = await request.post("/api/models", {
     multipart: {
-      name: "e2e-builder-smoke",
+      name,
       file: {
-        name: "e2e-builder-smoke.mpd",
+        name: `${name}.mpd`,
         mimeType: "text/plain",
-        buffer: Buffer.from(SYNTHETIC_MPD),
+        buffer: Buffer.from(content),
       },
     },
   });
@@ -117,6 +136,32 @@ test("guides a build task with step transport and camera interaction", async ({
     await page.getByRole("button", { name: "Open build task" }).click();
     await expect(page.getByText("of 2")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
+  } finally {
+    await request.delete(`/api/models/${modelId}`);
+  }
+});
+
+test("surfaces a scene that cannot be assembled as an error with retry", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium-desktop",
+    "The builder flow runs once in Chromium.",
+  );
+  const library = await request.get("/api/ldraw/LDConfig.ldr");
+  test.skip(!library.ok(), "The builder flow requires an installed LDraw library.");
+  const models = await request.get("/api/models?page=1");
+  test.skip(!models.ok(), "The builder flow requires a migrated database.");
+
+  const modelId = await importSyntheticModel(request, "e2e-builder-broken", BROKEN_SYNTHETIC_MPD);
+  try {
+    await page.goto(`/models/${modelId}/build`);
+    // A failed scene load must reject into the error state — never an
+    // indefinite "Preparing 3D scene" (audit suspect A8, seen as B7's hang).
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("Unable to prepare this assembly", { timeout: 30_000 });
+    await expect(alert.getByRole("button", { name: "Try again" })).toBeVisible();
   } finally {
     await request.delete(`/api/models/${modelId}`);
   }
