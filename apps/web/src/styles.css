@@ -1645,6 +1645,80 @@ h1 {
   margin-top: 0.5rem;
 }
 
+.viewer-loading-bricks {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: center;
+  justify-self: center;
+  padding-top: 0.45rem;
+  margin-bottom: 0.4rem;
+}
+
+.viewer-loading-bricks span {
+  position: relative;
+  width: 1.35rem;
+  height: 0.8rem;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  animation: viewer-brick-place 2.2s ease-out infinite;
+}
+
+/* Two studs on top of each brick. */
+.viewer-loading-bricks span::before {
+  content: "";
+  position: absolute;
+  top: -0.24rem;
+  left: 0.17rem;
+  width: 0.36rem;
+  height: 0.24rem;
+  border-radius: 2px 2px 0 0;
+  background: inherit;
+  box-shadow: 0.65rem 0 0 var(--accent);
+}
+
+.viewer-loading-bricks span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.viewer-loading-bricks span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+.viewer-loading-bricks span:nth-child(4) {
+  animation-delay: 0.48s;
+}
+
+.viewer-loading-bricks span:nth-child(5) {
+  animation-delay: 0.64s;
+}
+
+@keyframes viewer-brick-place {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.9rem);
+  }
+
+  14%,
+  72% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  86%,
+  100% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-loading-bricks span {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 .viewer-progress-badge {
   position: absolute;
   z-index: 4;
