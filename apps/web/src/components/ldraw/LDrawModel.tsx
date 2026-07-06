@@ -5,6 +5,7 @@ import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
 
 import { applyBuildingStepVisibility } from "./buildingSteps";
 import { LatestScopeLoader, ScopeLoadSupersededError } from "./boundedSceneLoader";
+import { activateInspectMergedView, restoreInspectMergedView } from "./inspectMergedView";
 import { createLDrawLoader, prepareOfficialLoader } from "./ldrawLoaderSetup";
 import {
   isSharedLDrawMaterial,
@@ -314,9 +315,16 @@ export function HierarchicalLDrawModel({
     [model, sceneIndex],
   );
   useLayoutEffect(() => {
+    // Ordering matters: restore per-part visibility first so the controller
+    // classifies from a clean slate (its first apply also normalizes group
+    // visibility), then swap in the merged twin for the static inspect view.
+    restoreInspectMergedView(model);
     presentation.apply(activeOccurrenceId, selectedStep, presentationMode);
+    if (presentationMode === "inspect") {
+      activateInspectMergedView(model);
+    }
     invalidate();
-  }, [activeOccurrenceId, invalidate, presentation, presentationMode, selectedStep]);
+  }, [activeOccurrenceId, invalidate, model, presentation, presentationMode, selectedStep]);
 
   useEffect(() => () => presentation.dispose(), [presentation]);
 
