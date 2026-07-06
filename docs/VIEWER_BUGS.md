@@ -43,7 +43,7 @@ either promote to a reproduced bug or mark not-reproduced with evidence.
 
 | ID | Suspect | Where | Priority | Status |
 | --- | --- | --- | --- | --- |
-| A1 | Camera refit/orbit misbehaves on occurrence and step changes (fit semantics, damping responsiveness) | `ViewerCamera.tsx` | — | partially fixed — the responsiveness half was B2; fit semantics still unverified |
+| A1 | Camera refit/orbit misbehaves on occurrence and step changes (fit semantics, damping responsiveness) | `ViewerCamera.tsx` | — | fixed — the responsiveness half was B2; the fit half framed full-model bounds (invisible children included), leaving early steps tiny; fits now frame visible geometry only (`viewerFit.ts`), step changes never move the camera |
 | A2 | Shared-state mutation of LRU-cached scenes: `model.rotation.x = Math.PI` applied to cached `Group` instances; mount/detach ordering | `LDrawModel.tsx`, `instructionSceneMount.ts` | — | reported |
 | A3 | Incomplete disposal in `disposeLDrawModel` (textures, conditional-line materials); memory growth across repeated occurrence navigation | `LDrawModel.tsx` | — | reported |
 | A4 | WebGL context-loss recovery races: canvas remount vs the persistent `sceneHost` group | `WebGlLifecycle.tsx` | — | reported |
