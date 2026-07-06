@@ -81,9 +81,9 @@ class ModelsRouterContext:
         try:
             return parse_playback_data(
                 model.source_sha256,
-                source_path.read_bytes(),
                 model.original_filename,
                 self.graph_limits,
+                source_path.read_bytes,
             )
         except ModelParseError as error:
             raise HTTPException(

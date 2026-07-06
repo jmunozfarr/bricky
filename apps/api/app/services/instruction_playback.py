@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import base64
-from collections import Counter, defaultdict
+import threading
+from collections import Counter, OrderedDict, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Literal
 
 from app.services.instruction_graph import (
@@ -191,23 +192,45 @@ def build_playback_data(graph: InstructionGraph) -> PlaybackData:
     )
 
 
-@lru_cache(maxsize=8)
+_PLAYBACK_CACHE_SIZE = 8
+_PLAYBACK_CACHE_LOCK = threading.Lock()
+_PLAYBACK_CACHE: OrderedDict[tuple[str, str, InstructionGraphLimits], PlaybackData] = OrderedDict()
+
+
 def parse_playback_data(
     source_sha256: str,
-    content: bytes,
     source_name: str,
     limits: InstructionGraphLimits,
+    load_content: Callable[[], bytes],
 ) -> PlaybackData:
-    """Cache immutable parsed playback data by the imported source identity."""
+    """Cache immutable parsed playback data by the imported source identity.
 
-    del source_sha256
-    return build_playback_data(
-        parse_instruction_graph(content, source_name=source_name, limits=limits)
+    Keyed by the source hash so cache hits never read or re-hash the model
+    bytes; `load_content` runs only on a miss. Parsing happens outside the
+    lock — two concurrent first requests may parse twice, which beats
+    serializing every playback lookup behind one large parse.
+    """
+
+    key = (source_sha256, source_name, limits)
+    with _PLAYBACK_CACHE_LOCK:
+        cached = _PLAYBACK_CACHE.get(key)
+        if cached is not None:
+            _PLAYBACK_CACHE.move_to_end(key)
+            return cached
+    data = build_playback_data(
+        parse_instruction_graph(load_content(), source_name=source_name, limits=limits)
     )
+    with _PLAYBACK_CACHE_LOCK:
+        _PLAYBACK_CACHE[key] = data
+        _PLAYBACK_CACHE.move_to_end(key)
+        while len(_PLAYBACK_CACHE) > _PLAYBACK_CACHE_SIZE:
+            _PLAYBACK_CACHE.popitem(last=False)
+    return data
 
 
 def clear_playback_cache() -> None:
-    parse_playback_data.cache_clear()
+    with _PLAYBACK_CACHE_LOCK:
+        _PLAYBACK_CACHE.clear()
 
 
 def playback_breadcrumbs(data: PlaybackData, occurrence_id: str) -> tuple[PlaybackBreadcrumb, ...]:
