@@ -37,7 +37,58 @@ function partEntry(step: number) {
   return { group, fill, edge, entry };
 }
 
+function occurrenceEntry(occurrenceId: string, attachmentStep: number) {
+  const group = new Group();
+  const fill = new MeshBasicMaterial({ color: "#996633" });
+  const edge = new LineBasicMaterial({ color: "#111111" });
+  group.add(new Mesh(new BufferGeometry(), fill));
+  group.add(new LineSegments(new BufferGeometry(), edge));
+  const entry: SceneIndexEntry = {
+    kind: "occurrence",
+    occurrenceId,
+    parentOccurrenceId: "occ-000001",
+    localStep: null,
+    attachmentStep,
+    definitionName: "wing.ldr",
+    instructionNodeId: null,
+    traversalPosition: attachmentStep,
+    group,
+  };
+  return { group, fill, edge, entry };
+}
+
 describe("instruction scene presentation", () => {
+  it("presents repeated placements of one definition independently (A7)", () => {
+    const model = new Group();
+    // Two occurrences of the same submodel definition, attached at
+    // different parent steps — they must never share presentation state.
+    const early = occurrenceEntry("occ-000002", 1);
+    const late = occurrenceEntry("occ-000003", 2);
+    model.add(early.group, late.group);
+    const index: InstructionSceneIndex = {
+      rootOccurrenceId: "occ-000001",
+      entries: [early.entry, late.entry],
+      objectCount: 6,
+    };
+    const presentation = new InstructionPresentationController(model, index);
+
+    presentation.apply("occ-000001", 1, "focus");
+    expect(early.group.visible).toBe(true);
+    expect(late.group.visible).toBe(false);
+    // The step-1 placement is current: accent edges, original fill.
+    expect((early.group.children[1] as LineSegments).material).not.toBe(early.edge);
+    expect((early.group.children[0] as Mesh).material).toBe(early.fill);
+
+    presentation.apply("occ-000001", 2, "focus");
+    expect(late.group.visible).toBe(true);
+    // The step-1 placement ghosts while its twin definition is current.
+    const ghost = (early.group.children[0] as Mesh).material as MeshBasicMaterial;
+    expect(ghost).not.toBe(early.fill);
+    expect(ghost.opacity).toBe(GHOST_OPACITY);
+    expect((late.group.children[0] as Mesh).material).toBe(late.fill);
+    expect((late.group.children[1] as LineSegments).material).not.toBe(late.edge);
+  });
+
   it("ghosts previous parts, accents current edges, and hides future parts", () => {
     const model = new Group();
     const first = partEntry(1);

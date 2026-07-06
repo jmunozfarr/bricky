@@ -141,6 +141,60 @@ test("guides a build task with step transport and camera interaction", async ({
   }
 });
 
+test("recovers builder scene and playback after WebGL context loss", async ({
+  page,
+  request,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium-desktop",
+    "WebGL recovery runs once in Chromium.",
+  );
+  const library = await request.get("/api/ldraw/LDConfig.ldr");
+  test.skip(!library.ok(), "The builder flow requires an installed LDraw library.");
+  const models = await request.get("/api/models?page=1");
+  test.skip(!models.ok(), "The builder flow requires a migrated database.");
+
+  // A distinct model per test: imports dedupe by content hash, so sharing
+  // one would let a parallel test's cleanup delete it mid-run.
+  const modelId = await importSyntheticModel(
+    request,
+    "e2e-builder-webgl",
+    SYNTHETIC_MPD.replace("0 Name: main.ldr", "0 Name: main.ldr\n0 // e2e-builder-webgl variant"),
+  );
+  try {
+    await page.goto(`/models/${modelId}/build`);
+    await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
+    await expect(page.locator(".viewer-message")).toBeHidden({ timeout: 20_000 });
+
+    const supported = await page
+      .locator(".builder-viewport canvas")
+      .evaluate((canvas: HTMLCanvasElement) => {
+        const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+        const extension = gl?.getExtension("WEBGL_lose_context");
+        if (!extension) return false;
+        extension.loseContext();
+        window.setTimeout(() => extension.restoreContext(), 300);
+        return true;
+      });
+    test.skip(!supported, "The browser does not expose WEBGL_lose_context.");
+
+    await expect(page.getByText("The 3D graphics context was interrupted.")).toBeVisible();
+    await expect(page.getByText("The 3D graphics context was interrupted.")).toBeHidden({
+      timeout: 5_000,
+    });
+
+    // The persistent scene host must reattach to the remounted canvas and
+    // step playback must keep working (audit suspect A4).
+    await page.getByRole("button", { name: "Next" }).click();
+    await expect(page.getByRole("heading", { name: "Step 2" })).toBeVisible();
+    await page.waitForTimeout(300);
+    const frame = await page.locator(".builder-viewport canvas").screenshot();
+    expect(frame.byteLength).toBeGreaterThan(0);
+  } finally {
+    await request.delete(`/api/models/${modelId}`);
+  }
+});
+
 test("surfaces a scene that cannot be assembled as an error with retry", async ({
   page,
   request,
