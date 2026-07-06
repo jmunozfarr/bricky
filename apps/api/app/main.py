@@ -8,11 +8,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 
+from app.api import create_models_router
 from app.catalog_api import create_catalog_router
 from app.core.config import get_settings
 from app.database import get_session_factory
 from app.inventory_api import create_inventory_router
-from app.models_api import create_models_router
 from app.services.instruction_graph import InstructionGraphLimits
 from app.services.instruction_playback import RenderComplexityLimits
 from app.services.ldraw_library import get_library_status
