@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Literal
 from urllib.parse import quote
 
-from sqlalchemy import select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.models import ImportedModel, InventoryItem, LDrawColor, ModelBomItem, Part
@@ -33,7 +33,8 @@ from app.services.instruction_playback import (
     playback_breadcrumbs,
     select_render_strategy,
 )
-from app.services.ldraw_aliases import LDrawMovedAliasResolver, OfficialPartRecord
+from app.services.ldraw_aliases import OfficialPartRecord, cached_moved_alias_resolver
+from app.services.ldraw_library import get_library_status
 from app.services.ldraw_pack import LDrawPackError, LDrawPackLimitError, PackedLDrawSource
 from app.services.local_workspace import resolve_local_workspace
 from app.services.model_coverage import (
@@ -82,24 +83,38 @@ def assemble_build_manifest(
     color_codes = sorted(
         {node.effective_color for node in part_nodes if node.effective_color is not None}
     )
-    official_parts = list(session.scalars(select(Part).where(Part.is_subpart.is_(False))))
-    alias_resolver = LDrawMovedAliasResolver(
-        library_root,
-        [
+    fingerprint = get_library_status(library_root).archive_sha256 or "unversioned-library"
+
+    def load_official_records() -> list[OfficialPartRecord]:
+        return [
             OfficialPartRecord(
                 part_id=part.part_id,
                 description=part.name,
                 relative_path=part.relative_path,
             )
-            for part in official_parts
-        ],
-    )
+            for part in session.scalars(select(Part).where(Part.is_subpart.is_(False)))
+        ]
+
+    alias_resolver = cached_moved_alias_resolver(library_root, fingerprint, load_official_records)
     alias_resolutions = alias_resolver.resolve_many(set(source_part_ids))
     canonical_by_source = {
         source_id: (resolution.canonical_part_id if resolution.status == "resolved" else source_id)
         for source_id, resolution in alias_resolutions.items()
     }
-    catalog_parts = {normalize_part_id(part.part_id): part for part in official_parts}
+    referenced_part_ids = sorted(
+        {normalize_part_id(part_id) for part_id in source_part_ids}
+        | {normalize_part_id(part_id) for part_id in canonical_by_source.values()}
+    )
+    catalog_parts = (
+        {
+            normalize_part_id(part.part_id): part
+            for part in session.scalars(
+                select(Part).where(func.lower(Part.part_id).in_(referenced_part_ids))
+            )
+        }
+        if referenced_part_ids
+        else {}
+    )
     colors = {
         color.code: color
         for color in session.scalars(select(LDrawColor).where(LDrawColor.code.in_(color_codes)))
@@ -117,16 +132,38 @@ def assemble_build_manifest(
     coverage_by_key = {
         (normalize_part_id(item.part_id), item.color_code): item for item in coverage.items
     }
-    raw_inventory = {
-        (normalize_part_id(part_id), color_code): quantity
-        for part_id, color_code, quantity in session.execute(
-            select(
-                InventoryItem.part_id,
-                InventoryItem.color_code,
-                InventoryItem.quantity,
-            ).where(InventoryItem.workspace_id == workspace.id)
-        )
-    }
+    inventory_keys = sorted(
+        {
+            (candidate, node.effective_color)
+            for node in part_nodes
+            if node.effective_color is not None
+            for source_id in (source_part_id(node.source_filename),)
+            for candidate in {
+                normalize_part_id(source_id),
+                normalize_part_id(canonical_by_source.get(source_id, source_id)),
+            }
+        }
+    )
+    raw_inventory = (
+        {
+            (normalize_part_id(part_id), color_code): quantity
+            for part_id, color_code, quantity in session.execute(
+                select(
+                    InventoryItem.part_id,
+                    InventoryItem.color_code,
+                    InventoryItem.quantity,
+                ).where(
+                    InventoryItem.workspace_id == workspace.id,
+                    tuple_(
+                        func.lower(func.trim(InventoryItem.part_id)),
+                        InventoryItem.color_code,
+                    ).in_(inventory_keys),
+                )
+            )
+        }
+        if inventory_keys
+        else {}
+    )
 
     children_by_step: dict[int, list[PlaybackChildResponse]] = {}
     for child_id in occurrence.child_occurrence_ids:
