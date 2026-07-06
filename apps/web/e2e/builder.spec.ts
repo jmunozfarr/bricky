@@ -147,14 +147,8 @@ test("guides a build task with step transport and camera interaction", async ({
   }
 });
 
-test("step transitions issue no scene or library requests", async ({
-  page,
-  request,
-}, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "chromium-desktop",
-    "The perf smoke runs once in Chromium.",
-  );
+test("step transitions issue no scene or library requests", async ({ page, request }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "The perf smoke runs once in Chromium.");
   const library = await request.get("/api/ldraw/LDConfig.ldr");
   test.skip(!library.ok(), "The builder flow requires an installed LDraw library.");
   const models = await request.get("/api/models?page=1");
@@ -201,10 +195,7 @@ test("recovers builder scene and playback after WebGL context loss", async ({
   page,
   request,
 }, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "chromium-desktop",
-    "WebGL recovery runs once in Chromium.",
-  );
+  test.skip(testInfo.project.name !== "chromium-desktop", "WebGL recovery runs once in Chromium.");
   const library = await request.get("/api/ldraw/LDConfig.ldr");
   test.skip(!library.ok(), "The builder flow requires an installed LDraw library.");
   const models = await request.get("/api/models?page=1");
