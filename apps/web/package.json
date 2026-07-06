@@ -12,10 +12,13 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run --exclude 'e2e/**'",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "generate:api": "openapi-typescript http://api:8000/openapi.json -o src/api/generated/openapi.d.ts",
+    "check:api-types": "openapi-typescript http://api:8000/openapi.json -o /tmp/openapi-check.d.ts && diff -q /tmp/openapi-check.d.ts src/api/generated/openapi.d.ts || (echo \"Generated API types drifted from the running schema; run npm run generate:api\" && exit 1)"
   },
   "dependencies": {
     "@react-three/fiber": "9.6.1",
+    "@tanstack/react-query": "5.101.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "react-router-dom": "7.18.1",
@@ -39,6 +42,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.7.0",
     "jsdom": "29.1.1",
+    "openapi-typescript": "7.13.0",
     "prettier": "3.9.4",
     "typescript": "5.9.3",
     "typescript-eslint": "8.62.1",
