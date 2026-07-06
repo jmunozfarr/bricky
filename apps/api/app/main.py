@@ -1,33 +1,21 @@
-import os
 from collections.abc import Iterator
 from pathlib import Path
 
-import psycopg
 from fastapi import FastAPI
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import StaticFiles
 
 from app.catalog_api import create_catalog_router
-from app.database import SessionFactory
+from app.core.config import get_settings
+from app.database import get_session_factory
 from app.inventory_api import create_inventory_router
 from app.models_api import create_models_router
-from app.services.instruction_graph import (
-    DEFAULT_MAX_EXPANDED_OCCURRENCES,
-    DEFAULT_MAX_INSTRUCTION_NODES,
-    DEFAULT_MAX_NESTING_DEPTH,
-    InstructionGraphLimits,
-)
-from app.services.instruction_playback import (
-    DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES,
-    DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS,
-    DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES,
-    DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES,
-    RenderComplexityLimits,
-)
+from app.services.instruction_graph import InstructionGraphLimits
+from app.services.instruction_playback import RenderComplexityLimits
 from app.services.ldraw_library import get_library_status
-from app.services.model_import import DEFAULT_MAX_UPLOAD_BYTES
 
 
 class HealthResponse(BaseModel):
@@ -62,60 +50,18 @@ def create_app(
     instruction_graph_limits: InstructionGraphLimits | None = None,
     render_complexity_limits: RenderComplexityLimits | None = None,
 ) -> FastAPI:
-    resolved_library_root = library_root or Path(
-        os.environ.get("LDRAW_LIBRARY_ROOT", "/data/ldraw/official")
-    )
+    settings = get_settings()
+    resolved_library_root = library_root or settings.ldraw_library_root
     application = FastAPI(title="Bricky API")
     application.add_middleware(GZipMiddleware, minimum_size=1_024)
-    active_session_factory = session_factory or SessionFactory
-    resolved_model_storage_root = model_storage_root or Path(
-        os.environ.get("MODEL_STORAGE_ROOT", "/data/models")
+    active_session_factory = session_factory or get_session_factory()
+    resolved_model_storage_root = model_storage_root or settings.model_storage_root
+    resolved_model_max_upload_bytes = model_max_upload_bytes or settings.model_max_upload_bytes
+    resolved_instruction_graph_limits = (
+        instruction_graph_limits or settings.instruction_graph_limits()
     )
-    resolved_model_max_upload_bytes = model_max_upload_bytes or int(
-        os.environ.get("MODEL_MAX_UPLOAD_BYTES", str(DEFAULT_MAX_UPLOAD_BYTES))
-    )
-    resolved_instruction_graph_limits = instruction_graph_limits or InstructionGraphLimits(
-        max_nesting_depth=int(
-            os.environ.get("INSTRUCTION_GRAPH_MAX_NESTING_DEPTH", str(DEFAULT_MAX_NESTING_DEPTH))
-        ),
-        max_expanded_occurrences=int(
-            os.environ.get(
-                "INSTRUCTION_GRAPH_MAX_EXPANDED_OCCURRENCES",
-                str(DEFAULT_MAX_EXPANDED_OCCURRENCES),
-            )
-        ),
-        max_instruction_nodes=int(
-            os.environ.get(
-                "INSTRUCTION_GRAPH_MAX_INSTRUCTION_NODES",
-                str(DEFAULT_MAX_INSTRUCTION_NODES),
-            )
-        ),
-    )
-    resolved_render_complexity_limits = render_complexity_limits or RenderComplexityLimits(
-        max_expanded_instruction_nodes=int(
-            os.environ.get(
-                "RENDER_MAX_EXPANDED_INSTRUCTION_NODES",
-                str(DEFAULT_RENDER_MAX_EXPANDED_INSTRUCTION_NODES),
-            )
-        ),
-        max_expanded_occurrences=int(
-            os.environ.get(
-                "RENDER_MAX_EXPANDED_OCCURRENCES",
-                str(DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES),
-            )
-        ),
-        max_direct_geometry_commands=int(
-            os.environ.get(
-                "RENDER_MAX_DIRECT_GEOMETRY_COMMANDS",
-                str(DEFAULT_RENDER_MAX_DIRECT_GEOMETRY_COMMANDS),
-            )
-        ),
-        max_derived_source_bytes=int(
-            os.environ.get(
-                "RENDER_MAX_DERIVED_SOURCE_BYTES",
-                str(DEFAULT_RENDER_MAX_DERIVED_SOURCE_BYTES),
-            )
-        ),
+    resolved_render_complexity_limits = (
+        render_complexity_limits or settings.render_complexity_limits()
     )
 
     def catalog_session() -> Iterator[Session]:
@@ -124,16 +70,13 @@ def create_app(
 
     @application.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
-        database_url = os.environ["DATABASE_URL"]
+        # Checks through the application's own session factory, so it
+        # exercises the pooled SQLAlchemy engine instead of opening a fresh
+        # database connection per probe.
+        with active_session_factory() as session:
+            result = session.execute(text("SELECT 1")).scalar_one()
 
-        with (
-            psycopg.connect(database_url, connect_timeout=3) as connection,
-            connection.cursor() as cursor,
-        ):
-            cursor.execute("SELECT 1")
-            result = cursor.fetchone()
-
-        if result != (1,):
+        if result != 1:
             raise RuntimeError("PostgreSQL health query returned an unexpected result")
 
         return HealthResponse(status="ok", database="ok")
