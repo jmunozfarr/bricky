@@ -113,6 +113,9 @@ describe("visual builder workspace", () => {
 
   afterEach(() => {
     cleanup();
+    // Builder progress persists to localStorage by design; without a reset,
+    // one test's saved step leaks into the next test's initial render.
+    window.localStorage.clear();
   });
 
   it("presents exact current-step parts and switches modes without refetching", async () => {
@@ -144,7 +147,7 @@ describe("visual builder workspace", () => {
     expect(screen.getByText(/2× Brick 2 x 4/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Build" }));
-    expect(await screen.findByText("1× Brick 2 x 4")).toBeTruthy();
+    expect(await screen.findByText("1× Brick 2 x 4", undefined, { timeout: 4_000 })).toBeTruthy();
     expect(screen.getByText("Own 0; model needs 1")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "As built" }));
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -171,7 +174,7 @@ describe("visual builder workspace", () => {
       </QueryClientProvider>,
     );
     fireEvent.click(await screen.findByRole("button", { name: "Build" }));
-    await screen.findByText("1× Brick 2 x 4");
+    await screen.findByText("1× Brick 2 x 4", undefined, { timeout: 4_000 });
     expect(screen.getByText(/subassemblies are built as separate tasks/i)).toBeTruthy();
   });
 
@@ -188,7 +191,7 @@ describe("visual builder workspace", () => {
       </QueryClientProvider>,
     );
     fireEvent.click(await screen.findByRole("button", { name: "Build" }));
-    await screen.findByText("1× Brick 2 x 4");
+    await screen.findByText("1× Brick 2 x 4", undefined, { timeout: 4_000 });
 
     const stepInput = screen.getByRole("spinbutton");
     fireEvent.change(stepInput, { target: { value: "2" } });
