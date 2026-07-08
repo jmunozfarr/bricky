@@ -41,6 +41,19 @@ type ManifestState =
 
 type WorkspaceMode = "build" | "inspect";
 
+/** Fullscreen interface density: everything, step arrows only, or nothing. */
+type OverlayMode = "full" | "minimal" | "hidden";
+
+const OVERLAY_TOGGLE_LABEL: Record<OverlayMode, string> = {
+  full: "Minimal interface",
+  minimal: "Hide interface",
+  hidden: "Show interface",
+};
+
+function nextOverlayMode(mode: OverlayMode): OverlayMode {
+  return mode === "full" ? "minimal" : mode === "minimal" ? "hidden" : "full";
+}
+
 export default function VisualBuilderPage() {
   const { modelId = "" } = useParams();
   const [activeOccurrenceId, setActiveOccurrenceId] = useState<string | null>(null);
@@ -216,15 +229,25 @@ function BuilderWorkspace({
     kind: "fit",
     preset: "isometric",
   });
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [overlayMode, setOverlayMode] = useState<OverlayMode>("full");
+
+  useEffect(() => {
+    const update = () => {
+      const active = document.fullscreenElement === workspaceRef.current;
+      setIsFullscreen(active);
+      if (!active) setOverlayMode("full");
+    };
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
   const parentOccurrenceId = manifest.parentOccurrenceId;
 
   function issueCameraCommand(command: CameraCommandInput) {
     setCameraCommand((current) => ({ ...command, id: current.id + 1 }));
   }
 
-  function handleShortcut(event: KeyboardEvent<HTMLElement>) {
-    if (isEditableShortcutTarget(event.target)) return;
-    const key = event.key.toLowerCase();
+  function runShortcut(key: string): boolean {
     if (key === "arrowleft") onStepChange(selectedStep - 1);
     else if (key === "arrowright") onStepChange(selectedStep + 1);
     else if (key === "home") onStepChange(1);
@@ -233,9 +256,30 @@ function BuilderWorkspace({
     else if (key === "2") issueCameraCommand({ kind: "fit", preset: "front" });
     else if (key === "3") issueCameraCommand({ kind: "fit", preset: "right" });
     else if (key === "4") issueCameraCommand({ kind: "fit", preset: "top" });
-    else return;
-    event.preventDefault();
+    else if (key === "h" && isFullscreen) setOverlayMode(nextOverlayMode(overlayMode));
+    else return false;
+    return true;
   }
+
+  function handleShortcut(event: KeyboardEvent<HTMLElement>) {
+    // In fullscreen the document-level listener owns the shortcuts: hiding
+    // overlays drops focus to the body, where section events never arrive.
+    if (isFullscreen) return;
+    if (isEditableShortcutTarget(event.target)) return;
+    if (runShortcut(event.key.toLowerCase())) event.preventDefault();
+  }
+
+  const shortcutRef = useRef(runShortcut);
+  shortcutRef.current = runShortcut;
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (event: globalThis.KeyboardEvent) => {
+      if (isEditableShortcutTarget(event.target)) return;
+      if (shortcutRef.current(event.key.toLowerCase())) event.preventDefault();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isFullscreen]);
 
   const presentationMode: InstructionPresentationMode =
     workspaceMode === "inspect" ? "inspect" : focusCurrentStep ? "focus" : "assembled";
@@ -245,9 +289,19 @@ function BuilderWorkspace({
     <section
       ref={workspaceRef}
       className="builder-workspace"
+      data-overlays={overlayMode}
       onKeyDown={handleShortcut}
       aria-label="Visual building workspace"
     >
+      {isFullscreen && (
+        <button
+          type="button"
+          className="builder-overlay-toggle"
+          onClick={() => setOverlayMode(nextOverlayMode(overlayMode))}
+        >
+          {OVERLAY_TOGGLE_LABEL[overlayMode]}
+        </button>
+      )}
       <nav className="builder-breadcrumbs" aria-label="Build task breadcrumb">
         {manifest.breadcrumbs.map((item, index) => (
           <span key={item.occurrenceId}>
