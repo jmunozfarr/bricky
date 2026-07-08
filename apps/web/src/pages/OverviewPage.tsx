@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { useLibraryStatus } from "../components/ldraw/useLibraryStatus";
+import { Alert } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import {
   useCatalogStatus,
@@ -115,16 +116,13 @@ export default function OverviewPage() {
         />
       </div>
       {(health.kind === "error" || catalog.kind === "error") && (
-        <div className="error" role="alert">
-          <strong>Some status checks failed.</strong>
-          <span>
-            {health.kind === "error"
-              ? health.message
-              : catalog.kind === "error"
-                ? catalog.message
-                : ""}
-          </span>
-        </div>
+        <Alert title="Some status checks failed.">
+          {health.kind === "error"
+            ? health.message
+            : catalog.kind === "error"
+              ? catalog.message
+              : ""}
+        </Alert>
       )}
     </section>
   );

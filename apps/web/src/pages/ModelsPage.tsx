@@ -5,11 +5,11 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   formatFileSize,
   formatCoveragePercentage,
-  modelStatusLabel,
   modelUploadError,
   validateModelUpload,
 } from "../models/helpers";
 import { useToast } from "../components/ui/ToastProvider";
+import { Alert, EmptyState, ModelStatusPill, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import { useModelsList, useUploadModel } from "../queries/hooks";
 
@@ -149,26 +149,20 @@ export default function ModelsPage() {
       </div>
 
       {results.kind === "loading" && <div className="page-message">Loading models…</div>}
-      {results.kind === "error" && (
-        <div className="error" role="alert">
-          {results.message}
-        </div>
-      )}
+      {results.kind === "error" && <Alert title={results.message} />}
       {results.kind === "ready" && (
         <>
           <p className="results-count">{results.data.totalItems.toLocaleString()} models</p>
           {results.data.items.length === 0 ? (
-            <div className="empty-state">
+            <EmptyState>
               {query || status ? "No models match these filters." : "No models have been imported."}
-            </div>
+            </EmptyState>
           ) : (
             <div className="models-grid">
               {results.data.items.map((model) => (
                 <article className="model-card" key={model.modelId}>
                   <div className="inventory-card-heading">
-                    <span className={`model-status model-status--${model.importStatus}`}>
-                      {modelStatusLabel(model.importStatus)}
-                    </span>
+                    <ModelStatusPill status={model.importStatus} />
                     <span>{model.sourceFormat.toUpperCase()}</span>
                   </div>
                   <h3>{model.name}</h3>
@@ -224,20 +218,12 @@ export default function ModelsPage() {
               ))}
             </div>
           )}
-          <div className="pagination">
-            <button disabled={page <= 1} onClick={() => updateParams("page", String(page - 1))}>
-              Previous
-            </button>
-            <span>
-              Page {page} of {Math.max(1, results.data.totalPages)}
-            </span>
-            <button
-              disabled={page >= results.data.totalPages}
-              onClick={() => updateParams("page", String(page + 1))}
-            >
-              Next
-            </button>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={results.data.totalPages}
+            label="Models pagination"
+            onPageChange={(next) => updateParams("page", String(next))}
+          />
         </>
       )}
     </section>

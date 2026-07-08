@@ -27,6 +27,7 @@ import {
 import { WebGlLifecycle } from "../components/ldraw/WebGlLifecycle";
 import { maximumViewerDpr } from "../components/ldraw/viewerQuality";
 import { loadStepMemory, saveStepMemory } from "../builder/stepMemory";
+import { SegmentedControl } from "../components/ui/primitives";
 import { errorMessage } from "../queries/async";
 import { useBuildManifest, useInstructionPlayback, useModelDetail } from "../queries/hooks";
 
@@ -149,22 +150,16 @@ export default function VisualBuilderPage() {
           <p className="eyebrow">Visual builder</p>
           <h2>{bootstrap.model.name}</h2>
         </div>
-        <div className="builder-mode-switch" role="group" aria-label="Builder workspace mode">
-          <button
-            type="button"
-            aria-pressed={workspaceMode === "build"}
-            onClick={() => setWorkspaceMode("build")}
-          >
-            Build
-          </button>
-          <button
-            type="button"
-            aria-pressed={workspaceMode === "inspect"}
-            onClick={() => setWorkspaceMode("inspect")}
-          >
-            Inspect
-          </button>
-        </div>
+        <SegmentedControl
+          className="builder-mode-switch"
+          label="Builder workspace mode"
+          value={workspaceMode}
+          options={[
+            { value: "build", label: "Build" },
+            { value: "inspect", label: "Inspect" },
+          ]}
+          onChange={setWorkspaceMode}
+        />
       </header>
 
       {manifest.kind === "loading" && (
@@ -321,26 +316,16 @@ function BuilderWorkspace({
               <h3 id="builder-step-title">Step {selectedStep}</h3>
             </div>
             {workspaceMode === "build" && (
-              <div
+              <SegmentedControl
                 className="builder-presentation-switch"
-                role="group"
-                aria-label="Build presentation"
-              >
-                <button
-                  type="button"
-                  aria-pressed={focusCurrentStep}
-                  onClick={() => onFocusChange(true)}
-                >
-                  Step focus
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={!focusCurrentStep}
-                  onClick={() => onFocusChange(false)}
-                >
-                  As built
-                </button>
-              </div>
+                label="Build presentation"
+                value={focusCurrentStep ? "focus" : "assembled"}
+                options={[
+                  { value: "focus", label: "Step focus" },
+                  { value: "assembled", label: "As built" },
+                ]}
+                onChange={(value) => onFocusChange(value === "focus")}
+              />
             )}
           </div>
 

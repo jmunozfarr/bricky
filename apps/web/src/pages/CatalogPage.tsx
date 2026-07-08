@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { nextPage, previousPage } from "../api/catalog";
 import { getCatalogAvailability } from "../catalog/catalogState";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
+import { Alert, EmptyState, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import { useCatalogStatus, useCategories, usePartsSearch } from "../queries/hooks";
 
@@ -106,7 +106,7 @@ export default function CatalogPage() {
         <>
           <p className="results-count">{results.data.totalItems.toLocaleString()} results</p>
           {results.data.items.length === 0 ? (
-            <div className="empty-state">No parts match this search.</div>
+            <EmptyState>No parts match this search.</EmptyState>
           ) : (
             <div className="parts-grid">
               {results.data.items.map((part) => (
@@ -122,25 +122,12 @@ export default function CatalogPage() {
               ))}
             </div>
           )}
-          <div className="pagination" aria-label="Catalog pagination">
-            <button
-              type="button"
-              disabled={page <= 1}
-              onClick={() => updateParam("page", String(previousPage(page)))}
-            >
-              Previous
-            </button>
-            <span>
-              Page {page} of {Math.max(1, results.data.totalPages)}
-            </span>
-            <button
-              type="button"
-              disabled={page >= results.data.totalPages}
-              onClick={() => updateParam("page", String(nextPage(page, results.data.totalPages)))}
-            >
-              Next
-            </button>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={results.data.totalPages}
+            label="Catalog pagination"
+            onPageChange={(next) => updateParam("page", String(next))}
+          />
         </>
       )}
     </section>
@@ -176,10 +163,5 @@ function CatalogSetupState({
 }
 
 function ErrorPanel({ message }: { message: string }) {
-  return (
-    <div className="error" role="alert">
-      <strong>Catalog request failed.</strong>
-      <span>{message}</span>
-    </div>
-  );
+  return <Alert title="Catalog request failed.">{message}</Alert>;
 }

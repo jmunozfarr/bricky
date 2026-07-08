@@ -5,6 +5,7 @@ import { CoverageStatus, InstructionGraph, ModelCoverage, ModelCoverageItem } fr
 import { CompactInventoryEditor } from "../components/inventory/CompactInventoryEditor";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useToast } from "../components/ui/ToastProvider";
+import { Alert, ModelStatusPill } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import {
   useDeleteModel,
@@ -18,7 +19,6 @@ import {
   coverageStatusLabel,
   filterCoverageItems,
   formatCoveragePercentage,
-  modelStatusLabel,
 } from "../models/helpers";
 
 type CoverageView = "all" | "wishlist";
@@ -74,12 +74,7 @@ export default function ModelDetailPage() {
 
   if (state.kind === "loading") return <div className="page-message">Loading model…</div>;
   if (state.kind === "error") {
-    return (
-      <div className="error" role="alert">
-        <strong>Model request failed.</strong>
-        <span>{state.message}</span>
-      </div>
-    );
+    return <Alert title="Model request failed.">{state.message}</Alert>;
   }
   const model = state.data;
 
@@ -113,9 +108,7 @@ export default function ModelDetailPage() {
             <p className="eyebrow">Imported {model.sourceFormat.toUpperCase()}</p>
             <h2>{model.name}</h2>
           </div>
-          <span className={`model-status model-status--${model.importStatus}`}>
-            {modelStatusLabel(model.importStatus)}
-          </span>
+          <ModelStatusPill status={model.importStatus} />
         </div>
         <dl className="part-metadata">
           <Meta label="Original filename" value={model.originalFilename} />
@@ -152,10 +145,7 @@ export default function ModelDetailPage() {
         <div className="page-message">Calculating build readiness…</div>
       )}
       {coverage.kind === "error" && (
-        <div className="error" role="alert">
-          <strong>Coverage request failed.</strong>
-          <span>{coverage.message}</span>
-        </div>
+        <Alert title="Coverage request failed.">{coverage.message}</Alert>
       )}
       {coverage.kind === "ready" && (
         <>
@@ -293,11 +283,7 @@ function InstructionGraphPanel({ modelId }: { modelId: string }) {
         </span>
       </summary>
       {state.kind === "loading" && <div className="page-message">Parsing instruction graph…</div>}
-      {state.kind === "error" && (
-        <div className="error" role="alert">
-          {state.message}
-        </div>
-      )}
+      {state.kind === "error" && <Alert title={state.message} />}
       {state.kind === "ready" && (
         <div className="instruction-graph-content">
           <dl className="part-metadata">
