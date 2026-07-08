@@ -74,35 +74,112 @@
   box-shadow: 0 1rem 3rem var(--shadow);
 }
 
+/* Immersive fullscreen: the 3D viewport is the screen; every other piece
+   floats above it and can be thinned to step arrows or hidden entirely via
+   the interface toggle (data-overlays: full | minimal | hidden). */
 .builder-workspace:fullscreen {
-  display: flex;
-  flex-direction: column;
+  position: relative;
   width: 100vw;
   height: 100vh;
-  overflow: auto;
+  overflow: hidden;
   border: 0;
   border-radius: 0;
 }
 
-/* Fullscreen hands every leftover pixel to the 3D viewport: the grid
-   stretches to the screen, the viewport row absorbs the growth, and the
-   parts panel scrolls internally instead of pushing the layout taller. */
-.builder-workspace:fullscreen .builder-main-grid {
-  flex: 1;
-  min-height: 0;
-}
-
+.builder-workspace:fullscreen .builder-main-grid,
 .builder-workspace:fullscreen .builder-view-column {
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  display: contents;
 }
 
 .builder-workspace:fullscreen .builder-viewport {
+  position: absolute;
+  inset: 0;
   min-height: 0;
 }
 
+.builder-workspace:fullscreen .builder-breadcrumbs,
+.builder-workspace:fullscreen .viewer-toolbar,
+.builder-workspace:fullscreen .builder-step-transport,
 .builder-workspace:fullscreen .builder-step-panel {
-  min-height: 0;
+  position: absolute;
+  z-index: 10;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--surface-overlay);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0.5rem 1.5rem var(--shadow);
+}
+
+.builder-workspace:fullscreen .builder-breadcrumbs {
+  top: 0.75rem;
+  left: 0.75rem;
+  max-width: min(32rem, 40vw);
+  padding: 0.5rem 0.85rem;
+}
+
+.builder-workspace:fullscreen .viewer-toolbar {
+  top: 0.75rem;
+  left: 50%;
+  padding: 0.5rem 0.65rem;
+  transform: translateX(-50%);
+}
+
+.builder-workspace:fullscreen .builder-step-transport {
+  bottom: 0.75rem;
+  left: 50%;
+  width: min(56rem, calc(100vw - 9rem));
+  padding: 0.6rem 0.85rem;
+  transform: translateX(-50%);
+}
+
+.builder-workspace:fullscreen .builder-step-panel {
+  top: 4.75rem;
+  right: 0.75rem;
+  bottom: 5.5rem;
+  width: min(24rem, 38vw);
   overflow-y: auto;
+  padding: 1rem;
+}
+
+.builder-overlay-toggle {
+  position: absolute;
+  z-index: 12;
+  top: 0.75rem;
+  right: 0.75rem;
+  border-radius: 0.9rem;
+  background: var(--surface-overlay);
+  backdrop-filter: blur(8px);
+}
+
+/* Arrows only: keep Previous/Next, drop the slider, hide the rest. */
+.builder-workspace:fullscreen[data-overlays="minimal"] .builder-breadcrumbs,
+.builder-workspace:fullscreen[data-overlays="minimal"] .viewer-toolbar,
+.builder-workspace:fullscreen[data-overlays="minimal"] .builder-step-panel,
+.builder-workspace:fullscreen[data-overlays="minimal"] .builder-step-selector {
+  display: none;
+}
+
+.builder-workspace:fullscreen[data-overlays="minimal"] .builder-step-transport {
+  display: flex;
+  gap: 0.6rem;
+  width: auto;
+}
+
+/* Uncluttered inspection: nothing but the viewer and a dimmed way back. */
+.builder-workspace:fullscreen[data-overlays="hidden"] .builder-breadcrumbs,
+.builder-workspace:fullscreen[data-overlays="hidden"] .viewer-toolbar,
+.builder-workspace:fullscreen[data-overlays="hidden"] .builder-step-transport,
+.builder-workspace:fullscreen[data-overlays="hidden"] .builder-step-panel {
+  display: none;
+}
+
+.builder-workspace:fullscreen[data-overlays="hidden"] .builder-overlay-toggle {
+  opacity: 0.35;
+}
+
+.builder-workspace:fullscreen[data-overlays="hidden"] .builder-overlay-toggle:hover,
+.builder-workspace:fullscreen[data-overlays="hidden"] .builder-overlay-toggle:focus-visible {
+  opacity: 1;
 }
 
 .builder-breadcrumbs {

@@ -73,7 +73,8 @@ export function ViewerToolbar({ containerRef, onCameraCommand }: ViewerToolbarPr
         <details className="viewer-shortcuts">
           <summary>Shortcuts</summary>
           <p>
-            Left/Right steps · Home/End first/final · R reset · F fullscreen · 1–4 views · +/− zoom
+            Left/Right steps · Home/End first/final · R reset · F fullscreen · H interface · 1–4
+            views · +/− zoom
           </p>
         </details>
       </div>
