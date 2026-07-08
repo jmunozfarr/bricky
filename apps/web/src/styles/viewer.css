@@ -419,7 +419,7 @@
 
 /* Same layout decoupling as the builder viewport: the canvas layer never
    drives the frame's size. */
-.viewer-frame > div {
+.viewer-frame > .builder-canvas-layer {
   position: absolute !important;
   inset: 0;
 }

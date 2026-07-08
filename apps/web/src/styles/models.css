@@ -230,8 +230,10 @@
 /* The canvas layer must never drive layout: leaving fullscreen used to trap
    the grid at screen size because the fr row resolved against the
    still-fullscreen-sized canvas, so the resize observer never saw a smaller
-   container. R3F sets position: relative inline on its wrapper. */
-.builder-viewport > div {
+   container. Scoped to the canvas wrapper alone — a broad `> div` also hit
+   the loading/refreshing overlays, stretching the round-cornered progress
+   badge into a full-viewport disc. R3F sets position: relative inline. */
+.builder-viewport > .builder-canvas-layer {
   position: absolute !important;
   inset: 0;
 }

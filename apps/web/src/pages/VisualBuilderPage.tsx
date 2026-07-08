@@ -644,6 +644,7 @@ function BuilderViewport({
     >
       <Canvas
         key={canvasVersion}
+        className="builder-canvas-layer"
         camera={{ fov: 40, near: 0.1, far: 10_000 }}
         dpr={[1, maximumViewerDpr(window.innerWidth, window.devicePixelRatio)]}
         frameloop="demand"
@@ -668,7 +669,12 @@ function BuilderViewport({
             host={sceneHost}
             model={loaded.model}
             sceneIndex={loaded.sceneIndex}
-            activeOccurrenceId={manifest.occurrenceId}
+            // Aim presentation at the mounted scene's own occurrence, not the
+            // manifest's: with keepPreviousData the manifest advances to the
+            // next task before its scene finishes parsing, and applying the
+            // new occurrence to the still-mounted old scene index mis-focuses
+            // it during the swap.
+            activeOccurrenceId={loaded.fitKey}
             selectedStep={selectedStep}
             cacheKey={loaded.sourceKey}
             presentationMode={presentationMode}
@@ -676,7 +682,11 @@ function BuilderViewport({
         )}
         <ViewerCamera
           model={loaded?.sceneIndex ? sceneHost : null}
-          fitVersion={manifest.occurrenceId}
+          // Keyed to the scene actually on screen: the manifest (and its
+          // occurrence id) arrives before the new scene finishes loading,
+          // and fitting the old scene left the camera inside the freshly
+          // mounted subassembly's local-coordinate geometry.
+          fitVersion={loaded?.fitKey ?? "pending-scene"}
           command={cameraCommand}
         />
       </Canvas>
