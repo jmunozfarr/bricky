@@ -92,6 +92,9 @@ test("guides a build task with step transport and camera interaction", async ({
   const modelId = await importSyntheticModel(request);
   try {
     await page.goto(`/models/${modelId}/build`);
+    // The workspace opens on the assembled overview; steps live in Build.
+    await expect(page.getByText(/assembled model is shown in full colour/i)).toBeVisible();
+    await page.getByRole("button", { name: "Build", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
     await expect(page.getByText("of 4")).toBeVisible();
     await expect(page.locator(".viewer-message")).toBeHidden({ timeout: 20_000 });
@@ -161,6 +164,7 @@ test("step transitions issue no scene or library requests", async ({ page, reque
   );
   try {
     await page.goto(`/models/${modelId}/build`);
+    await page.getByRole("button", { name: "Build", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
     await expect(page.locator(".viewer-message")).toBeHidden({ timeout: 20_000 });
 
@@ -210,6 +214,7 @@ test("recovers builder scene and playback after WebGL context loss", async ({
   );
   try {
     await page.goto(`/models/${modelId}/build`);
+    await page.getByRole("button", { name: "Build", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Step 1" })).toBeVisible();
     await expect(page.locator(".viewer-message")).toBeHidden({ timeout: 20_000 });
 

@@ -58,7 +58,7 @@ export default function VisualBuilderPage() {
   const { modelId = "" } = useParams();
   const [activeOccurrenceId, setActiveOccurrenceId] = useState<string | null>(null);
   const [selectedStep, setSelectedStep] = useState(1);
-  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("build");
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("inspect");
   const [focusCurrentStep, setFocusCurrentStep] = useState(true);
   // Builder progress survives page reloads: seeded from localStorage per
   // model and written through on every step change.
@@ -187,6 +187,7 @@ export default function VisualBuilderPage() {
       )}
       {activeManifest && currentStep && (
         <BuilderWorkspace
+          model={bootstrap.model}
           manifest={activeManifest}
           currentStep={currentStep}
           selectedStep={selectedStep}
@@ -203,6 +204,7 @@ export default function VisualBuilderPage() {
 }
 
 function BuilderWorkspace({
+  model,
   manifest,
   currentStep,
   selectedStep,
@@ -213,6 +215,7 @@ function BuilderWorkspace({
   onOccurrenceChange,
   onFocusChange,
 }: {
+  model: ModelDetail;
   manifest: BuildManifest;
   currentStep: BuildStep;
   selectedStep: number;
@@ -248,10 +251,11 @@ function BuilderWorkspace({
   }
 
   function runShortcut(key: string): boolean {
-    if (key === "arrowleft") onStepChange(selectedStep - 1);
-    else if (key === "arrowright") onStepChange(selectedStep + 1);
-    else if (key === "home") onStepChange(1);
-    else if (key === "end") onStepChange(manifest.steps.length);
+    const stepsActive = workspaceMode === "build";
+    if (key === "arrowleft" && stepsActive) onStepChange(selectedStep - 1);
+    else if (key === "arrowright" && stepsActive) onStepChange(selectedStep + 1);
+    else if (key === "home" && stepsActive) onStepChange(1);
+    else if (key === "end" && stepsActive) onStepChange(manifest.steps.length);
     else if (key === "r" || key === "1") issueCameraCommand({ kind: "fit", preset: "isometric" });
     else if (key === "2") issueCameraCommand({ kind: "fit", preset: "front" });
     else if (key === "3") issueCameraCommand({ kind: "fit", preset: "right" });
@@ -326,48 +330,54 @@ function BuilderWorkspace({
             presentationMode={presentationMode}
             cameraCommand={cameraCommand}
           />
-          <div className="builder-step-transport">
-            <button
-              type="button"
-              disabled={selectedStep === 1}
-              onClick={() => onStepChange(selectedStep - 1)}
-            >
-              Previous
-            </button>
-            <div className="builder-step-selector">
-              <label className="builder-step-number">
-                <span>Step</span>
-                <StepNumberInput
-                  selectedStep={selectedStep}
-                  stepCount={manifest.steps.length}
-                  onStepChange={onStepChange}
+          {workspaceMode === "build" && (
+            <div className="builder-step-transport">
+              <button
+                type="button"
+                disabled={selectedStep === 1}
+                onClick={() => onStepChange(selectedStep - 1)}
+              >
+                Previous
+              </button>
+              <div className="builder-step-selector">
+                <label className="builder-step-number">
+                  <span>Step</span>
+                  <StepNumberInput
+                    selectedStep={selectedStep}
+                    stepCount={manifest.steps.length}
+                    onStepChange={onStepChange}
+                  />
+                  <span>of {manifest.steps.length}</span>
+                </label>
+                <input
+                  type="range"
+                  min={1}
+                  max={manifest.steps.length}
+                  value={selectedStep}
+                  aria-label="Scrub through building steps"
+                  onChange={(event) => onStepChange(event.currentTarget.valueAsNumber)}
                 />
-                <span>of {manifest.steps.length}</span>
-              </label>
-              <input
-                type="range"
-                min={1}
-                max={manifest.steps.length}
-                value={selectedStep}
-                aria-label="Scrub through building steps"
-                onChange={(event) => onStepChange(event.currentTarget.valueAsNumber)}
-              />
+              </div>
+              <button
+                type="button"
+                disabled={selectedStep === manifest.steps.length}
+                onClick={() => onStepChange(selectedStep + 1)}
+              >
+                Next
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={selectedStep === manifest.steps.length}
-              onClick={() => onStepChange(selectedStep + 1)}
-            >
-              Next
-            </button>
-          </div>
+          )}
         </div>
 
         <aside className="builder-step-panel" aria-labelledby="builder-step-title">
           <div className="builder-step-heading">
             <div>
-              <p className="eyebrow">Current task</p>
-              <h3 id="builder-step-title">Step {selectedStep}</h3>
+              <p className="eyebrow">{workspaceMode === "build" ? "Current task" : "Overview"}</p>
+              <h3 id="builder-step-title">
+                {workspaceMode === "build"
+                  ? `Step ${selectedStep}`
+                  : displaySubmodelName(manifest.sourceSubmodelName)}
+              </h3>
             </div>
             {workspaceMode === "build" && (
               <SegmentedControl
@@ -384,16 +394,16 @@ function BuilderWorkspace({
           </div>
 
           {workspaceMode === "inspect" ? (
-            <div className="builder-inspect-summary">
-              <strong>Inspecting {displaySubmodelName(manifest.sourceSubmodelName)}</strong>
-              <p>
-                The complete safe scope is shown in full colour. Camera controls do not change the
-                authored build steps.
-              </p>
-              {manifest.scene.renderStrategy === "local" && (
-                <p>Open subassembly tasks to inspect their geometry separately.</p>
-              )}
-            </div>
+            <>
+              <div className="builder-inspect-summary">
+                <strong>The assembled model is shown in full colour.</strong>
+                <p>Rotate and zoom freely; switch to Build to follow the steps.</p>
+                {manifest.scene.renderStrategy === "local" && (
+                  <p>Open subassembly tasks to inspect their geometry separately.</p>
+                )}
+              </div>
+              <ModelPartsOverview model={model} />
+            </>
           ) : (
             <>
               {manifest.scene.renderStrategy === "local" && (
@@ -503,6 +513,43 @@ function StepNumberInput({
         }
       }}
     />
+  );
+}
+
+function ModelPartsOverview({ model }: { model: ModelDetail }) {
+  // The list renders only once expanded, so inspecting a 5,000-piece model
+  // does not pay for hundreds of rows up front.
+  const [expanded, setExpanded] = useState(false);
+  const uniqueItems = model.bom.length;
+  return (
+    <details
+      className="builder-parts-overview"
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary>
+        All parts · {model.totalPartQuantity.toLocaleString()} pieces ·{" "}
+        {uniqueItems.toLocaleString()} kinds
+      </summary>
+      {expanded && (
+        <ul className="builder-parts-overview-list">
+          {model.bom.map((item) => (
+            <li key={`${item.partId}-${item.colorCode}`}>
+              <span
+                className="color-swatch"
+                style={{ backgroundColor: item.colorHex ?? "#808080" }}
+                aria-hidden="true"
+              />
+              <span className="builder-parts-overview-name">
+                {item.quantity}× {item.partName}
+              </span>
+              <small>
+                {item.partId} · {item.colorName}
+              </small>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }
 
