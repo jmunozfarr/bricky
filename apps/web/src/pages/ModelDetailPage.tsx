@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { CoverageStatus, InstructionGraph, ModelCoverage, ModelCoverageItem } from "../api/models";
 import { CompactInventoryEditor } from "../components/inventory/CompactInventoryEditor";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { useToast } from "../components/ui/ToastProvider";
 import { toAsyncState } from "../queries/async";
 import {
   useDeleteModel,
@@ -36,6 +38,8 @@ export default function ModelDetailPage() {
   const coverage = toAsyncState(useModelCoverage(modelId, {}), "Unable to load coverage.");
   const deletion = useDeleteModel();
   const deleting = deletion.isPending;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const showToast = useToast();
   const state =
     deletion.error !== null
       ? ({
@@ -45,11 +49,13 @@ export default function ModelDetailPage() {
       : detailState;
 
   function remove() {
-    if (!window.confirm("Delete this imported model and its preserved source file?")) return;
     deletion.mutate(modelId, {
       onSuccess: () => {
+        setConfirmingDelete(false);
+        showToast("Model deleted.");
         void navigate(returnTarget);
       },
+      onError: () => setConfirmingDelete(false),
     });
   }
 
@@ -83,9 +89,23 @@ export default function ModelDetailPage() {
         <Link className="button-link" to={returnTarget}>
           Back to models
         </Link>
-        <button className="danger-button" disabled={deleting} onClick={remove}>
+        <button
+          className="danger-button"
+          disabled={deleting}
+          onClick={() => setConfirmingDelete(true)}
+        >
           {deleting ? "Deleting…" : "Delete model"}
         </button>
+        <ConfirmDialog
+          open={confirmingDelete}
+          title="Delete this model?"
+          description="The imported model and its preserved source file are removed permanently."
+          confirmLabel="Delete model"
+          destructive
+          busy={deleting}
+          onConfirm={remove}
+          onCancel={() => setConfirmingDelete(false)}
+        />
       </div>
       <section className="page-panel">
         <div className="page-heading catalog-heading">

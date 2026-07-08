@@ -9,6 +9,7 @@ import {
   modelUploadError,
   validateModelUpload,
 } from "../models/helpers";
+import { useToast } from "../components/ui/ToastProvider";
 import { toAsyncState } from "../queries/async";
 import { useModelsList, useUploadModel } from "../queries/hooks";
 
@@ -21,6 +22,7 @@ export default function ModelsPage() {
   const [searchInput, setSearchInput] = useState(query);
   const results = toAsyncState(useModelsList({ query, status, page }), "Unable to load models.");
   const upload = useUploadModel();
+  const showToast = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -67,6 +69,7 @@ export default function ModelsPage() {
       { file, name },
       {
         onSuccess: (created) => {
+          showToast(`Imported ${created.name}.`);
           const returnSearch = params.toString();
           void navigate(`/models/${created.modelId}?return=${encodeURIComponent(returnSearch)}`);
         },
