@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { useToast } from "../ui/ToastProvider";
 import {
   useColors,
   useDeleteInventoryItem,
@@ -21,8 +22,8 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
   const variants = useMemo(() => variantsQuery.data ?? [], [variantsQuery.data]);
   const [selectedCode, setSelectedCode] = useState<number | null>(null);
   const [quantityInput, setQuantityInput] = useState("1");
-  const [message, setMessage] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
+  const showToast = useToast();
   const loading = colorsQuery.isPending || variantsQuery.isPending;
   const busy = setQuantity.isPending || deleteItem.isPending;
   const loadError = colorsQuery.error ?? variantsQuery.error;
@@ -59,7 +60,6 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
 
   useEffect(() => {
     setQuantityInput(String(currentVariant?.quantity ?? 1));
-    setMessage(null);
     setInputError(null);
     // The input must reset only when the selected color changes; reacting to
     // quantity refreshes would clobber in-progress edits and saved messages.
@@ -73,23 +73,21 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
       return;
     }
     setInputError(null);
-    setMessage(null);
     setQuantity.mutate(
       { partId, colorCode: selectedCode, quantity },
-      { onSuccess: () => setMessage("Inventory quantity saved.") },
+      { onSuccess: () => showToast("Inventory quantity saved.") },
     );
   }
 
   function remove() {
     if (selectedCode === null) return;
     setInputError(null);
-    setMessage(null);
     deleteItem.mutate(
       { partId, colorCode: selectedCode },
       {
         onSuccess: () => {
           setQuantityInput("1");
-          setMessage("Inventory item removed.");
+          showToast("Inventory item removed.");
         },
       },
     );
@@ -156,11 +154,6 @@ export function InventoryEditor({ partId }: InventoryEditorProps) {
             )}
           </div>
         </div>
-      )}
-      {message && (
-        <p className="success-message" role="status">
-          {message}
-        </p>
       )}
       {error && (
         <p className="inline-error" role="alert">

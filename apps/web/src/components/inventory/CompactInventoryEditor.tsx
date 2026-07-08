@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { useToast } from "../ui/ToastProvider";
 import { useDeleteInventoryItem, useSetInventoryQuantity } from "../../queries/hooks";
 import {
   incrementQuantity,
@@ -21,8 +22,8 @@ export function CompactInventoryEditor({
   catalogAvailable,
 }: CompactInventoryEditorProps) {
   const [input, setInput] = useState(String(ownedQuantity));
-  const [message, setMessage] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
+  const showToast = useToast();
   const setQuantity = useSetInventoryQuantity();
   const deleteItem = useDeleteInventoryItem();
   const busy = setQuantity.isPending || deleteItem.isPending;
@@ -41,17 +42,16 @@ export function CompactInventoryEditor({
 
   function mutate(quantity: number) {
     if (busy) return;
-    setMessage(null);
     setInputError(null);
     if (quantity === 0) {
       deleteItem.mutate(
         { partId, colorCode },
-        { onSuccess: () => setMessage("Inventory entry removed.") },
+        { onSuccess: () => showToast(`Removed ${partId} from the inventory.`) },
       );
     } else {
       setQuantity.mutate(
         { partId, colorCode, quantity },
-        { onSuccess: () => setMessage(`Total owned quantity set to ${quantity}.`) },
+        { onSuccess: () => showToast(`Owned quantity for ${partId} set to ${quantity}.`) },
       );
     }
   }
@@ -113,11 +113,6 @@ export function CompactInventoryEditor({
       </div>
       {!catalogAvailable && (
         <small>Catalog metadata is unavailable; only removal is allowed.</small>
-      )}
-      {message && (
-        <small className="success-message" role="status">
-          {message}
-        </small>
       )}
       {error && (
         <small className="inline-error" role="alert">

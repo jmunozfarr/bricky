@@ -1,4 +1,4 @@
-import { fetchJson, fetchNoContent } from "./client";
+import { ApiError, fetchJson, fetchNoContent } from "./client";
 
 export type ModelImportStatus = "ready" | "ready_with_warnings" | "failed";
 export type CoverageStatus = "complete" | "partial" | "missing";
@@ -403,11 +403,50 @@ export function getBuildManifest(
   );
 }
 
-export function uploadModel(file: File, name: string): Promise<ModelSummary> {
-  const body = new FormData();
-  body.set("file", file);
-  if (name.trim()) body.set("name", name.trim());
-  return fetchJson<ModelSummary>("/api/models", undefined, { method: "POST", body });
+export function uploadModel(
+  file: File,
+  name: string,
+  onProgress?: (fraction: number) => void,
+): Promise<ModelSummary> {
+  // XMLHttpRequest instead of fetch: upload progress events feed the
+  // dropzone's progress bar.
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", "/api/models");
+    request.responseType = "json";
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress !== undefined) {
+        onProgress(event.loaded / event.total);
+      }
+    };
+    request.onload = () => {
+      const body: unknown = request.response;
+      if (request.status >= 200 && request.status < 300) {
+        resolve(body as ModelSummary);
+        return;
+      }
+      let message = `Request failed with HTTP ${request.status}`;
+      let detail: unknown = null;
+      if (typeof body === "object" && body !== null && "detail" in body) {
+        detail = body.detail;
+        if (typeof detail === "string") message = detail;
+        else if (
+          typeof detail === "object" &&
+          detail !== null &&
+          "message" in detail &&
+          typeof detail.message === "string"
+        ) {
+          message = detail.message;
+        }
+      }
+      reject(new ApiError(request.status, message, detail));
+    };
+    request.onerror = () => reject(new Error("Model upload failed."));
+    const body = new FormData();
+    body.set("file", file);
+    if (name.trim()) body.set("name", name.trim());
+    request.send(body);
+  });
 }
 
 export function deleteModel(modelId: string): Promise<void> {

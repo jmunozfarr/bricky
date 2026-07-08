@@ -219,7 +219,15 @@ export function useInstructionGraph(modelId: string | null, enabled: boolean) {
 export function useUploadModel() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ file, name }: { file: File; name: string }) => uploadModel(file, name),
+    mutationFn: ({
+      file,
+      name,
+      onProgress,
+    }: {
+      file: File;
+      name: string;
+      onProgress?: (fraction: number) => void;
+    }) => uploadModel(file, name, onProgress),
     onSuccess: () => client.invalidateQueries({ queryKey: ["models"] }),
   });
 }

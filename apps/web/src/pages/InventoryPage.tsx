@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { nextPage, previousPage } from "../api/catalog";
 import { InventoryItem } from "../api/inventory";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
+import { Alert, EmptyState, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import {
   useCategories,
@@ -103,7 +103,7 @@ export default function InventoryPage() {
           <p className="eyebrow">Local workspace</p>
           <h2 id="inventory-title">Personal inventory</h2>
         </div>
-        <p>PostgreSQL is the source of truth</p>
+        <p>Every change is saved to your local workspace</p>
       </div>
 
       {summary.kind === "ready" ? (
@@ -164,7 +164,7 @@ export default function InventoryPage() {
         <>
           <p className="results-count">{results.data.totalItems.toLocaleString()} items</p>
           {results.data.items.length === 0 ? (
-            <div className="empty-state">{inventoryEmptyMessage(hasFilters)}</div>
+            <EmptyState>{inventoryEmptyMessage(hasFilters)}</EmptyState>
           ) : (
             <div className="inventory-grid">
               {results.data.items.map((item) => (
@@ -176,21 +176,12 @@ export default function InventoryPage() {
               ))}
             </div>
           )}
-          <div className="pagination" aria-label="Inventory pagination">
-            <button type="button" disabled={page <= 1} onClick={() => setPage(previousPage(page))}>
-              Previous
-            </button>
-            <span>
-              Page {page} of {Math.max(1, results.data.totalPages)}
-            </span>
-            <button
-              type="button"
-              disabled={page >= results.data.totalPages}
-              onClick={() => setPage(nextPage(page, results.data.totalPages))}
-            >
-              Next
-            </button>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={results.data.totalPages}
+            label="Inventory pagination"
+            onPageChange={setPage}
+          />
         </>
       )}
     </section>
@@ -304,10 +295,5 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
 }
 
 function ErrorPanel({ message }: { message: string }) {
-  return (
-    <div className="error" role="alert">
-      <strong>Inventory request failed.</strong>
-      <span>{message}</span>
-    </div>
-  );
+  return <Alert title="Inventory request failed.">{message}</Alert>;
 }

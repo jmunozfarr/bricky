@@ -3,6 +3,9 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { CoverageStatus, InstructionGraph, ModelCoverage, ModelCoverageItem } from "../api/models";
 import { CompactInventoryEditor } from "../components/inventory/CompactInventoryEditor";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
+import { useToast } from "../components/ui/ToastProvider";
+import { Alert, ModelStatusPill } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import {
   useDeleteModel,
@@ -16,7 +19,6 @@ import {
   coverageStatusLabel,
   filterCoverageItems,
   formatCoveragePercentage,
-  modelStatusLabel,
 } from "../models/helpers";
 
 type CoverageView = "all" | "wishlist";
@@ -36,6 +38,8 @@ export default function ModelDetailPage() {
   const coverage = toAsyncState(useModelCoverage(modelId, {}), "Unable to load coverage.");
   const deletion = useDeleteModel();
   const deleting = deletion.isPending;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const showToast = useToast();
   const state =
     deletion.error !== null
       ? ({
@@ -45,11 +49,13 @@ export default function ModelDetailPage() {
       : detailState;
 
   function remove() {
-    if (!window.confirm("Delete this imported model and its preserved source file?")) return;
     deletion.mutate(modelId, {
       onSuccess: () => {
+        setConfirmingDelete(false);
+        showToast("Model deleted.");
         void navigate(returnTarget);
       },
+      onError: () => setConfirmingDelete(false),
     });
   }
 
@@ -68,12 +74,7 @@ export default function ModelDetailPage() {
 
   if (state.kind === "loading") return <div className="page-message">Loading model…</div>;
   if (state.kind === "error") {
-    return (
-      <div className="error" role="alert">
-        <strong>Model request failed.</strong>
-        <span>{state.message}</span>
-      </div>
-    );
+    return <Alert title="Model request failed.">{state.message}</Alert>;
   }
   const model = state.data;
 
@@ -83,9 +84,23 @@ export default function ModelDetailPage() {
         <Link className="button-link" to={returnTarget}>
           Back to models
         </Link>
-        <button className="danger-button" disabled={deleting} onClick={remove}>
+        <button
+          className="danger-button"
+          disabled={deleting}
+          onClick={() => setConfirmingDelete(true)}
+        >
           {deleting ? "Deleting…" : "Delete model"}
         </button>
+        <ConfirmDialog
+          open={confirmingDelete}
+          title="Delete this model?"
+          description="The imported model and its preserved source file are removed permanently."
+          confirmLabel="Delete model"
+          destructive
+          busy={deleting}
+          onConfirm={remove}
+          onCancel={() => setConfirmingDelete(false)}
+        />
       </div>
       <section className="page-panel">
         <div className="page-heading catalog-heading">
@@ -93,9 +108,7 @@ export default function ModelDetailPage() {
             <p className="eyebrow">Imported {model.sourceFormat.toUpperCase()}</p>
             <h2>{model.name}</h2>
           </div>
-          <span className={`model-status model-status--${model.importStatus}`}>
-            {modelStatusLabel(model.importStatus)}
-          </span>
+          <ModelStatusPill status={model.importStatus} />
         </div>
         <dl className="part-metadata">
           <Meta label="Original filename" value={model.originalFilename} />
@@ -132,10 +145,7 @@ export default function ModelDetailPage() {
         <div className="page-message">Calculating build readiness…</div>
       )}
       {coverage.kind === "error" && (
-        <div className="error" role="alert">
-          <strong>Coverage request failed.</strong>
-          <span>{coverage.message}</span>
-        </div>
+        <Alert title="Coverage request failed.">{coverage.message}</Alert>
       )}
       {coverage.kind === "ready" && (
         <>
@@ -273,11 +283,7 @@ function InstructionGraphPanel({ modelId }: { modelId: string }) {
         </span>
       </summary>
       {state.kind === "loading" && <div className="page-message">Parsing instruction graph…</div>}
-      {state.kind === "error" && (
-        <div className="error" role="alert">
-          {state.message}
-        </div>
-      )}
+      {state.kind === "error" && <Alert title={state.message} />}
       {state.kind === "ready" && (
         <div className="instruction-graph-content">
           <dl className="part-metadata">
@@ -395,16 +401,16 @@ function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
               className={`coverage-row coverage-row--${item.status}`}
               key={`${item.partId}-${item.colorCode}`}
             >
-              <td>
+              <td data-label="Part">
                 <span className="part-id">{item.partId}</span>
               </td>
-              <td>
+              <td data-label="Name">
                 {item.partName}
                 {!item.catalogAvailable && (
                   <small className="metadata-warning">Catalog metadata unavailable</small>
                 )}
               </td>
-              <td>
+              <td data-label="Exact color">
                 <span className="inventory-color">
                   {item.colorHex && (
                     <span
@@ -416,12 +422,12 @@ function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
                   {item.colorName} ({item.colorCode})
                 </span>
               </td>
-              <td>{item.requiredQuantity}</td>
-              <td>{item.ownedQuantity}</td>
-              <td>
+              <td data-label="Required">{item.requiredQuantity}</td>
+              <td data-label="Owned">{item.ownedQuantity}</td>
+              <td data-label="Missing">
                 <strong>{item.missingQuantity}</strong>
               </td>
-              <td>
+              <td data-label="Status">
                 <span
                   className={`coverage-status coverage-status--${item.status}`}
                   aria-label={`Coverage status: ${coverageStatusLabel(item.status)}`}
@@ -429,7 +435,7 @@ function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
                   {coverageStatusLabel(item.status)}
                 </span>
               </td>
-              <td>
+              <td data-label="Actions">
                 <div className="coverage-actions">
                   {item.catalogAvailable ? (
                     <Link to={`/catalog?part=${encodeURIComponent(item.partId)}`}>
