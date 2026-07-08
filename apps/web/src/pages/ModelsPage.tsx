@@ -26,6 +26,8 @@ export default function ModelsPage() {
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const uploading = upload.isPending;
   const uploadError =
     validationError ?? (upload.error !== null ? modelUploadError(upload.error) : null);
@@ -65,14 +67,16 @@ export default function ModelsPage() {
       return;
     }
     setValidationError(null);
+    setUploadProgress(0);
     upload.mutate(
-      { file, name },
+      { file, name, onProgress: setUploadProgress },
       {
         onSuccess: (created) => {
           showToast(`Imported ${created.name}.`);
           const returnSearch = params.toString();
           void navigate(`/models/${created.modelId}?return=${encodeURIComponent(returnSearch)}`);
         },
+        onSettled: () => setUploadProgress(null),
       },
     );
   }
@@ -89,7 +93,23 @@ export default function ModelsPage() {
         <p>Original source bytes are preserved</p>
       </div>
 
-      <form className="model-upload" onSubmit={submit}>
+      <form
+        className={`model-upload${dragActive ? " model-upload--drag" : ""}`}
+        onSubmit={submit}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragActive(false);
+          if (uploading) return;
+          const dropped = event.dataTransfer.files?.[0] ?? null;
+          if (dropped !== null) setFile(dropped);
+        }}
+      >
+        <p className="model-upload-hint">Drop an .ldr or .mpd file anywhere in this panel</p>
         <label>
           <span>Model file</span>
           <input
@@ -116,6 +136,14 @@ export default function ModelsPage() {
           <p className="file-preview">
             {file.name} · {formatFileSize(file.size)}
           </p>
+        )}
+        {uploadProgress !== null && (
+          <progress
+            className="upload-progress"
+            aria-label="Upload progress"
+            max={1}
+            value={uploadProgress}
+          />
         )}
         {uploadError && (
           <p className="inline-error" role="alert">

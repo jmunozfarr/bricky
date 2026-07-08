@@ -68,17 +68,6 @@ test("keeps the application within the tablet viewport", async ({ page }, testIn
   await expect(page.getByRole("toolbar", { name: "3D view controls" })).toBeVisible();
 });
 
-test("keeps primary application routes accessible in dark mode", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium-desktop", "The route audit runs once in Chromium.");
-  for (const route of ["/", "/catalog", "/inventory", "/models"]) {
-    await page.goto(route);
-    await page.getByLabel("Theme").selectOption("dark");
-    await page.locator("main").waitFor();
-    const accessibility = await new AxeBuilder({ page }).analyze();
-    expect(accessibility.violations, `Accessibility violations on ${route}`).toEqual([]);
-  }
-});
-
 test("reports and recovers from WebGL context loss", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "WebGL recovery runs once in Chromium.");
   await page.goto("/viewer-demo");

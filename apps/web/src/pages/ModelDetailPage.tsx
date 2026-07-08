@@ -401,16 +401,16 @@ function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
               className={`coverage-row coverage-row--${item.status}`}
               key={`${item.partId}-${item.colorCode}`}
             >
-              <td>
+              <td data-label="Part">
                 <span className="part-id">{item.partId}</span>
               </td>
-              <td>
+              <td data-label="Name">
                 {item.partName}
                 {!item.catalogAvailable && (
                   <small className="metadata-warning">Catalog metadata unavailable</small>
                 )}
               </td>
-              <td>
+              <td data-label="Exact color">
                 <span className="inventory-color">
                   {item.colorHex && (
                     <span
@@ -422,12 +422,12 @@ function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
                   {item.colorName} ({item.colorCode})
                 </span>
               </td>
-              <td>{item.requiredQuantity}</td>
-              <td>{item.ownedQuantity}</td>
-              <td>
+              <td data-label="Required">{item.requiredQuantity}</td>
+              <td data-label="Owned">{item.ownedQuantity}</td>
+              <td data-label="Missing">
                 <strong>{item.missingQuantity}</strong>
               </td>
-              <td>
+              <td data-label="Status">
                 <span
                   className={`coverage-status coverage-status--${item.status}`}
                   aria-label={`Coverage status: ${coverageStatusLabel(item.status)}`}
@@ -435,7 +435,7 @@ function CoverageTable({ items }: { items: ModelCoverageItem[] }) {
                   {coverageStatusLabel(item.status)}
                 </span>
               </td>
-              <td>
+              <td data-label="Actions">
                 <div className="coverage-actions">
                   {item.catalogAvailable ? (
                     <Link to={`/catalog?part=${encodeURIComponent(item.partId)}`}>
