@@ -105,7 +105,7 @@ export default function ModelsPage() {
           event.preventDefault();
           setDragActive(false);
           if (uploading) return;
-          const dropped = event.dataTransfer.files?.[0] ?? null;
+          const dropped = event.dataTransfer.files[0] ?? null;
           if (dropped !== null) setFile(dropped);
         }}
       >
