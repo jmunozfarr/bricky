@@ -119,6 +119,7 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
       >
         <Canvas
           key={canvasVersion}
+          className="builder-canvas-layer"
           camera={{ fov: 40, near: 0.1, far: 10_000 }}
           dpr={[1, maximumViewerDpr(window.innerWidth, window.devicePixelRatio)]}
           frameloop="demand"
@@ -140,7 +141,11 @@ export function LDrawViewer({ source, eyebrow, title }: LDrawViewerProps) {
           <directionalLight position={[100, 150, 100]} intensity={2.2} />
           <directionalLight position={[-80, 60, -100]} intensity={1.1} />
           {model !== null && <LDrawModel model={model} selectedStep={selectedStep} />}
-          <ViewerCamera model={model} fitVersion={source.key} command={cameraCommand} />
+          <ViewerCamera
+            model={model}
+            fitVersion={loadState.kind === "ready" ? loadState.fitKey : "pending-scene"}
+            command={cameraCommand}
+          />
         </Canvas>
         {loadState.kind === "loading" && <ViewerLoadingIndicator title="Loading LDraw model…" />}
         {loadState.kind === "error" && (
