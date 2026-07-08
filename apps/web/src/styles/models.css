@@ -75,11 +75,34 @@
 }
 
 .builder-workspace:fullscreen {
+  display: flex;
+  flex-direction: column;
   width: 100vw;
   height: 100vh;
   overflow: auto;
   border: 0;
   border-radius: 0;
+}
+
+/* Fullscreen hands every leftover pixel to the 3D viewport: the grid
+   stretches to the screen, the viewport row absorbs the growth, and the
+   parts panel scrolls internally instead of pushing the layout taller. */
+.builder-workspace:fullscreen .builder-main-grid {
+  flex: 1;
+  min-height: 0;
+}
+
+.builder-workspace:fullscreen .builder-view-column {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.builder-workspace:fullscreen .builder-viewport {
+  min-height: 0;
+}
+
+.builder-workspace:fullscreen .builder-step-panel {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .builder-breadcrumbs {
