@@ -417,6 +417,13 @@
   touch-action: none;
 }
 
+/* Same layout decoupling as the builder viewport: the canvas layer never
+   drives the frame's size. */
+.viewer-frame > div {
+  position: absolute !important;
+  inset: 0;
+}
+
 .viewer-frame:focus-visible,
 .viewer-frame canvas:focus-visible {
   outline: 3px solid var(--focus-ring);
