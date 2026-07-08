@@ -274,7 +274,9 @@ function BuilderWorkspace({
   }
 
   const shortcutRef = useRef(runShortcut);
-  shortcutRef.current = runShortcut;
+  useEffect(() => {
+    shortcutRef.current = runShortcut;
+  });
   useEffect(() => {
     if (!isFullscreen) return;
     const onKey = (event: globalThis.KeyboardEvent) => {
