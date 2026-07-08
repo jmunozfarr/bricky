@@ -11,17 +11,31 @@ preserved. The plan is surgical, not a rewrite.
 
 ## Phase summary
 
-| Phase | Scope | Estimate |
-|---|---|---|
-| 0 | Baseline: scoped commits, `v0.1.0-mvp` tag, green gate | 0.5 day |
-| 1 | Toolchain and CI: ruff, mypy, ESLint, Prettier, GitHub Actions | 1–2 days |
-| 2 | 3D viewer stabilization (dedicated bug-fixing phase) | 4–6 days |
-| 3 | Backend structural refactor | 3–5 days |
-| 4 | Backend performance and correctness | 2–4 days |
-| 5 | Frontend data layer (TanStack Query + OpenAPI types) | 3–4 days |
-| 6 | UI system and UX fixes | 4–6 days |
-| 7 | Platform and dependency upgrades | 1–2 days |
-| 8 | UX feature investments (optional) | 1–2 weeks |
+Status as of 2026-07-09. Every completed phase is merged to `main`; the
+working tree is clean and `./scripts/check.sh` is green.
+
+| Phase | Scope | Estimate | Status |
+|---|---|---|---|
+| 0 | Baseline: scoped commits, `v0.1.0-mvp` tag, green gate | 0.5 day | ✅ done |
+| 1 | Toolchain and CI: ruff, mypy, ESLint, Prettier, GitHub Actions | 1–2 days | ✅ done |
+| 2 | 3D viewer stabilization (dedicated bug-fixing phase) | 4–6 days | ✅ done (B1–B9, audit A1–A8; user field-confirmed) |
+| 3 | Backend structural refactor | 3–5 days | ✅ done |
+| 4 | Backend performance and correctness | 2–4 days | ✅ done |
+| 5 | Frontend data layer (TanStack Query + OpenAPI types) | 3–4 days | ✅ done |
+| 6 | UI system and UX fixes | 4–6 days | ✅ done (+ immersive fullscreen, assembled-first flow) |
+| 7 | Platform and dependency upgrades | 1–2 days | ⬜ next |
+| 8 | UX feature investments (optional) | 1–2 weeks | ⬜ optional |
+
+Carried-over follow-ups, none blocking:
+- **Builder/viewer e2e in CI**: the specs run on the dev machine but
+  self-skip in CI, which has no installed LDraw library (and the repo has no
+  git remote yet). Wire the library — or a fixture subset — into CI when a
+  remote exists.
+- **Phase 2 real-fix backlog** (mitigated, not urgent): move build-mode
+  step playback to `BatchedMesh` if per-part draw calls ever lag on real
+  GPUs; the three.js upgrade is a no-op until a release past 0.185.1 lands.
+- Per-phase detail and gotchas live in the memory note
+  `refactoring-plan-progress.md`; bug reproductions in `docs/VIEWER_BUGS.md`.
 
 ## Phase 0 — Baseline
 
