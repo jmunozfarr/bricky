@@ -43,7 +43,6 @@ export function App() {
             <NavLink to="/catalog">Catalog</NavLink>
             <NavLink to="/inventory">Inventory</NavLink>
             <NavLink to="/models">Models</NavLink>
-            <NavLink to="/viewer-demo">Viewer demo</NavLink>
           </nav>
           <label className="theme-control">
             <span>Theme</span>

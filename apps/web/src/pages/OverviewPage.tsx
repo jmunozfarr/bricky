@@ -19,7 +19,7 @@ export default function OverviewPage() {
   return (
     <section className="page-panel" aria-labelledby="overview-title">
       <div className="page-heading">
-        <p className="eyebrow">Final local MVP</p>
+        <p className="eyebrow">Local workspace</p>
         <h2 id="overview-title">Local workspace status</h2>
         <p>Runtime services, official library, and catalog indexing remain local.</p>
       </div>
@@ -63,7 +63,7 @@ export default function OverviewPage() {
           tone={health.kind === "ready" ? "ok" : health.kind === "error" ? "error" : "pending"}
         />
         <StatusCard
-          label="PostgreSQL"
+          label="Database"
           value={
             health.kind === "ready" && health.data.database === "ok"
               ? "Online"

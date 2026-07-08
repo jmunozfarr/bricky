@@ -103,7 +103,7 @@ export default function InventoryPage() {
           <p className="eyebrow">Local workspace</p>
           <h2 id="inventory-title">Personal inventory</h2>
         </div>
-        <p>PostgreSQL is the source of truth</p>
+        <p>Every change is saved to your local workspace</p>
       </div>
 
       {summary.kind === "ready" ? (

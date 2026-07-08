@@ -26,6 +26,7 @@ import {
 } from "../components/ldraw/ViewerToolbar";
 import { WebGlLifecycle } from "../components/ldraw/WebGlLifecycle";
 import { maximumViewerDpr } from "../components/ldraw/viewerQuality";
+import { loadStepMemory, saveStepMemory } from "../builder/stepMemory";
 import { errorMessage } from "../queries/async";
 import { useBuildManifest, useInstructionPlayback, useModelDetail } from "../queries/hooks";
 
@@ -45,7 +46,16 @@ export default function VisualBuilderPage() {
   const [selectedStep, setSelectedStep] = useState(1);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("build");
   const [focusCurrentStep, setFocusCurrentStep] = useState(true);
-  const rememberedSteps = useRef(new Map<string, number>());
+  // Builder progress survives page reloads: seeded from localStorage per
+  // model and written through on every step change.
+  const rememberedSteps = useRef<Map<string, number> | null>(null);
+  rememberedSteps.current ??= loadStepMemory(modelId);
+
+  function rememberStep(occurrenceId: string, step: number) {
+    const steps = rememberedSteps.current ?? new Map<string, number>();
+    steps.set(occurrenceId, step);
+    saveStepMemory(modelId, steps);
+  }
 
   const detailQuery = useModelDetail(modelId);
   const playbackQuery = useInstructionPlayback(modelId);
@@ -92,7 +102,7 @@ export default function VisualBuilderPage() {
     if (manifestData === undefined) return;
     setSelectedStep(
       Math.min(
-        rememberedSteps.current.get(manifestData.occurrenceId) ?? 1,
+        rememberedSteps.current?.get(manifestData.occurrenceId) ?? 1,
         Math.max(1, manifestData.steps.length),
       ),
     );
@@ -101,13 +111,13 @@ export default function VisualBuilderPage() {
   function chooseStep(step: number) {
     if (manifest.kind !== "ready" || Number.isNaN(step)) return;
     const selected = Math.min(Math.max(Math.trunc(step), 1), manifest.data.steps.length);
-    rememberedSteps.current.set(manifest.data.occurrenceId, selected);
+    rememberStep(manifest.data.occurrenceId, selected);
     setSelectedStep(selected);
   }
 
   function openOccurrence(occurrenceId: string) {
     if (manifest.kind === "ready") {
-      rememberedSteps.current.set(manifest.data.occurrenceId, selectedStep);
+      rememberStep(manifest.data.occurrenceId, selectedStep);
     }
     setActiveOccurrenceId(occurrenceId);
   }
