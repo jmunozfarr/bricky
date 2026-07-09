@@ -10,7 +10,9 @@ const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const CatalogPage = lazy(() => import("./pages/CatalogPage"));
 const InventoryPage = lazy(() => import("./pages/InventoryPage"));
 const ViewerDemoPage = lazy(() => import("./pages/ViewerDemoPage"));
+const ThumbnailHarnessPage = lazy(() => import("./pages/ThumbnailHarnessPage"));
 const ModelsPage = lazy(() => import("./pages/ModelsPage"));
+const PrintPartsPage = lazy(() => import("./pages/PrintPartsPage"));
 const VisualBuilderPage = lazy(() => import("./pages/VisualBuilderPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
@@ -119,10 +121,26 @@ export function App() {
                   }
                 />
                 <Route
+                  path="/models/:modelId/print"
+                  element={
+                    <TitledRoute title="Printable parts list">
+                      <PrintPartsPage />
+                    </TitledRoute>
+                  }
+                />
+                <Route
                   path="/viewer-demo"
                   element={
                     <TitledRoute title="Viewer demo">
                       <ViewerDemoPage />
+                    </TitledRoute>
+                  }
+                />
+                <Route
+                  path="/thumbnail-harness"
+                  element={
+                    <TitledRoute title="Thumbnail harness">
+                      <ThumbnailHarnessPage />
                     </TitledRoute>
                   }
                 />

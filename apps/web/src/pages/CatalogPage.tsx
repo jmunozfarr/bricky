@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { getCatalogAvailability } from "../catalog/catalogState";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
+import { PartThumbnail } from "../components/parts/PartThumbnail";
 import { Alert, EmptyState, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import { useCatalogStatus, useCategories, usePartsSearch } from "../queries/hooks";
@@ -111,6 +112,7 @@ export default function CatalogPage() {
             <div className="parts-grid">
               {results.data.items.map((part) => (
                 <article className="part-card" key={part.partId}>
+                  <PartThumbnail className="part-thumbnail--card" partId={part.partId} />
                   <span className="part-id">{part.partId}</span>
                   <h3>{part.name}</h3>
                   <p>{part.category}</p>

@@ -1,0 +1,108 @@
+/* Printable per-step parts list (PrintPartsPage). */
+
+.print-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.print-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.print-heading h2 {
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.print-heading p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+}
+
+.print-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.print-task-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.print-task-heading h3 {
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.print-task-heading span {
+  color: var(--text-muted);
+}
+
+.print-step {
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.6rem;
+}
+
+.print-step h4 {
+  margin: 0 0 0.4rem;
+}
+
+.print-step-empty,
+.print-step-attachments {
+  margin: 0.2rem 0;
+  color: var(--text-muted);
+}
+
+.print-step-parts {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.print-step-parts li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  column-gap: 0.6rem;
+  align-items: center;
+}
+
+.print-step-parts small {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+}
+
+@media print {
+  .app-header,
+  .skip-link,
+  .print-actions {
+    display: none !important;
+  }
+
+  .app-shell {
+    width: 100%;
+  }
+
+  .print-task {
+    border: 0;
+    box-shadow: none;
+    break-inside: auto;
+  }
+
+  .print-task-heading {
+    break-after: avoid-page;
+  }
+
+  .print-step-parts li {
+    break-inside: avoid-page;
+  }
+}

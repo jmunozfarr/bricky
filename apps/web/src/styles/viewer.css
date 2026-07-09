@@ -676,6 +676,41 @@
   box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
 }
 
+.part-thumbnail {
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  /* Matches the baked render background so tiles look uniform. */
+  background: #f4f4f2;
+}
+
+span.part-thumbnail--empty {
+  display: inline-block;
+  background: var(--surface-muted);
+}
+
+.part-thumbnail--card {
+  width: 4.5rem;
+  height: 4.5rem;
+}
+
+/* Fixed square render surface for the thumbnail CLI; the neutral light
+   background is baked into the captured PNGs so thumbnails read the same
+   in both themes. */
+.thumbnail-harness {
+  width: 256px;
+  height: 256px;
+  overflow: hidden;
+  background: #f4f4f2;
+}
+
+.thumbnail-harness canvas {
+  display: block;
+}
+
 .metadata-warning {
   display: block;
   margin-top: 0.25rem;

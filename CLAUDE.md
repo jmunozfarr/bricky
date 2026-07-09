@@ -73,6 +73,17 @@ Playwright specs live in `apps/web/e2e/`; config is `apps/web/playwright.config.
 
 Tests use synthetic fixtures/schemas — they never touch the real installed LDraw library or personal runtime data, so it's safe to run them repeatedly.
 
+### Part thumbnails (operator command)
+
+```sh
+./scripts/render-thumbnails.sh [--scope referenced|all] [--force] [--limit N]
+```
+
+Pre-renders part images through the app's own viewer (`/thumbnail-harness`
+route driven by the Playwright image) into derived, rebuildable
+`data/thumbnails/`, served at `/api/thumbnails`. Resumable; excluded from
+backups.
+
 ### Backup / restore (operator commands, not part of normal dev loop)
 
 ```sh
@@ -144,5 +155,6 @@ A centralized complexity policy decides between complete `subtree` rendering and
 | `data/models` | Personal, immutable originals | Included in backup |
 | `data/ldraw` | Rebuildable upstream library | Reinstall + reindex |
 | `data/backups` | Portable backup archives | N/A |
+| `data/thumbnails` | Derived part images | Re-run `render-thumbnails.sh` |
 
 `docker compose down --volumes` permanently deletes inventory/model metadata — never run it casually.

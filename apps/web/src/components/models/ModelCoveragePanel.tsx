@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { CompactInventoryEditor } from "../inventory/CompactInventoryEditor";
+import { PartThumbnail } from "../parts/PartThumbnail";
 import { Alert, SegmentedControl } from "../ui/primitives";
 import {
   coverageEmptyMessage,
@@ -107,15 +108,16 @@ export function ModelCoveragePanel({ modelId }: { modelId: string }) {
               <ul className="builder-parts-overview-list">
                 {visible.map((item) => (
                   <li className="builder-coverage-row" key={`${item.partId}-${item.colorCode}`}>
-                    <span
-                      className="color-swatch"
-                      style={{ backgroundColor: item.colorHex ?? "#808080" }}
-                      aria-hidden="true"
-                    />
+                    <PartThumbnail partId={item.partId} />
                     <span className="builder-parts-overview-name">
                       {item.requiredQuantity}× {item.partName}
                     </span>
                     <small>
+                      <span
+                        className="color-swatch"
+                        style={{ backgroundColor: item.colorHex ?? "#808080" }}
+                        aria-hidden="true"
+                      />
                       {item.partId} · {item.colorName} ({item.colorCode})
                     </small>
                     <div className="builder-coverage-row-status">

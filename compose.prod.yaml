@@ -52,6 +52,7 @@ services:
       - ${LDRAW_DATA_PATH:-./data/ldraw}:/data/ldraw
       - ${MODEL_DATA_PATH:-./data/models}:/data/models
       - ./data/backups:/data/backups
+      - ./data/thumbnails:/data/thumbnails
     expose:
       - "8000"
     healthcheck:

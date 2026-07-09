@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { InventoryItem } from "../api/inventory";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
+import { PartThumbnail } from "../components/parts/PartThumbnail";
 import { Alert, EmptyState, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import {
@@ -222,6 +223,7 @@ function InventoryCard({ item, onInspect }: { item: InventoryItem; onInspect: ()
         <span className="part-id">{item.partId}</span>
         <span className="quantity-badge">× {item.quantity}</span>
       </div>
+      <PartThumbnail partId={item.partId} />
       <h3>{item.partName}</h3>
       <p>{item.category}</p>
       <div className="inventory-color">

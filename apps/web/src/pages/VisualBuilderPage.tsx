@@ -29,6 +29,7 @@ import { maximumViewerDpr } from "../components/ldraw/viewerQuality";
 import { loadStepMemory, saveStepMemory } from "../builder/stepMemory";
 import { InstructionGraphPanel } from "../components/models/InstructionGraphPanel";
 import { ModelCoveragePanel } from "../components/models/ModelCoveragePanel";
+import { PartThumbnail } from "../components/parts/PartThumbnail";
 import { SegmentedControl } from "../components/ui/primitives";
 import { errorMessage } from "../queries/async";
 import { useBuildManifest, useInstructionPlayback, useModelDetail } from "../queries/hooks";
@@ -549,16 +550,17 @@ function StepPartList({ step }: { step: BuildStep }) {
       <ul>
         {step.parts.map((part) => (
           <li key={`${part.partId}-${part.colorCode ?? "inherited"}`}>
-            <span
-              className="color-swatch"
-              style={{ backgroundColor: part.colorHex ?? "transparent" }}
-              aria-hidden="true"
-            />
+            <PartThumbnail partId={part.partId} />
             <div>
               <strong>
                 {part.quantityThisStep}× {part.partName}
               </strong>
               <span>
+                <span
+                  className="color-swatch"
+                  style={{ backgroundColor: part.colorHex ?? "transparent" }}
+                  aria-hidden="true"
+                />
                 {part.partId} · {part.colorName}
               </span>
               <small>
