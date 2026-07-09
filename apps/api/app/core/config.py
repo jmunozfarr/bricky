@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     ldraw_library_root: Path = Path("/data/ldraw/official")
     model_storage_root: Path = Path("/data/models")
+    part_thumbnail_root: Path = Path("/data/thumbnails")
     model_max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
 
     instruction_graph_max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH

@@ -49,9 +49,11 @@ def create_app(
     model_max_upload_bytes: int | None = None,
     instruction_graph_limits: InstructionGraphLimits | None = None,
     render_complexity_limits: RenderComplexityLimits | None = None,
+    part_thumbnail_root: Path | None = None,
 ) -> FastAPI:
     settings = get_settings()
     resolved_library_root = library_root or settings.ldraw_library_root
+    resolved_part_thumbnail_root = part_thumbnail_root or settings.part_thumbnail_root
     application = FastAPI(title="Bricky API")
     application.add_middleware(GZipMiddleware, minimum_size=1_024)
     active_session_factory = session_factory or get_session_factory()
@@ -113,6 +115,11 @@ def create_app(
         "/api/ldraw",
         OptionalLibraryStaticFiles(directory=resolved_library_root, check_dir=False),
         name="ldraw-library",
+    )
+    application.mount(
+        "/api/thumbnails",
+        OptionalLibraryStaticFiles(directory=resolved_part_thumbnail_root, check_dir=False),
+        name="part-thumbnails",
     )
     return application
 

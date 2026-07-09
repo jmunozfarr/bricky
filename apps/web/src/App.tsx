@@ -10,6 +10,7 @@ const OverviewPage = lazy(() => import("./pages/OverviewPage"));
 const CatalogPage = lazy(() => import("./pages/CatalogPage"));
 const InventoryPage = lazy(() => import("./pages/InventoryPage"));
 const ViewerDemoPage = lazy(() => import("./pages/ViewerDemoPage"));
+const ThumbnailHarnessPage = lazy(() => import("./pages/ThumbnailHarnessPage"));
 const ModelsPage = lazy(() => import("./pages/ModelsPage"));
 const VisualBuilderPage = lazy(() => import("./pages/VisualBuilderPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
@@ -123,6 +124,14 @@ export function App() {
                   element={
                     <TitledRoute title="Viewer demo">
                       <ViewerDemoPage />
+                    </TitledRoute>
+                  }
+                />
+                <Route
+                  path="/thumbnail-harness"
+                  element={
+                    <TitledRoute title="Thumbnail harness">
+                      <ThumbnailHarnessPage />
                     </TitledRoute>
                   }
                 />

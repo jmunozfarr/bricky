@@ -37,6 +37,9 @@ data/models/*
 !data/backups/
 data/backups/*
 !data/backups/.gitkeep
+!data/thumbnails/
+data/thumbnails/*
+!data/thumbnails/.gitkeep
 *.log
 
 # Editor and operating-system files

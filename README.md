@@ -171,6 +171,23 @@ docker compose -f compose.prod.yaml ps
 
 Shutdown preserves PostgreSQL and bind-mounted data. Never add `--volumes` unless permanent deletion is intended.
 
+## Part thumbnails
+
+Catalog, inventory, and coverage rows show pre-rendered part images when they
+exist under the derived, rebuildable `data/thumbnails/` directory (served at
+`/api/thumbnails`; rows degrade to a neutral tile without them). Render them
+through the app's own viewer with the running dev stack:
+
+```sh
+./scripts/render-thumbnails.sh                  # parts in inventory and model BOMs
+./scripts/render-thumbnails.sh --scope all      # the whole catalog (~20k parts, over an hour)
+./scripts/render-thumbnails.sh --force          # re-render existing files
+```
+
+The renderer is resumable (existing files are skipped) and never touches
+imported sources or the LDraw library. Thumbnails are excluded from backups —
+re-run the script to rebuild them.
+
 ## Backup and restore
 
 Backups are written under ignored `data/backups/`. The default archive contains:

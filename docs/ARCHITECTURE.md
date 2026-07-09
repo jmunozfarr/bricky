@@ -15,6 +15,7 @@
 | `data/models` | Configured local UID/GID through API | Personal immutable originals | Included in backup |
 | `data/ldraw` | Configured local UID/GID through explicit installer | Rebuildable upstream data | Reinstall and reindex |
 | `data/backups` | Configured local UID/GID and host operator | Portable personal-data archives | Copy archive off-device if desired |
+| `data/thumbnails` | Configured local UID/GID through the render CLI | Derived rebuildable part images | Re-run `scripts/render-thumbnails.sh` |
 
 No path is made world-writable. PostgreSQL internal files remain in a named volume rather than a host bind mount.
 

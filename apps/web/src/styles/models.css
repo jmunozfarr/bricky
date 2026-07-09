@@ -699,8 +699,13 @@ h1 {
 }
 
 .builder-coverage-row {
+  grid-template-columns: auto minmax(0, 1fr);
   padding-bottom: 0.55rem;
   border-bottom: 1px solid var(--border);
+}
+
+.builder-coverage-row > :not(.part-thumbnail) {
+  grid-column: 2;
 }
 
 .builder-coverage-row:last-child {
