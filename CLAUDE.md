@@ -91,7 +91,7 @@ Browser -> Nginx (prod) / Vite (dev) -> FastAPI (/api) -> PostgreSQL 18
 ```
 
 - `apps/web` (React 19 + strict TS + Vite + R3F/Three.js): navigation, forms, rendering, prod static delivery. Talks to the backend **only** via `/api`.
-- `apps/api` (Python 3.13 + FastAPI + SQLAlchemy 2 + Alembic): HTTP validation, LDraw install/index, import parsing, coverage math, managed file storage, backup validation.
+- `apps/api` (Python 3.14 + FastAPI + SQLAlchemy 2 + Alembic): HTTP validation, LDraw install/index, import parsing, coverage math, managed file storage, backup validation.
 - PostgreSQL is the sole source of truth for durable state; the filesystem/browser storage never substitutes for it.
 - In production, Nginx is the *only* published service; API and Postgres stay on the internal Compose network. In dev, Vite (`5173`) and API (`8000`) are both published directly.
 

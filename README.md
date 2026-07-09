@@ -58,7 +58,7 @@ The MPD graph design, hierarchical playback semantics, supported subset, fixture
 |---|---|---|
 | Frontend | React 19, strict TypeScript, Vite | Small typed UI with fast local iteration and route-level code splitting. |
 | 3D | Three.js, React Three Fiber | Browser-side LDraw rendering without generated GLB assets. |
-| API | Python 3.13, FastAPI, Pydantic | Explicit typed HTTP contracts and testable service logic. |
+| API | Python 3.14, FastAPI, Pydantic | Explicit typed HTTP contracts and testable service logic. |
 | Persistence | PostgreSQL 18, SQLAlchemy 2, Alembic | Durable relational constraints, transactional rebuild/import behavior, portable dumps. |
 | Packaging | Docker Compose, multi-stage images, Nginx | No host runtimes; reproducible development and production-like operation. |
 | Quality | Pytest, Vitest, TypeScript compiler | Deterministic backend, API, parser, coverage, backup, and frontend helper checks. |
@@ -136,7 +136,7 @@ Production uses [`compose.prod.yaml`](compose.prod.yaml):
 browser -> Nginx :8080 -> FastAPI :8000 -> PostgreSQL :5432
 ```
 
-Only `127.0.0.1:${PROD_WEB_PORT}` is published. Nginx serves fingerprinted static assets with immutable caching, uses no-cache behavior for `index.html`, supports React Router fallback, proxies `/api/`, applies basic security headers, and returns a JSON 503 when the API is unavailable.
+Only `127.0.0.1:${PROD_WEB_PORT}` is published. Nginx serves fingerprinted static assets with immutable caching and gzip compression, uses no-cache behavior for `index.html`, supports React Router fallback, proxies `/api/`, applies security headers including a same-origin Content-Security-Policy, and returns a JSON 503 when the API is unavailable. `apps/web/scripts/csp-smoke.mjs` loads every route through the production stack and fails on CSP violations or console errors.
 
 For a configured database, start the stack with:
 

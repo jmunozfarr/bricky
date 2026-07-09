@@ -8,10 +8,7 @@ server {
     autoindex off;
     client_max_body_size ${NGINX_UPLOAD_LIMIT};
 
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header Referrer-Policy "same-origin" always;
-    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    include /etc/nginx/snippets/security-headers.conf;
 
     location /api/ {
         proxy_pass http://api:8000;
@@ -28,29 +25,19 @@ server {
     location @api_unavailable {
         default_type application/json;
         add_header Cache-Control "no-store" always;
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header Referrer-Policy "same-origin" always;
-        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        include /etc/nginx/snippets/security-headers.conf;
         return 503 '{"detail":"Bricky API is temporarily unavailable"}';
     }
 
     location /assets/ {
         try_files $uri =404;
-        expires 1y;
         add_header Cache-Control "public, max-age=31536000, immutable";
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header Referrer-Policy "same-origin" always;
-        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     location = /index.html {
         add_header Cache-Control "no-store, no-cache, must-revalidate";
-        add_header X-Content-Type-Options "nosniff" always;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header Referrer-Policy "same-origin" always;
-        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        include /etc/nginx/snippets/security-headers.conf;
     }
 
     location = /models {

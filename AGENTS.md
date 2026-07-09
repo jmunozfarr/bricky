@@ -2,7 +2,7 @@
 
 ## Scope and Architecture
 
-Bricky is a local Docker Compose application. `apps/web/` contains the React, TypeScript, and Vite frontend; `apps/api/` contains the Python 3.13 and FastAPI backend. PostgreSQL is the source of truth for persisted data. Keep code within the service that owns it, and do not implement features outside the explicitly requested checkpoint.
+Bricky is a local Docker Compose application. `apps/web/` contains the React, TypeScript, and Vite frontend; `apps/api/` contains the Python 3.14 and FastAPI backend. PostgreSQL is the source of truth for persisted data. Keep code within the service that owns it, and do not implement features outside the explicitly requested checkpoint.
 
 Preserve imported source files exactly as received. If imported data needs normalization, create a derived file or transformation step instead of modifying the source.
 

@@ -23,7 +23,7 @@ working tree is clean and `./scripts/check.sh` is green.
 | 4 | Backend performance and correctness | 2–4 days | ✅ done |
 | 5 | Frontend data layer (TanStack Query + OpenAPI types) | 3–4 days | ✅ done |
 | 6 | UI system and UX fixes | 4–6 days | ✅ done (+ immersive fullscreen, assembled-first flow) |
-| 7 | Platform and dependency upgrades | 1–2 days | ⬜ next |
+| 7 | Platform and dependency upgrades | 1–2 days | ✅ done |
 | 8 | UX feature investments (optional) | 1–2 weeks | ⬜ optional |
 
 Carried-over follow-ups, none blocking:
@@ -166,6 +166,19 @@ known P1/P2 viewer defects; the builder e2e suite runs in CI.
   Policy header.
 - Optional: enable the React Compiler in the Vite build.
 - The three.js upgrade is handled in Phase 2, not here.
+
+*Done 2026-07-09.* Python 3.14.6 (ruff/mypy targets bumped; the formatter
+adopted PEP 758 unparenthesized except clauses), Node 24 LTS, fastapi
+0.139.0 (starlette 1.3), uvicorn 0.51.0, psycopg 3.3.4, mypy 2.2.0, nginx
+1.30 with gzip and a same-origin CSP (verified by the read-only
+`scripts/csp-smoke.mjs` against the prod stack). Already current, so
+no-ops: SQLAlchemy 2.0.51, alembic, pydantic, ruff, pytest, httpx,
+`@playwright/test` 1.61.1 (image lockstep holds), three 0.185.1,
+postgres 18; ESLint stays pinned to 9.x until jsx-a11y supports 10.
+React Compiler enabled via plugin-react's `reactCompilerPreset` with
+`src/components/ldraw/**` excluded — fully-compiled R3F components
+crash-unmounted the builder under parallel e2e stress (they mutate
+three.js objects imperatively, the react-hooks/immutability carve-out).
 
 ## Phase 8 — UX feature investments (optional)
 

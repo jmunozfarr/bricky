@@ -151,6 +151,6 @@ def parse_color_config(content: bytes) -> list[ColorDefinition]:
                     finish=finish,
                 )
             )
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             continue
     return colors

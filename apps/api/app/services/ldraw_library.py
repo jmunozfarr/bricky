@@ -127,7 +127,7 @@ def _read_manifest(path: Path) -> LibraryManifest | None:
             archive_sha256=archive_sha256,
             file_counts=FileCounts(dat=dat, ldr=ldr, png=png),
         )
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except OSError, UnicodeDecodeError, json.JSONDecodeError:
         return None
 
 

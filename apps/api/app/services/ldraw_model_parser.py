@@ -227,7 +227,7 @@ def parse_ldraw_model(
             reference_count += 1
             try:
                 reference = _parse_reference(stripped)
-            except (ValueError, OverflowError):
+            except ValueError, OverflowError:
                 add_issue(
                     "malformed_type1_reference",
                     "Malformed type-1 reference was ignored",

@@ -370,10 +370,7 @@ export interface components {
     schemas: {
         /** Body_upload_model_api_models_post */
         Body_upload_model_api_models_post: {
-            /**
-             * File
-             * Format: binary
-             */
+            /** File */
             file: string;
             /** Name */
             name?: string | null;
@@ -1146,6 +1143,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
     };
     responses: never;
