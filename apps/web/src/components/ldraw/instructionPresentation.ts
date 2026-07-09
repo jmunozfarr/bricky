@@ -50,7 +50,6 @@ function assignMaterials(object: Renderable, materials: Material[]): void {
 export class InstructionPresentationController {
   private readonly originals = new Map<Renderable, Material[]>();
   private readonly variants = new Map<string, Material>();
-  private readonly fallbackGroups: { group: Group; localStep: number }[] = [];
   private appliedVariants = new Map<Group, VariantKind>();
   private hiddenGroups = new Set<Group>();
   private normalized = false;
@@ -59,13 +58,8 @@ export class InstructionPresentationController {
     private readonly model: Group,
     private readonly index: InstructionSceneIndex,
   ) {
-    const indexedGroups = new Set(index.entries.map((entry) => entry.group));
     model.traverse((object) => {
       if (isRenderable(object)) this.originals.set(object, materialsOf(object));
-      if (!isGroup(object) || indexedGroups.has(object)) return;
-      const step: unknown = object.userData.buildingStep;
-      if (typeof step !== "number" || !Number.isInteger(step)) return;
-      this.fallbackGroups.push({ group: object, localStep: step + 1 });
     });
   }
 
@@ -79,6 +73,12 @@ export class InstructionPresentationController {
       this.normalized = true;
     }
 
+    // Only indexed entries carry hierarchical step semantics. Unindexed
+    // groups (part geometry inside node wrappers, nested submodel internals)
+    // inherit their indexed ancestor's visibility; their three.js
+    // `userData.buildingStep` is a flattened cross-submodel counter that must
+    // never be compared against the active task's local step (doing so hid
+    // attached subassembly geometry — see docs/BUILDER_LOGIC_BUGS.md).
     const desiredVariants = new Map<Group, VariantKind>();
     const desiredHidden = new Set<Group>();
     if (mode !== "inspect") {
@@ -86,16 +86,6 @@ export class InstructionPresentationController {
         const step = entryLocalStep(entry, activeOccurrenceId);
         if (step === null) continue;
         classify(entry.group, step, currentStep, mode, desiredVariants, desiredHidden);
-      }
-      for (const fallback of this.fallbackGroups) {
-        classify(
-          fallback.group,
-          fallback.localStep,
-          currentStep,
-          mode,
-          desiredVariants,
-          desiredHidden,
-        );
       }
     }
 
