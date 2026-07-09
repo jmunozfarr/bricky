@@ -1,28 +1,12 @@
-import { APIRequestContext, expect, Page, test } from "@playwright/test";
+import { expect, Page, test } from "@playwright/test";
+
+import { importSyntheticModel } from "./synthetic";
 
 // Each of these tests drives a full WebGL builder session; running them in
 // parallel workers starves the software rasterizer and flakes first paints.
 // "default" keeps them sequential in one worker without serial-mode's
 // abort-following-tests behavior.
 test.describe.configure({ mode: "default" });
-
-const SYNTHETIC_MPD = [
-  "0 FILE main.ldr",
-  "0 Name: main.ldr",
-  "1 4 0 0 0 1 0 0 0 1 0 0 0 1 3001.dat",
-  "0 STEP",
-  "1 14 0 -24 0 1 0 0 0 1 0 0 0 1 3001.dat",
-  "0 STEP",
-  "1 1 0 -48 0 1 0 0 0 1 0 0 0 1 3001.dat",
-  "0 STEP",
-  "1 16 60 0 0 1 0 0 0 1 0 0 0 1 wing.ldr",
-  "0 FILE wing.ldr",
-  "1 2 0 0 0 1 0 0 0 1 0 0 0 1 3020.dat",
-  "0 STEP",
-  "1 2 0 -8 0 1 0 0 0 1 0 0 0 1 3020.dat",
-  "0 NOFILE",
-  "",
-].join("\n");
 
 // An embedded custom part whose subpart exists nowhere: the scene source
 // parses, but the derived scene cannot be assembled (B7's failure shape).
@@ -38,30 +22,6 @@ const BROKEN_SYNTHETIC_MPD = [
   "0 NOFILE",
   "",
 ].join("\n");
-
-async function importSyntheticModel(
-  request: APIRequestContext,
-  name = "e2e-builder-smoke",
-  content = SYNTHETIC_MPD,
-): Promise<string> {
-  const imported = await request.post("/api/models", {
-    multipart: {
-      name,
-      file: {
-        name: `${name}.mpd`,
-        mimeType: "text/plain",
-        buffer: Buffer.from(content),
-      },
-    },
-  });
-  if (imported.status() === 409) {
-    const body = (await imported.json()) as { detail: { existingModelId: string } };
-    return body.detail.existingModelId;
-  }
-  expect(imported.status()).toBe(201);
-  const body = (await imported.json()) as { modelId: string };
-  return body.modelId;
-}
 
 async function dragAcrossCanvas(page: Page, deltaX: number, deltaY: number): Promise<void> {
   const canvas = page.locator(".builder-viewport canvas");
