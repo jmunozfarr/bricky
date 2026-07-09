@@ -244,6 +244,9 @@ export default function ModelsPage() {
                     >
                       View
                     </Link>
+                    <Link className="button-link" to={`/models/${model.modelId}/print`}>
+                      Parts list
+                    </Link>
                     <a
                       className="button-link"
                       href={`/api/models/${encodeURIComponent(model.modelId)}/source`}

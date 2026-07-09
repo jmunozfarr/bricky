@@ -111,7 +111,16 @@ test("core loop: import, readiness, workspace coverage, delete", async ({
       }
     }
 
-    // 6. Delete through the UI, dialog and toast included.
+    if (manifestOk) {
+      // 6. The printable parts list walks every distinct build task.
+      await page.goto(`/models/${modelId}/print`);
+      await expect(page.getByRole("heading", { name: MODEL_NAME })).toBeVisible();
+      await expect(page.getByText("2 build tasks")).toBeVisible();
+      await expect(page.getByText(/Attach completed subassembly/)).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Step 4" })).toBeVisible();
+    }
+
+    // 7. Delete through the UI, dialog and toast included.
     await page.goto(`/models?query=${MODEL_NAME}`);
     await expect(card).toHaveCount(1);
     await card.getByRole("button", { name: "Delete", exact: true }).click();
