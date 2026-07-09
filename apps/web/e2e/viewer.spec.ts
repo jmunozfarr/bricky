@@ -72,8 +72,9 @@ test("reports and recovers from WebGL context loss", async ({ page }, testInfo) 
   test.skip(testInfo.project.name !== "chromium-desktop", "WebGL recovery runs once in Chromium.");
   await page.goto("/viewer-demo");
   await expect(page.getByText("Step 1 of 3", { exact: true })).toBeVisible();
-  const supported = await page.locator("canvas").evaluate((canvas) => {
-    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+  const supported = await page.locator("canvas").evaluate((element) => {
+    if (!(element instanceof HTMLCanvasElement)) return false;
+    const gl = element.getContext("webgl2") ?? element.getContext("webgl");
     const extension = gl?.getExtension("WEBGL_lose_context");
     if (!extension) return false;
     extension.loseContext();

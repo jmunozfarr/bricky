@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { importSyntheticModel } from "./synthetic";
+import { importSyntheticModel, SYNTHETIC_MPD } from "./synthetic";
 
 test.describe.configure({ mode: "default" });
 
@@ -17,7 +17,14 @@ test("core loop: import, readiness, workspace coverage, delete", async ({
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "The core loop runs once in Chromium.");
 
-  const modelId = await importSyntheticModel(request, MODEL_NAME);
+  // Imports dedupe by content SHA-256: a byte-identical fixture would make
+  // this test share (and race deletion of) builder.spec's model, so the
+  // content carries a spec-unique marker.
+  const modelId = await importSyntheticModel(
+    request,
+    MODEL_NAME,
+    SYNTHETIC_MPD.replace("0 Name: main.ldr", "0 Name: main.ldr\n0 // e2e-core-loop variant"),
+  );
   const libraryAvailable = (await request.get("/api/ldraw/LDConfig.ldr")).ok();
   const catalogAvailable = (await request.get("/api/parts/3020")).ok();
 

@@ -1,6 +1,6 @@
 import { expect, Page, test } from "@playwright/test";
 
-import { importSyntheticModel } from "./synthetic";
+import { importSyntheticModel, SYNTHETIC_MPD } from "./synthetic";
 
 // Each of these tests drives a full WebGL builder session; running them in
 // parallel workers starves the software rasterizer and flakes first paints.
