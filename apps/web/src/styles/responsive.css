@@ -47,9 +47,13 @@
 
   .builder-main-grid {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .builder-view-column {
+    /* Stacked layout: pin the viewport row so step content never resizes
+       the canvas; the panel flows below at natural height. */
+    grid-template-rows: auto 34rem auto;
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
