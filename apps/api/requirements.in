@@ -5,6 +5,7 @@ mypy==2.2.0
 psycopg[binary]==3.3.4
 pydantic-settings==2.14.2
 pytest==9.1.1
+pytest-cov==7.1.0
 python-multipart==0.0.32
 ruff==0.15.20
 SQLAlchemy==2.0.51
