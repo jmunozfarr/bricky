@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SubmitEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import {
   formatFileSize,
@@ -8,14 +8,14 @@ import {
   modelUploadError,
   validateModelUpload,
 } from "../models/helpers";
+import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useToast } from "../components/ui/ToastProvider";
 import { Alert, EmptyState, ModelStatusPill, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
-import { useModelsList, useUploadModel } from "../queries/hooks";
+import { useDeleteModel, useModelsList, useUploadModel } from "../queries/hooks";
 
 export default function ModelsPage() {
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
   const query = params.get("query") ?? "";
   const status = params.get("status") ?? "";
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
@@ -28,6 +28,10 @@ export default function ModelsPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const deletion = useDeleteModel();
+  const [confirmingDelete, setConfirmingDelete] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const uploading = upload.isPending;
   const uploadError =
     validationError ?? (upload.error !== null ? modelUploadError(upload.error) : null);
@@ -71,17 +75,22 @@ export default function ModelsPage() {
     upload.mutate(
       { file, name, onProgress: setUploadProgress },
       {
-        onSuccess: (created) => {
-          showToast(`Imported ${created.name}.`);
-          const returnSearch = params.toString();
-          void navigate(`/models/${created.modelId}?return=${encodeURIComponent(returnSearch)}`);
-        },
+        onSuccess: (created) => showToast(`Imported ${created.name}.`),
         onSettled: () => setUploadProgress(null),
       },
     );
   }
 
-  const returnSearch = params.toString();
+  function removeModel(target: { id: string; name: string }) {
+    deletion.mutate(target.id, {
+      onSuccess: () => {
+        setConfirmingDelete(null);
+        showToast(`Deleted ${target.name}.`);
+      },
+      onError: () => setConfirmingDelete(null),
+    });
+  }
+
   const prefetchBuilder = () => void import("./VisualBuilderPage");
   return (
     <section className="page-panel" aria-labelledby="models-title">
@@ -229,23 +238,47 @@ export default function ModelsPage() {
                   <div className="model-card-actions">
                     <Link
                       className="button-link"
-                      to={`/models/${model.modelId}?return=${encodeURIComponent(returnSearch)}`}
-                    >
-                      Model details
-                    </Link>
-                    <Link
-                      className="button-link"
                       to={`/models/${model.modelId}/build`}
                       onMouseEnter={prefetchBuilder}
                       onFocus={prefetchBuilder}
                     >
-                      Open builder
+                      View
                     </Link>
+                    <a
+                      className="button-link"
+                      href={`/api/models/${encodeURIComponent(model.modelId)}/source`}
+                      download={model.originalFilename}
+                    >
+                      Download source
+                    </a>
+                    <button
+                      type="button"
+                      className="danger-button"
+                      disabled={deletion.isPending}
+                      onClick={() => setConfirmingDelete({ id: model.modelId, name: model.name })}
+                    >
+                      Delete
+                    </button>
                   </div>
                 </article>
               ))}
             </div>
           )}
+          {deletion.error !== null && (
+            <Alert title="Delete failed.">
+              {deletion.error instanceof Error ? deletion.error.message : "Delete failed."}
+            </Alert>
+          )}
+          <ConfirmDialog
+            open={confirmingDelete !== null}
+            title={confirmingDelete ? `Delete ${confirmingDelete.name}?` : "Delete this model?"}
+            description="The imported model and its preserved source file are removed permanently."
+            confirmLabel="Delete model"
+            destructive
+            busy={deletion.isPending}
+            onConfirm={() => confirmingDelete && removeModel(confirmingDelete)}
+            onCancel={() => setConfirmingDelete(null)}
+          />
           <Pagination
             page={page}
             totalPages={results.data.totalPages}

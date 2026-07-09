@@ -1,26 +1,11 @@
-.model-detail {
-  display: grid;
-  gap: 1rem;
-}
-
-.builder-launch-panel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  border-color: var(--accent);
-  background: linear-gradient(120deg, var(--accent-soft), transparent 55%), var(--surface);
-}
-
-.builder-launch-panel h2,
-.builder-launch-panel p:last-child {
-  margin-bottom: 0;
-}
-
 .model-card-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.model-card-actions .button-link {
+  flex: 1;
 }
 
 .visual-builder-page {
@@ -469,43 +454,9 @@
   color: var(--text-muted);
 }
 
-.detail-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
 .danger-button {
   border-color: #fecaca;
   color: var(--danger);
-}
-
-.bom-search {
-  max-width: 24rem;
-  margin-bottom: 1rem;
-}
-
-.table-scroll {
-  overflow-x: auto;
-}
-
-.bom-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-}
-
-.bom-table th,
-.bom-table td {
-  padding: 0.75rem;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-}
-
-.bom-table th {
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  text-transform: uppercase;
 }
 
 .issue-list {
@@ -702,4 +653,88 @@ h1 {
 .builder-parts-overview-list small {
   grid-column: 2;
   color: var(--text-muted);
+}
+
+.builder-coverage {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.builder-coverage-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.builder-coverage-heading h4 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.builder-coverage .coverage-progress {
+  margin-top: 0;
+}
+
+.builder-coverage-filters {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0 0.9rem 0.75rem;
+}
+
+.builder-coverage-filters label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.builder-coverage-filters input {
+  min-height: 2.4rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
+.builder-coverage-row {
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.builder-coverage-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.builder-coverage-row-status {
+  display: flex;
+  grid-column: 2;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+
+.builder-coverage-row .coverage-actions {
+  grid-column: 2;
+  margin-top: 0.4rem;
+}
+
+.builder-import-warnings {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-subtle);
+}
+
+.builder-import-warnings summary {
+  padding: 0.75rem 0.9rem;
+  color: var(--text-strong);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.builder-import-warnings .issue-list {
+  padding: 0 0.9rem 0.75rem;
+  list-style: none;
 }

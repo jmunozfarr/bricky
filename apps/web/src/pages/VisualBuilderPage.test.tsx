@@ -6,12 +6,14 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BuildManifest, ModelDetail } from "../api/models";
+import { ToastProvider } from "../components/ui/ToastProvider";
 import VisualBuilderPage from "./VisualBuilderPage";
 
-const { getModel, getInstructionPlayback, getBuildManifest } = vi.hoisted(() => ({
+const { getModel, getInstructionPlayback, getBuildManifest, getModelCoverage } = vi.hoisted(() => ({
   getModel: vi.fn(),
   getInstructionPlayback: vi.fn(),
   getBuildManifest: vi.fn(),
+  getModelCoverage: vi.fn(),
 }));
 
 vi.mock("../api/models", async (loadOriginal) => ({
@@ -19,6 +21,7 @@ vi.mock("../api/models", async (loadOriginal) => ({
   getModel,
   getInstructionPlayback,
   getBuildManifest,
+  getModelCoverage,
 }));
 
 vi.mock("@react-three/fiber", () => ({
@@ -36,6 +39,7 @@ const model = {
   name: "Test car",
   sourceUrl: "/source",
   totalPartQuantity: 2,
+  issues: [],
   bom: [
     {
       partId: "3001",
@@ -50,6 +54,39 @@ const model = {
     },
   ],
 } as unknown as ModelDetail;
+
+const coverage = {
+  modelId: "model-1",
+  summary: {
+    pieceCoveragePercentage: 0,
+    fullyBuildable: false,
+    totalRequiredQuantity: 2,
+    totalAvailableQuantity: 0,
+    totalMissingQuantity: 2,
+    uniqueItemCount: 1,
+    completeItemCount: 0,
+    partialItemCount: 0,
+    missingItemCount: 1,
+  },
+  items: [
+    {
+      partId: "3001",
+      partName: "Brick 2 x 4",
+      category: "Brick",
+      colorCode: 4,
+      colorName: "Red",
+      colorHex: "#c91a09",
+      requiredQuantity: 2,
+      ownedQuantity: 0,
+      availableQuantity: 0,
+      missingQuantity: 2,
+      coveragePercentage: 0,
+      status: "missing",
+      catalogAvailable: true,
+      renderAssetUrl: null,
+    },
+  ],
+};
 
 const manifest: BuildManifest = {
   modelId: "model-1",
@@ -100,6 +137,22 @@ const manifest: BuildManifest = {
   ],
 };
 
+function renderPage() {
+  return render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <ToastProvider>
+        <MemoryRouter initialEntries={["/models/model-1/build"]}>
+          <Routes>
+            <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>
+    </QueryClientProvider>,
+  );
+}
+
 describe("visual builder workspace", () => {
   beforeEach(() => {
     getModel.mockResolvedValue(model);
@@ -109,6 +162,7 @@ describe("visual builder workspace", () => {
       fallbackReason: null,
     });
     getBuildManifest.mockResolvedValue(manifest);
+    getModelCoverage.mockResolvedValue(coverage);
   });
 
   afterEach(() => {
@@ -119,24 +173,14 @@ describe("visual builder workspace", () => {
   });
 
   it("presents exact current-step parts and switches modes without refetching", async () => {
-    render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <MemoryRouter initialEntries={["/models/model-1/build"]}>
-          <Routes>
-            <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderPage();
 
     // The workspace opens on the assembled overview: no steps anywhere.
     expect(await screen.findByText(/assembled model is shown in full colour/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
 
-    // The full parts list renders its rows only once expanded.
-    const summary = screen.getByText(/All parts · 2 pieces · 1 kinds/);
+    // The coverage list renders its rows only once expanded.
+    const summary = await screen.findByText(/All parts · 2 pieces · 1 kinds/);
     expect(screen.queryByText(/2× Brick 2 x 4/)).toBeNull();
     // jsdom does not activate <details> from summary clicks; drive the
     // toggle event the way the browser would after opening.
@@ -162,34 +206,14 @@ describe("visual builder workspace", () => {
       ...manifest,
       scene: { ...manifest.scene, renderStrategy: "local" },
     });
-    render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <MemoryRouter initialEntries={["/models/model-1/build"]}>
-          <Routes>
-            <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Build" }));
     await screen.findByText("1× Brick 2 x 4", undefined, { timeout: 4_000 });
     expect(screen.getByText(/subassemblies are built as separate tasks/i)).toBeTruthy();
   });
 
   it("jumps directly to a typed step number and clamps out-of-range input", async () => {
-    render(
-      <QueryClientProvider
-        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-      >
-        <MemoryRouter initialEntries={["/models/model-1/build"]}>
-          <Routes>
-            <Route path="/models/:modelId/build" element={<VisualBuilderPage />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Build" }));
     await screen.findByText("1× Brick 2 x 4", undefined, { timeout: 4_000 });
 

@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import type { ReactNode } from "react";
-import { BrowserRouter, NavLink, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, NavLink, Route, Routes, useParams } from "react-router-dom";
 
 import { useDocumentTitle } from "./app/pageTitle";
 import { ToastProvider } from "./components/ui/ToastProvider";
@@ -11,13 +11,19 @@ const CatalogPage = lazy(() => import("./pages/CatalogPage"));
 const InventoryPage = lazy(() => import("./pages/InventoryPage"));
 const ViewerDemoPage = lazy(() => import("./pages/ViewerDemoPage"));
 const ModelsPage = lazy(() => import("./pages/ModelsPage"));
-const ModelDetailPage = lazy(() => import("./pages/ModelDetailPage"));
 const VisualBuilderPage = lazy(() => import("./pages/VisualBuilderPage"));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage"));
 
 function TitledRoute({ title, children }: { title: string; children: ReactNode }) {
   useDocumentTitle(title);
   return children;
+}
+
+/** The former model-detail route: everything it held now lives in the
+    workspace, so deep links land there. */
+function ModelWorkspaceRedirect() {
+  const { modelId = "" } = useParams();
+  return <Navigate to={`/models/${modelId}/build`} replace />;
 }
 
 export function App() {
@@ -103,14 +109,7 @@ export function App() {
                     </TitledRoute>
                   }
                 />
-                <Route
-                  path="/models/:modelId"
-                  element={
-                    <TitledRoute title="Model details">
-                      <ModelDetailPage />
-                    </TitledRoute>
-                  }
-                />
+                <Route path="/models/:modelId" element={<ModelWorkspaceRedirect />} />
                 <Route
                   path="/models/:modelId/build"
                   element={

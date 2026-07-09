@@ -84,10 +84,20 @@ it never used this controller.
   one step). With the fix the root now shows the fully assembled model
   instead of loose slices; the cards remain the way into each build task.
 
-## Remaining items in this pass
+## Companion changes in this pass
 
-- S7: fix the viewport to a stable size independent of side-panel content.
-- `/models` restructure (drop the intermediate detail route; inline the key
-  facts and actions on the list; move the BOM/coverage table into the
-  workspace overview).
+- S7 fixed: the workspace grid takes a fixed viewport-derived height on
+  desktop (side panel scrolls internally) and stacked layouts pin the
+  viewport row — verified pixel-identical viewport boxes across steps
+  1/9/10/24 on the real Bugatti chassisrear task.
+- `/models` restructure: the intermediate model-detail route is retired
+  (`/models/:modelId` redirects to the workspace). List cards carry the key
+  facts plus View / Download source / Delete; build readiness and the
+  per-part coverage list (with inline inventory editing) moved into the
+  workspace inspect panel (`ModelCoveragePanel`); import warnings and the
+  `?debug=viewer` instruction-graph diagnostic moved with them.
+
+## Exit gate
+
+- Full unit + e2e + axe matrix green.
 - User field-check on the Bugatti (real GPU) before merging the branch.
