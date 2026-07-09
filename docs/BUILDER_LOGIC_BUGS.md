@@ -83,6 +83,13 @@ it never used this controller.
   (official sets ship a root model that places the car, start key, and bag in
   one step). With the fix the root now shows the fully assembled model
   instead of loose slices; the cards remain the way into each build task.
+- 42056 GT3 RS main task, step 10 ("No physical parts are added at this
+  step"): the source MPD literally contains two consecutive `0 STEP` lines —
+  an empty step between the step that pins one side of the chassis (9) and
+  the step that repeats it mirrored on the other side (11), where the paper
+  instructions show a rotate-the-model page. Imported sources are immutable
+  and step numbers must stay aligned with the printed instructions, so the
+  step is presented honestly rather than skipped or merged away.
 
 ## Companion changes in this pass
 
