@@ -258,7 +258,7 @@ def assemble_build_manifest(
     try:
         cache_key, _packed = packed_scene_for(model, data, occurrence_id, render_strategy)
         delivery = "packed"
-    except (LDrawPackError, LDrawPackLimitError):
+    except LDrawPackError, LDrawPackLimitError:
         LOGGER.info(
             "Packed scene unavailable for model %s occurrence %s; using external assets",
             model.public_id,

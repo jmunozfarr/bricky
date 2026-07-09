@@ -328,7 +328,7 @@ def parse_instruction_graph(
                             source_submodel_name=section_name,
                         )
                     )
-                except (ValueError, OverflowError):
+                except ValueError, OverflowError:
                     add_issue(
                         "malformed_direct_geometry",
                         "Malformed direct geometry was excluded from hierarchical rendering",
@@ -344,7 +344,7 @@ def parse_instruction_graph(
                 continue
             try:
                 color_code, transform, filename = _parse_type_one(stripped)
-            except (ValueError, OverflowError):
+            except ValueError, OverflowError:
                 add_issue(
                     "malformed_type1_reference",
                     "Malformed type-1 reference was excluded from the instruction graph",

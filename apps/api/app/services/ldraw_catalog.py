@@ -103,7 +103,7 @@ def rebuild_catalog(session_factory: sessionmaker[Session], library_root: Path) 
                     "is_shortcut": header.is_shortcut,
                 }
             )
-        except (OSError, ValueError):
+        except OSError, ValueError:
             skipped_invalid_count += 1
 
     try:

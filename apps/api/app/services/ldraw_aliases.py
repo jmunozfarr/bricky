@@ -219,7 +219,7 @@ class LDrawMovedAliasResolver:
         try:
             content = source_path.read_bytes()
             header = parse_part_header(content, record.relative_path)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             return AliasInspection(record.part_id, True, None, True)
 
         catalog_match = _MOVED_DESCRIPTION.fullmatch(record.description)
