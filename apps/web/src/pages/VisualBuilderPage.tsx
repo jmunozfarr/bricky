@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Group } from "three";
 
 import { BuildManifest, BuildStep, ModelDetail } from "../api/models";
@@ -27,6 +27,8 @@ import {
 import { WebGlLifecycle } from "../components/ldraw/WebGlLifecycle";
 import { maximumViewerDpr } from "../components/ldraw/viewerQuality";
 import { loadStepMemory, saveStepMemory } from "../builder/stepMemory";
+import { InstructionGraphPanel } from "../components/models/InstructionGraphPanel";
+import { ModelCoveragePanel } from "../components/models/ModelCoveragePanel";
 import { SegmentedControl } from "../components/ui/primitives";
 import { errorMessage } from "../queries/async";
 import { useBuildManifest, useInstructionPlayback, useModelDetail } from "../queries/hooks";
@@ -56,6 +58,7 @@ function nextOverlayMode(mode: OverlayMode): OverlayMode {
 
 export default function VisualBuilderPage() {
   const { modelId = "" } = useParams();
+  const [searchParams] = useSearchParams();
   const [activeOccurrenceId, setActiveOccurrenceId] = useState<string | null>(null);
   const [selectedStep, setSelectedStep] = useState(1);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("inspect");
@@ -159,7 +162,7 @@ export default function VisualBuilderPage() {
     <div className="visual-builder-page">
       <header className="builder-page-header">
         <div>
-          <Link to={`/models/${modelId}`}>Back to model details</Link>
+          <Link to="/models">Back to models</Link>
           <p className="eyebrow">Visual builder</p>
           <h2>{bootstrap.model.name}</h2>
         </div>
@@ -199,6 +202,7 @@ export default function VisualBuilderPage() {
           onFocusChange={setFocusCurrentStep}
         />
       )}
+      {searchParams.get("debug") === "viewer" && <InstructionGraphPanel modelId={modelId} />}
     </div>
   );
 }
@@ -404,7 +408,23 @@ function BuilderWorkspace({
                   <p>Open subassembly tasks to inspect their geometry separately.</p>
                 )}
               </div>
-              <ModelPartsOverview model={model} />
+              <ModelCoveragePanel modelId={model.modelId} />
+              {model.issues.length > 0 && (
+                <details className="builder-import-warnings">
+                  <summary>Import warnings · {model.issues.length}</summary>
+                  <ul className="issue-list">
+                    {model.issues.map((issue, index) => (
+                      <li key={`${issue.code}-${index}`}>
+                        <strong>{issue.code.replaceAll("_", " ")}</strong>
+                        <span>
+                          {issue.message}
+                          {issue.referencedFilename ? ` — ${issue.referencedFilename}` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </>
           ) : (
             <>
@@ -515,43 +535,6 @@ function StepNumberInput({
         }
       }}
     />
-  );
-}
-
-function ModelPartsOverview({ model }: { model: ModelDetail }) {
-  // The list renders only once expanded, so inspecting a 5,000-piece model
-  // does not pay for hundreds of rows up front.
-  const [expanded, setExpanded] = useState(false);
-  const uniqueItems = model.bom.length;
-  return (
-    <details
-      className="builder-parts-overview"
-      onToggle={(event) => setExpanded(event.currentTarget.open)}
-    >
-      <summary>
-        All parts · {model.totalPartQuantity.toLocaleString()} pieces ·{" "}
-        {uniqueItems.toLocaleString()} kinds
-      </summary>
-      {expanded && (
-        <ul className="builder-parts-overview-list">
-          {model.bom.map((item) => (
-            <li key={`${item.partId}-${item.colorCode}`}>
-              <span
-                className="color-swatch"
-                style={{ backgroundColor: item.colorHex ?? "#808080" }}
-                aria-hidden="true"
-              />
-              <span className="builder-parts-overview-name">
-                {item.quantity}× {item.partName}
-              </span>
-              <small>
-                {item.partId} · {item.colorName}
-              </small>
-            </li>
-          ))}
-        </ul>
-      )}
-    </details>
   );
 }
 

@@ -195,30 +195,89 @@ describe("instruction scene presentation", () => {
     presentation.dispose();
   });
 
-  it("applies fallback building-step groups without retraversing the scene", () => {
+  it("never gates unindexed geometry by its flattened building step (Bugatti bug)", () => {
+    // The three.js loader stamps a cross-submodel cumulative buildingStep on
+    // the geometry groups inside node wrappers. Comparing that number against
+    // the active task's local step hid attached subassembly internals — the
+    // groups must simply inherit their indexed ancestor's visibility.
     const model = new Group();
     const indexed = partEntry(1);
-    const fallbackFill = new MeshBasicMaterial({ color: "#996633" });
-    const fallback = new Group();
-    fallback.userData.buildingStep = 1; // zero-based: local step 2
-    fallback.add(new Mesh(new BufferGeometry(), fallbackFill));
-    model.add(indexed.group, fallback);
+    const inner = new Group();
+    inner.userData.buildingStep = 24; // flattened counter far beyond local steps
+    inner.add(new Mesh(new BufferGeometry(), new MeshBasicMaterial({ color: "#996633" })));
+    indexed.group.add(inner);
+    model.add(indexed.group);
     const index: InstructionSceneIndex = {
       rootOccurrenceId: "occ-000001",
       entries: [indexed.entry],
-      objectCount: 4,
+      objectCount: 5,
     };
     const presentation = new InstructionPresentationController(model, index);
 
     presentation.apply("occ-000001", 1, "focus");
-    expect(fallback.visible).toBe(false);
-
-    presentation.apply("occ-000001", 2, "focus");
-    expect(fallback.visible).toBe(true);
-    const indexedFill = (indexed.group.children[0] as Mesh).material as MeshBasicMaterial;
-    expect(indexedFill.opacity).toBe(GHOST_OPACITY);
-    expect((fallback.children[0] as Mesh).material).toBe(fallbackFill);
+    expect(indexed.group.visible).toBe(true);
+    expect(inner.visible).toBe(true);
     presentation.dispose();
-    expect((indexed.group.children[0] as Mesh).material).toBe(indexed.fill);
+  });
+
+  it("shows an attached child complete, including its own deep internals", () => {
+    const model = new Group();
+    // Child subassembly attached at parent step 2. Its internals: a part of
+    // the child at the child's local step 3, and a grandchild occurrence —
+    // both nested inside the child wrapper and both beyond the parent's
+    // step numbers.
+    const child = occurrenceEntry("occ-000002", 2);
+    const childPartFill = new MeshBasicMaterial({ color: "#663399" });
+    const childPart = new Group();
+    childPart.add(new Mesh(new BufferGeometry(), childPartFill));
+    const childPartEntry: SceneIndexEntry = {
+      kind: "part",
+      occurrenceId: "occ-000002",
+      parentOccurrenceId: "occ-000002",
+      localStep: 3,
+      attachmentStep: null,
+      definitionName: "wing.ldr",
+      instructionNodeId: "node-900",
+      traversalPosition: 10,
+      group: childPart,
+    };
+    const grandchild = new Group();
+    grandchild.add(new Mesh(new BufferGeometry(), new MeshBasicMaterial({ color: "#339966" })));
+    const grandchildEntry: SceneIndexEntry = {
+      kind: "occurrence",
+      occurrenceId: "occ-000003",
+      parentOccurrenceId: "occ-000002",
+      localStep: null,
+      attachmentStep: 1,
+      definitionName: "axle.ldr",
+      instructionNodeId: null,
+      traversalPosition: 11,
+      group: grandchild,
+    };
+    child.group.add(childPart, grandchild);
+    model.add(child.group);
+    const index: InstructionSceneIndex = {
+      rootOccurrenceId: "occ-000001",
+      entries: [child.entry, childPartEntry, grandchildEntry],
+      objectCount: 9,
+    };
+    const presentation = new InstructionPresentationController(model, index);
+
+    // Before the attachment step the whole child subtree is hidden.
+    presentation.apply("occ-000001", 1, "focus");
+    expect(child.group.visible).toBe(false);
+
+    // From the attachment step onward the child renders fully assembled:
+    // its own parts and grandchildren are not gated by the parent timeline.
+    presentation.apply("occ-000001", 2, "focus");
+    expect(child.group.visible).toBe(true);
+    expect(childPart.visible).toBe(true);
+    expect(grandchild.visible).toBe(true);
+
+    presentation.apply("occ-000001", 3, "focus");
+    expect(child.group.visible).toBe(true);
+    expect(childPart.visible).toBe(true);
+    expect(grandchild.visible).toBe(true);
+    presentation.dispose();
   });
 });

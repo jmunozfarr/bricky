@@ -612,22 +612,6 @@
   font-size: 0.8rem;
 }
 
-.readiness-panel {
-  border: 2px solid #d6dbe3;
-}
-
-.readiness-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.readiness-heading h2 {
-  margin: 0;
-  font-size: clamp(1.75rem, 4vw, 2.5rem);
-}
-
 .build-state,
 .coverage-status {
   display: inline-flex;
@@ -672,38 +656,6 @@
   background: #15803d;
 }
 
-.coverage-progress-text {
-  margin: 0.65rem 0 1rem;
-  color: var(--text);
-}
-
-.readiness-counts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(7rem, 1fr));
-  gap: 0.7rem;
-  margin: 0;
-}
-
-.readiness-counts div {
-  padding: 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 0.55rem;
-  background: var(--surface-muted);
-}
-
-.readiness-counts dt {
-  color: var(--text-muted);
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.readiness-counts dd {
-  margin: 0.25rem 0 0;
-  font-size: 1.25rem;
-  font-weight: 750;
-}
-
 .segmented-control {
   display: inline-flex;
   gap: 0.25rem;
@@ -722,50 +674,6 @@
   border-color: var(--border-strong);
   background: var(--surface);
   box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
-}
-
-.coverage-filters {
-  display: grid;
-  grid-template-columns: minmax(14rem, 2fr) minmax(10rem, 1fr);
-  gap: 0.8rem;
-  margin-bottom: 1rem;
-}
-
-.coverage-filters label {
-  display: grid;
-  gap: 0.35rem;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.coverage-filters input,
-.coverage-filters select {
-  min-height: 2.6rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 0.5rem;
-  background: var(--surface);
-}
-
-.coverage-table {
-  min-width: 72rem;
-}
-
-.coverage-row td:first-child {
-  border-left: 0.3rem solid transparent;
-}
-
-.coverage-row--missing td:first-child {
-  border-left-color: var(--danger);
-}
-
-.coverage-row--partial td:first-child {
-  border-left-color: #d97706;
-}
-
-.coverage-row--complete td:first-child {
-  border-left-color: #15803d;
 }
 
 .metadata-warning {
