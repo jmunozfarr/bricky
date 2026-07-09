@@ -24,7 +24,7 @@ working tree is clean and `./scripts/check.sh` is green.
 | 5 | Frontend data layer (TanStack Query + OpenAPI types) | 3–4 days | ✅ done |
 | 6 | UI system and UX fixes | 4–6 days | ✅ done (+ immersive fullscreen, assembled-first flow) |
 | 7 | Platform and dependency upgrades | 1–2 days | ✅ done |
-| 8 | UX feature investments (optional) | 1–2 weeks | ⬜ optional |
+| 8 | UX feature investments (optional) | 1–2 weeks | ✅ done |
 
 Carried-over follow-ups, none blocking:
 - **Builder/viewer e2e in CI**: the specs run on the dev machine but
@@ -188,6 +188,32 @@ three.js objects imperatively, the react-hooks/immutability carve-out).
 - Core-loop e2e (import → coverage → builder) on synthetic fixtures; coverage
   reporting; automated perf assertions for the builder targets.
 - Printable per-step parts list; optional PWA manifest/offline shell.
+
+*Done 2026-07-09, four user-chosen tracks (the PWA item was dropped in
+favour of a builder-logic pass):*
+
+- **Builder logic** (`fix/builder-logic`, user field-confirmed on the
+  Bugatti): attached subassemblies now render fully assembled — the
+  presentation fallback compared three.js's flattened cross-submodel
+  `buildingStep` against the active task's local steps and hid attached
+  child geometry (`docs/BUILDER_LOGIC_BUGS.md`). Plus a fixed-size builder
+  viewport and the `/models` restructure (detail route folded into the
+  list and the workspace inspect panel).
+- **Core-loop e2e** (`test/core-loop-e2e`): import → readiness → workspace
+  coverage → guided steps → UI delete on the synthetic fixture; the
+  coverage flow runs without the LDraw library or catalog (verified against
+  a library-less API) so CI executes it. Request-count builder budgets;
+  pytest-cov + @vitest/coverage-v8 report-only in `check.sh`; `e2e/` is now
+  type-checked.
+- **Part thumbnails** (`feat/part-thumbnails`): `scripts/render-thumbnails.sh`
+  renders parts through the app's own viewer (`/thumbnail-harness` +
+  Playwright image) into derived `data/thumbnails`, served at
+  `/api/thumbnails`; wired into catalog/inventory/coverage/step rows with a
+  neutral-tile fallback. Individual lazy PNGs instead of the planned sprite
+  sheets — simpler and request count is a non-issue locally.
+- **Printable parts list** (same branch): `/models/:modelId/print` prints
+  one section per distinct submodel definition with per-step part rows and
+  a print stylesheet.
 
 ## Explicit non-goals
 
