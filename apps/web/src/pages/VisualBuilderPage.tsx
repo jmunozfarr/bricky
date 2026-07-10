@@ -157,7 +157,17 @@ export default function VisualBuilderPage() {
   }
 
   const activeManifest = manifest.kind === "ready" ? manifest.data : null;
-  const currentStep = activeManifest?.steps[selectedStep - 1] ?? null;
+  const stepCount = activeManifest?.steps.length ?? 0;
+  // Clamp the step index for the lookup so a manifest swap to a task with fewer
+  // steps (e.g. returning from a deep subassembly to a shorter parent) can never
+  // make currentStep transiently null before the remembered-step effect re-clamps
+  // selectedStep. A null currentStep unmounts BuilderWorkspace for one render, and
+  // unmounting the fullscreened workspace element forces the browser out of
+  // fullscreen. Only a genuinely empty manifest (no steps) yields a null step.
+  const currentStep =
+    activeManifest && stepCount > 0
+      ? (activeManifest.steps[Math.min(Math.max(selectedStep, 1), stepCount) - 1] ?? null)
+      : null;
 
   return (
     <div className="visual-builder-page">

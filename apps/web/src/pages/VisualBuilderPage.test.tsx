@@ -235,4 +235,76 @@ describe("visual builder workspace", () => {
     fireEvent.blur(stepInput);
     expect(screen.getByRole("heading", { name: "Step 2" })).toBeTruthy();
   });
+
+  it("keeps the workspace mounted when returning to a parent with fewer steps", async () => {
+    // The workspace <section> owns the fullscreen element. If it unmounts during
+    // an occurrence swap, the browser drops out of fullscreen — so returning from
+    // a deep subassembly to a shorter parent must not remount that node.
+    const parentManifest: BuildManifest = {
+      ...manifest,
+      occurrenceId: "occ-parent",
+      parentOccurrenceId: null,
+      breadcrumbs: [{ occurrenceId: "occ-parent", sourceSubmodelName: "car.ldr" }],
+      steps: [
+        {
+          step: 1,
+          directGeometryCommandCount: 0,
+          parts: [],
+          attachments: [
+            {
+              occurrenceId: "occ-child",
+              sourceSubmodelName: "wheel.ldr",
+              attachmentStep: 1,
+              traversalOrder: 0,
+              repeatedDefinitionCount: 1,
+              repeatedDefinitionIndex: 1,
+            },
+          ],
+        },
+        { step: 2, directGeometryCommandCount: 0, attachments: [], parts: [] },
+      ],
+    };
+    const childManifest: BuildManifest = {
+      ...manifest,
+      occurrenceId: "occ-child",
+      parentOccurrenceId: "occ-parent",
+      sourceSubmodelName: "wheel.ldr",
+      breadcrumbs: [
+        { occurrenceId: "occ-parent", sourceSubmodelName: "car.ldr" },
+        { occurrenceId: "occ-child", sourceSubmodelName: "wheel.ldr" },
+      ],
+      steps: [1, 2, 3, 4, 5].map((step) => ({
+        step,
+        directGeometryCommandCount: 0,
+        attachments: [],
+        parts: [],
+      })),
+    };
+    getInstructionPlayback.mockResolvedValue({
+      available: true,
+      rootOccurrenceId: "occ-parent",
+      fallbackReason: null,
+    });
+    getBuildManifest.mockImplementation((_modelId: string, occurrenceId: string) =>
+      Promise.resolve(occurrenceId === "occ-child" ? childManifest : parentManifest),
+    );
+
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Build" }));
+    // Descend into the subassembly and wait for its longer timeline to load.
+    fireEvent.click(await screen.findByRole("button", { name: "Open build task" }));
+    await screen.findByText(/of 5/);
+    // Advance past the parent's final step (2) while inside the 5-step child.
+    fireEvent.change(await screen.findByRole("spinbutton"), { target: { value: "5" } });
+    expect(await screen.findByRole("heading", { name: "Step 5" })).toBeTruthy();
+
+    const workspaceBefore = screen.getByRole("region", { name: "Visual building workspace" });
+    fireEvent.click(screen.getByRole("button", { name: "Return to parent task" }));
+
+    // The 2-step parent swaps in while selectedStep is still 5; the workspace
+    // node must survive the render before the step is re-clamped back to 1.
+    await screen.findByText(/of 2/);
+    const workspaceAfter = screen.getByRole("region", { name: "Visual building workspace" });
+    expect(workspaceAfter).toBe(workspaceBefore);
+  });
 });
