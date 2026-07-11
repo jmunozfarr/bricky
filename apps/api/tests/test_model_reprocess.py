@@ -11,7 +11,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.cli.models import reprocess_targets
 from app.main import create_app
-from app.models import ImportedModel, LDrawColor, ModelBomItem, ModelImportIssue, Part
+from app.models import (
+    ImportedModel,
+    LDrawColor,
+    LDrawPrimitive,
+    ModelBomItem,
+    ModelImportIssue,
+    Part,
+)
 from app.services.model_import import import_model
 from app.services.model_reprocess import (
     ModelNotFoundError,
@@ -117,6 +124,28 @@ def test_reprocess_resolves_new_catalog_parts_and_is_idempotent(
         )
         assert bom_rows == 2
         assert issue_rows == 0
+
+
+def test_reprocess_uses_indexed_primitives(
+    catalog_session_factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    seed_catalog(catalog_session_factory, ["3001"])
+    source = f"0 Model\n1 4 {IDENTITY} 3001.dat\n1 16 {IDENTITY} axlehol8.dat\n".encode()
+    public_id = import_source(catalog_session_factory, tmp_path, source)
+    with catalog_session_factory() as session:
+        model = session.scalar(select(ImportedModel).where(ImportedModel.public_id == public_id))
+        assert model is not None
+        assert model.import_status == "ready_with_warnings"
+        assert model.unresolved_reference_count == 1
+
+    with catalog_session_factory.begin() as session:
+        session.add(LDrawPrimitive(name="axlehol8.dat"))
+    outcome = reprocess_model(
+        catalog_session_factory, tmp_path / "models", tmp_path / "library", public_id
+    )
+    assert outcome.import_status == "ready"
+    assert outcome.parsed.issues == ()
+    assert [(item.part_id, item.quantity) for item in outcome.parsed.bom] == [("3001", 1)]
 
 
 def test_reprocess_endpoint_returns_updated_detail(

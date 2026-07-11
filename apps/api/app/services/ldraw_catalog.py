@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlalchemy import delete, insert
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models import CatalogIndexState, LDrawColor, Part
+from app.models import CatalogIndexState, LDrawColor, LDrawPrimitive, Part
 from app.services.ldraw_library import get_library_status
 from app.services.ldraw_metadata import parse_color_config, parse_part_header
 
@@ -25,6 +25,7 @@ class RebuildReport:
     skipped_subpart_count: int
     skipped_invalid_count: int
     indexed_color_count: int
+    indexed_primitive_count: int
     library_fingerprint: str
     duration_seconds: float
 
@@ -106,6 +107,14 @@ def rebuild_catalog(session_factory: sessionmaker[Session], library_root: Path) 
         except OSError, ValueError:
             skipped_invalid_count += 1
 
+    primitives_root = library_root / "p"
+    primitive_names: set[str] = set()
+    if primitives_root.is_dir():
+        for source_path in primitives_root.rglob("*.dat"):
+            relative_name = source_path.relative_to(primitives_root).as_posix().lower()
+            if len(relative_name) <= 255:
+                primitive_names.add(relative_name)
+
     try:
         color_definitions = parse_color_config((library_root / "LDConfig.ldr").read_bytes())
     except OSError as error:
@@ -129,10 +138,16 @@ def rebuild_catalog(session_factory: sessionmaker[Session], library_root: Path) 
             session.execute(delete(CatalogIndexState))
             session.execute(delete(Part))
             session.execute(delete(LDrawColor))
+            session.execute(delete(LDrawPrimitive))
             if part_rows:
                 session.execute(insert(Part), part_rows)
             if color_rows:
                 session.execute(insert(LDrawColor), color_rows)
+            if primitive_names:
+                session.execute(
+                    insert(LDrawPrimitive),
+                    [{"name": name} for name in sorted(primitive_names)],
+                )
             session.add(
                 CatalogIndexState(
                     id=1,
@@ -153,6 +168,7 @@ def rebuild_catalog(session_factory: sessionmaker[Session], library_root: Path) 
         skipped_subpart_count=skipped_subpart_count,
         skipped_invalid_count=skipped_invalid_count,
         indexed_color_count=len(color_rows),
+        indexed_primitive_count=len(primitive_names),
         library_fingerprint=library.archive_sha256,
         duration_seconds=duration,
     )

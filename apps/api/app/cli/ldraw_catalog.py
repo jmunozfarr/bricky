@@ -51,6 +51,7 @@ def main() -> int:
     print(f"Skipped subparts: {report.skipped_subpart_count}")
     print(f"Skipped or invalid files: {report.skipped_invalid_count}")
     print(f"Indexed colors: {report.indexed_color_count}")
+    print(f"Indexed primitives: {report.indexed_primitive_count}")
     print(f"Library fingerprint: {report.library_fingerprint}")
     print(f"Completed in {report.duration_seconds:.2f} seconds")
     return 0

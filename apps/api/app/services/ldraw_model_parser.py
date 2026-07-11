@@ -163,6 +163,7 @@ def parse_ldraw_model(
     *,
     official_part_ids: AbstractSet[str],
     known_color_codes: AbstractSet[int],
+    known_primitive_names: AbstractSet[str] = frozenset(),
 ) -> ParsedModel:
     text, encoding = decode_model_source(content)
     sections, main_key, main_name = _split_sections(text)
@@ -196,6 +197,22 @@ def parse_ldraw_model(
                     "Color 16 cannot inherit a physical color at this level",
                     filename,
                 )
+            return parent_color
+        if color_code == 24:
+            add_issue(
+                "edge_color_not_physical",
+                "Color 24 is an edge color and was excluded from the physical BOM",
+                filename,
+            )
+            return None
+        return color_code
+
+    def submodel_child_color(
+        color_code: int, parent_color: int | None, filename: str
+    ) -> int | None:
+        # Color 16 on a submodel reference is the standard "no override" idiom;
+        # only leaf part references can leave a physical part without a color.
+        if color_code == 16:
             return parent_color
         if color_code == 24:
             add_issue(
@@ -243,7 +260,6 @@ def parse_ldraw_model(
                     reference.filename,
                 )
                 continue
-            color = effective_color(reference.color_code, parent_color, normalized_ref)
 
             if normalized_ref in sections:
                 embedded = sections[normalized_ref]
@@ -254,7 +270,12 @@ def parse_ldraw_model(
                         embedded.name,
                     )
                     continue
-                traverse(normalized_ref, color, multiplier, (*stack, section_key))
+                traverse(
+                    normalized_ref,
+                    submodel_child_color(reference.color_code, parent_color, normalized_ref),
+                    multiplier,
+                    (*stack, section_key),
+                )
                 continue
 
             path = PurePosixPath(normalized_ref)
@@ -264,20 +285,25 @@ def parse_ldraw_model(
                 continue
 
             part_id = path.stem.lower()
-            if part_id in normalized_parts:
-                if color is None:
+            official_part_id = normalized_parts.get(part_id)
+            if official_part_id is None:
+                if normalized_ref in known_primitive_names:
                     continue
-                quantities[(normalized_parts[part_id], color)] += multiplier
-                if color not in known_color_codes:
-                    add_issue(
-                        "unknown_color",
-                        f"Color code {color} is not present in the indexed official colors",
-                        normalized_ref,
-                    )
-            else:
                 add_issue(
                     "unresolved_reference",
                     "Reference is not an embedded submodel or indexed official part",
+                    normalized_ref,
+                )
+                continue
+
+            color = effective_color(reference.color_code, parent_color, normalized_ref)
+            if color is None:
+                continue
+            quantities[(official_part_id, color)] += multiplier
+            if color not in known_color_codes:
+                add_issue(
+                    "unknown_color",
+                    f"Color code {color} is not present in the indexed official colors",
                     normalized_ref,
                 )
 

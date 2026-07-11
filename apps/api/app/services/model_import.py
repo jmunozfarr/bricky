@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.models import (
     ImportedModel,
     LDrawColor,
+    LDrawPrimitive,
     ModelBomItem,
     ModelImportIssue,
     Part,
@@ -80,6 +81,7 @@ class CatalogContext:
     part_records: tuple[OfficialPartRecord, ...]
     official_part_ids: frozenset[str]
     known_color_codes: frozenset[int]
+    known_primitive_names: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,7 @@ def load_catalog_context(session: Session) -> CatalogContext:
         part_records=part_records,
         official_part_ids=frozenset(part.part_id for part in part_records),
         known_color_codes=frozenset(session.scalars(select(LDrawColor.code))),
+        known_primitive_names=frozenset(session.scalars(select(LDrawPrimitive.name))),
     )
 
 
@@ -113,6 +116,7 @@ def derive_parsed_model(
         source_bytes,
         official_part_ids=catalog.official_part_ids,
         known_color_codes=catalog.known_color_codes,
+        known_primitive_names=catalog.known_primitive_names,
     )
     return _canonicalize_moved_aliases(
         parsed,
