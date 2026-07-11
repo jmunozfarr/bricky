@@ -21,12 +21,13 @@ No path is made world-writable. PostgreSQL internal files remain in a named volu
 
 ## Database responsibilities
 
-- `parts`, `ldraw_colors`, and `catalog_index_state` are rebuildable catalog metadata.
+- `parts`, `ldraw_colors`, `ldraw_primitives`, and `catalog_index_state` are rebuildable catalog metadata.
 - `workspaces` contains the deterministic `local-default` workspace boundary.
 - `inventory_items` is personal owned quantity keyed by workspace, part ID, and color.
 - `imported_models` records immutable source identity, managed location, status, and aggregate counts.
 - `model_bom_items` stores derived canonical physical requirements.
-- `model_import_issues` stores stable import diagnostics.
+- `model_import_issues` stores stable import diagnostics with per-row occurrence counts.
+- `model_reference_resolutions` is personal: per-model user decisions (map to an official part, or ignore) about source references the parser cannot resolve on its own, keyed by natural LDraw identifiers.
 
 Inventory and BOM identifiers intentionally do not cascade from catalog rows. A catalog rebuild can temporarily remove display metadata without deleting personal state.
 
@@ -58,6 +59,8 @@ The frontend serializes bounded Three.js parses because parsing cannot be cancel
 Imported and instruction-scope scenes use normal `LDrawLoader` material and depth behavior. Bricky preserves authored transforms, BFC winding, colors, transparency, and depth settings; it does not add placement offsets or renderer compensation for defective model geometry.
 
 Source bytes are never normalized. Only derived rows are canonicalized.
+
+The same derivation pipeline can be re-run at any time against the stored original (`POST /api/models/{id}/reprocess`, or `python -m app.cli.models reprocess [--all]`): it checksum-verifies the stored bytes, re-parses with the current catalog, primitives index, and manual reference resolutions, and atomically replaces the derived BOM rows, issues, and counter columns. Parsing recognizes the common instruction-export conventions — set-wrapper custom sections (`<set> - <part>.dat`, `<part>_bended.dat`) auto-map to official parts as info-level issues, bare primitive references are rendering-only, and LDCad-generated path sections that contribute no physical parts are flagged for manual resolution. Upserting or deleting a resolution triggers the same reprocess so derived rows never drift from the stored decisions.
 
 ## Coverage flow
 

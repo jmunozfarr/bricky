@@ -73,6 +73,14 @@ Playwright specs live in `apps/web/e2e/`; config is `apps/web/playwright.config.
 
 Tests use synthetic fixtures/schemas — they never touch the real installed LDraw library or personal runtime data, so it's safe to run them repeatedly.
 
+### Reprocess imported models (operator command)
+
+```sh
+docker compose exec api python -m app.cli.models reprocess --all   # or explicit model UUIDs
+```
+
+Re-derives BOM/issues/counters for already-imported models from their immutable stored originals — run after an LDraw library update + catalog rebuild, or after parser changes. Originals are never modified.
+
 ### Part thumbnails (operator command)
 
 ```sh

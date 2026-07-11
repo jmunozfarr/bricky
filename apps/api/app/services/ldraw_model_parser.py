@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -26,6 +27,15 @@ class ParseIssue:
     message: str
     referenced_filename: str | None = None
     occurrence_count: int = 1
+
+
+@dataclass(frozen=True)
+class ReferenceResolution:
+    """A persisted user decision about one normalized source reference."""
+
+    action: str
+    part_id: str | None = None
+    color_code: int | None = None
 
 
 @dataclass(frozen=True)
@@ -57,6 +67,14 @@ _STEP_DIRECTIVE = re.compile(r"^0\s+(?:STEP|ROTSTEP)(?:\s|$)", re.IGNORECASE)
 # sections named "<set number> - <part id>.dat" or "<part id>_bended.dat".
 _SET_WRAPPER_PREFIX = re.compile(r"^\d{3,7}\s*-\s*")
 _BENT_STEM_SUFFIX = re.compile(r"[_-](?:bended|bent)$")
+
+# LDCad writes flexible parts as path sections whose geometry is generated;
+# they represent a real physical part that never reaches the BOM.
+_LDCAD_GENERATED_META = re.compile(r"^0\s+!LDCAD\s+(?:GENERATED|PATH)", re.IGNORECASE)
+
+
+def _has_generated_marker(section: _Section) -> bool:
+    return any(_LDCAD_GENERATED_META.match(line.strip()) for line in section.lines)
 
 
 def _auto_map_candidates(stem: str) -> tuple[str, ...]:
@@ -103,6 +121,11 @@ def _normalize_reference(filename: str) -> str | None:
         return None
     parts = tuple(part for part in path.parts if part not in ("", "."))
     return PurePosixPath(*parts).as_posix().lower() if parts else None
+
+
+def normalize_reference(filename: str) -> str | None:
+    """Normalize a source reference exactly like parser lookups do."""
+    return _normalize_reference(filename)
 
 
 def _safe_issue_filename(filename: str) -> str:
@@ -180,6 +203,7 @@ def parse_ldraw_model(
     official_part_ids: AbstractSet[str],
     known_color_codes: AbstractSet[int],
     known_primitive_names: AbstractSet[str] = frozenset(),
+    reference_resolutions: Mapping[str, ReferenceResolution] | None = None,
 ) -> ParsedModel:
     text, encoding = decode_model_source(content)
     sections, main_key, main_name = _split_sections(text)
@@ -194,9 +218,12 @@ def parse_ldraw_model(
 
     declared_steps = 1 + sum(1 for line in main_lines if _STEP_DIRECTIVE.match(line.strip()))
     normalized_parts = {part_id.lower(): part_id for part_id in official_part_ids}
+    resolutions = reference_resolutions or {}
     quantities: Counter[tuple[str, int]] = Counter()
     issues: list[ParseIssue] = []
     issue_index: dict[tuple[str, str, str | None], int] = {}
+    section_yield: Counter[str] = Counter()
+    submodel_edges: Counter[tuple[str, str]] = Counter()
 
     def add_issue(
         code: str,
@@ -284,16 +311,17 @@ def parse_ldraw_model(
 
     def traverse(
         section_key: str, parent_color: int | None, multiplier: int, stack: tuple[str, ...]
-    ) -> None:
+    ) -> int:
         if section_key in stack:
             add_issue(
                 "recursive_submodel_cycle",
                 "Recursive MPD submodel cycle was stopped",
                 sections[section_key].name,
             )
-            return
+            return 0
         section = sections[section_key]
         reference_count = 0
+        contributed = 0
         for line in section.lines:
             stripped = line.strip()
             if not stripped or stripped.startswith("0"):
@@ -320,6 +348,35 @@ def parse_ldraw_model(
                 )
                 continue
 
+            resolution = resolutions.get(normalized_ref)
+            if resolution is not None and resolution.action == "ignore":
+                add_issue(
+                    "reference_ignored",
+                    "Excluded from the physical BOM by a manual resolution",
+                    normalized_ref,
+                    count=multiplier,
+                    severity="info",
+                )
+                continue
+            if resolution is not None and resolution.action == "map" and resolution.part_id:
+                resolved_color = (
+                    resolution.color_code
+                    if resolution.color_code is not None
+                    else reference.color_code
+                )
+                if count_physical_part(
+                    resolution.part_id, resolved_color, parent_color, normalized_ref, multiplier
+                ):
+                    contributed += multiplier
+                    add_issue(
+                        "reference_manually_mapped",
+                        f"Mapped to official part '{resolution.part_id}' by a manual resolution",
+                        normalized_ref,
+                        count=multiplier,
+                        severity="info",
+                    )
+                continue
+
             if normalized_ref in sections:
                 embedded = sections[normalized_ref]
                 if embedded.name is not None and embedded.name.lower().endswith(".dat"):
@@ -334,6 +391,7 @@ def parse_ldraw_model(
                     elif count_physical_part(
                         mapped, reference.color_code, parent_color, normalized_ref, multiplier
                     ):
+                        contributed += multiplier
                         add_issue(
                             "custom_part_auto_mapped",
                             f"Automatically mapped to official part '{mapped}'",
@@ -342,12 +400,15 @@ def parse_ldraw_model(
                             severity="info",
                         )
                     continue
-                traverse(
+                child_yield = traverse(
                     normalized_ref,
                     submodel_child_color(reference.color_code, parent_color, normalized_ref),
                     multiplier,
                     (*stack, section_key),
                 )
+                contributed += child_yield
+                section_yield[normalized_ref] += child_yield
+                submodel_edges[(section_key, normalized_ref)] += multiplier
                 continue
 
             path = PurePosixPath(normalized_ref)
@@ -376,6 +437,8 @@ def parse_ldraw_model(
             counted = count_physical_part(
                 official_part_id, reference.color_code, parent_color, normalized_ref, multiplier
             )
+            if counted:
+                contributed += multiplier
             if auto_mapped and counted:
                 add_issue(
                     "custom_part_auto_mapped",
@@ -396,8 +459,24 @@ def parse_ldraw_model(
                 "Embedded custom part has no official catalog mapping",
                 section.name,
             )
+        return contributed
 
     traverse(main_key, None, 1, ())
+
+    zero_yield_generated = {
+        key
+        for key, total in section_yield.items()
+        if total == 0 and _has_generated_marker(sections[key])
+    }
+    for (parent_key, child_key), count in sorted(submodel_edges.items()):
+        if child_key in zero_yield_generated and parent_key not in zero_yield_generated:
+            add_issue(
+                "generated_section_without_parts",
+                "LDCad-generated section contributes no physical parts; "
+                "map it to a physical part or ignore it",
+                sections[child_key].name,
+                count=count,
+            )
     bom = tuple(
         BomEntry(part_id=part_id, color_code=color, quantity=quantity)
         for (part_id, color), quantity in sorted(quantities.items())

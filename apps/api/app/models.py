@@ -167,6 +167,37 @@ class ModelBomItem(Base):
     quantity: Mapped[int] = mapped_column(Integer)
 
 
+class ModelReferenceResolution(Base):
+    """A user decision about one normalized source reference of one model.
+
+    Personal data: keyed by natural LDraw identifiers so the rebuildable
+    catalog can be dropped without touching it.
+    """
+
+    __tablename__ = "model_reference_resolutions"
+    __table_args__ = (
+        UniqueConstraint("model_id", "source_reference", name="uq_model_resolution_source"),
+        CheckConstraint("action IN ('map', 'ignore')", name="ck_model_resolution_action"),
+        CheckConstraint(
+            "action != 'map' OR target_part_id IS NOT NULL",
+            name="ck_model_resolution_map_target",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_id: Mapped[int] = mapped_column(
+        ForeignKey("imported_models.id", ondelete="CASCADE"), index=True
+    )
+    source_reference: Mapped[str] = mapped_column(String(255))
+    action: Mapped[str] = mapped_column(String(16))
+    target_part_id: Mapped[str | None] = mapped_column(String(64))
+    color_code: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class ModelImportIssue(Base):
     __tablename__ = "model_import_issues"
     __table_args__ = (Index("ix_model_issues_model_severity", "model_id", "severity"),)

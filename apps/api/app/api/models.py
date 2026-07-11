@@ -39,6 +39,7 @@ from app.models import (
     LDrawColor,
     ModelBomItem,
     ModelImportIssue,
+    ModelReferenceResolution,
     Part,
 )
 from app.schemas.models import (
@@ -46,11 +47,14 @@ from app.schemas.models import (
     ModelCoverageResponse,
     ModelDetailResponse,
     ModelIssueResponse,
+    ModelResolutionRequest,
+    ModelResolutionResponse,
     ModelsPageResponse,
     ModelsReadinessResponse,
     ModelSummaryResponse,
 )
 from app.services.instruction_playback import clear_playback_cache
+from app.services.ldraw_model_parser import normalize_reference
 from app.services.ldraw_pack import PACKED_SOURCE_CACHE
 from app.services.local_workspace import resolve_local_workspace
 from app.services.model_coverage import (
@@ -87,6 +91,11 @@ def _detail_response(session: Session, model: ImportedModel) -> ModelDetailRespo
         .where(ModelImportIssue.model_id == model.id)
         .order_by(ModelImportIssue.id)
     ).all()
+    resolutions = session.scalars(
+        select(ModelReferenceResolution)
+        .where(ModelReferenceResolution.model_id == model.id)
+        .order_by(ModelReferenceResolution.source_reference)
+    ).all()
     return ModelDetailResponse(
         **_summary(model).model_dump(),
         source_sha256=model.source_sha256,
@@ -102,6 +111,15 @@ def _detail_response(session: Session, model: ImportedModel) -> ModelDetailRespo
                 occurrence_count=issue.occurrence_count,
             )
             for issue in issues
+        ],
+        resolutions=[
+            ModelResolutionResponse(
+                source_reference=resolution.source_reference,
+                action=resolution.action,
+                part_id=resolution.target_part_id,
+                color_code=resolution.color_code,
+            )
+            for resolution in resolutions
         ],
     )
 
@@ -312,10 +330,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
             raise HTTPException(status_code=404, detail="Model not found")
         return _detail_response(session, model)
 
-    @router.post("/{model_id}/reprocess", response_model=ModelDetailResponse)
-    def reprocess_imported_model(
-        model_id: uuid.UUID, session: Session = Depends(context.session_dependency)
-    ) -> ModelDetailResponse:
+    def _reprocessed_detail(session: Session, model_id: uuid.UUID) -> ModelDetailResponse:
         try:
             reprocess_model(
                 context.session_factory,
@@ -329,10 +344,102 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
             raise HTTPException(status_code=404, detail=str(error)) from error
         except ModelImportError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+        # The reprocess ran in its own session; drop any instance this request
+        # already loaded so the response reflects the re-derived columns.
+        session.expire_all()
         model = context.find_model(session, model_id)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         return _detail_response(session, model)
+
+    @router.post("/{model_id}/reprocess", response_model=ModelDetailResponse)
+    def reprocess_imported_model(
+        model_id: uuid.UUID, session: Session = Depends(context.session_dependency)
+    ) -> ModelDetailResponse:
+        return _reprocessed_detail(session, model_id)
+
+    @router.put("/{model_id}/resolutions", response_model=ModelDetailResponse)
+    def upsert_reference_resolution(
+        model_id: uuid.UUID,
+        payload: ModelResolutionRequest,
+        session: Session = Depends(context.session_dependency),
+    ) -> ModelDetailResponse:
+        model = context.find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        source_reference = normalize_reference(payload.source_reference)
+        if source_reference is None:
+            raise HTTPException(status_code=422, detail="Unsafe or invalid source reference")
+        target_part_id: str | None = None
+        color_code = payload.color_code
+        if payload.action == "map":
+            requested_part = (payload.part_id or "").strip()
+            if not requested_part:
+                raise HTTPException(
+                    status_code=422, detail="A mapped resolution requires a part id"
+                )
+            part = session.scalar(
+                select(Part).where(
+                    func.lower(Part.part_id) == requested_part.lower(),
+                    Part.is_subpart.is_(False),
+                )
+            )
+            if part is None:
+                raise HTTPException(status_code=422, detail="Unknown official part id")
+            target_part_id = part.part_id
+            if color_code is not None and (
+                color_code in (16, 24)
+                or session.scalar(select(LDrawColor).where(LDrawColor.code == color_code)) is None
+            ):
+                raise HTTPException(status_code=422, detail="Unknown or non-physical color code")
+        else:
+            color_code = None
+        existing = session.scalar(
+            select(ModelReferenceResolution).where(
+                ModelReferenceResolution.model_id == model.id,
+                ModelReferenceResolution.source_reference == source_reference,
+            )
+        )
+        if existing is None:
+            session.add(
+                ModelReferenceResolution(
+                    model_id=model.id,
+                    source_reference=source_reference,
+                    action=payload.action,
+                    target_part_id=target_part_id,
+                    color_code=color_code,
+                )
+            )
+        else:
+            existing.action = payload.action
+            existing.target_part_id = target_part_id
+            existing.color_code = color_code
+        session.commit()
+        return _reprocessed_detail(session, model_id)
+
+    @router.delete("/{model_id}/resolutions", response_model=ModelDetailResponse)
+    def delete_reference_resolution(
+        model_id: uuid.UUID,
+        source: str = Query(min_length=1, max_length=255),
+        session: Session = Depends(context.session_dependency),
+    ) -> ModelDetailResponse:
+        model = context.find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        source_reference = normalize_reference(source)
+        if source_reference is None:
+            raise HTTPException(status_code=422, detail="Unsafe or invalid source reference")
+        existing = session.scalar(
+            select(ModelReferenceResolution).where(
+                ModelReferenceResolution.model_id == model.id,
+                ModelReferenceResolution.source_reference == source_reference,
+            )
+        )
+        if existing is None:
+            return _detail_response(session, model)
+        session.delete(existing)
+        session.commit()
+        return _reprocessed_detail(session, model_id)
 
     @router.get("/{model_id}/source", response_class=FileResponse)
     def model_source(
