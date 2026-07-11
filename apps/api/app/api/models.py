@@ -99,6 +99,7 @@ def _detail_response(session: Session, model: ImportedModel) -> ModelDetailRespo
                 code=issue.code,
                 message=issue.message,
                 referenced_filename=issue.referenced_filename,
+                occurrence_count=issue.occurrence_count,
             )
             for issue in issues
         ],

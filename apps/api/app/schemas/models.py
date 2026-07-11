@@ -58,6 +58,7 @@ class ModelIssueResponse(CamelModel):
     code: str
     message: str
     referenced_filename: str | None
+    occurrence_count: int
 
 
 class ModelDetailResponse(ModelSummaryResponse):

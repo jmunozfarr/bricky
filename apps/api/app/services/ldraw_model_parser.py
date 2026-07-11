@@ -25,6 +25,7 @@ class ParseIssue:
     code: str
     message: str
     referenced_filename: str | None = None
+    occurrence_count: int = 1
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,21 @@ class _Reference:
 _FILE_DIRECTIVE = re.compile(r"^0\s+FILE\s+(.+?)\s*$", re.IGNORECASE)
 _NOFILE_DIRECTIVE = re.compile(r"^0\s+NOFILE(?:\s|$)", re.IGNORECASE)
 _STEP_DIRECTIVE = re.compile(r"^0\s+(?:STEP|ROTSTEP)(?:\s|$)", re.IGNORECASE)
+
+# Instruction exports commonly inline flexible or printed parts as custom
+# sections named "<set number> - <part id>.dat" or "<part id>_bended.dat".
+_SET_WRAPPER_PREFIX = re.compile(r"^\d{3,7}\s*-\s*")
+_BENT_STEM_SUFFIX = re.compile(r"[_-](?:bended|bent)$")
+
+
+def _auto_map_candidates(stem: str) -> tuple[str, ...]:
+    candidates: list[str] = []
+    for base in (stem, _SET_WRAPPER_PREFIX.sub("", stem)):
+        for candidate in (base, _BENT_STEM_SUFFIX.sub("", base)):
+            cleaned = candidate.strip()
+            if cleaned and cleaned not in candidates:
+                candidates.append(cleaned)
+    return tuple(candidates)
 
 
 def decode_model_source(content: bytes) -> tuple[str, str]:
@@ -180,14 +196,30 @@ def parse_ldraw_model(
     normalized_parts = {part_id.lower(): part_id for part_id in official_part_ids}
     quantities: Counter[tuple[str, int]] = Counter()
     issues: list[ParseIssue] = []
-    issue_keys: set[tuple[str, str, str | None]] = set()
+    issue_index: dict[tuple[str, str, str | None], int] = {}
 
-    def add_issue(code: str, message: str, filename: str | None = None) -> None:
+    def add_issue(
+        code: str,
+        message: str,
+        filename: str | None = None,
+        count: int = 1,
+        severity: str = "warning",
+    ) -> None:
         safe_filename = _safe_issue_filename(filename) if filename else None
         key = (code, message, safe_filename)
-        if key not in issue_keys:
-            issue_keys.add(key)
-            issues.append(ParseIssue("warning", code, message, safe_filename))
+        existing = issue_index.get(key)
+        if existing is None:
+            issue_index[key] = len(issues)
+            issues.append(ParseIssue(severity, code, message, safe_filename, count))
+        else:
+            current = issues[existing]
+            issues[existing] = ParseIssue(
+                current.severity,
+                current.code,
+                current.message,
+                current.referenced_filename,
+                current.occurrence_count + count,
+            )
 
     def effective_color(color_code: int, parent_color: int | None, filename: str) -> int | None:
         if color_code == 16:
@@ -222,6 +254,33 @@ def parse_ldraw_model(
             )
             return None
         return color_code
+
+    def count_physical_part(
+        official_part_id: str,
+        color_code: int,
+        parent_color: int | None,
+        reference_name: str,
+        multiplier: int,
+    ) -> bool:
+        color = effective_color(color_code, parent_color, reference_name)
+        if color is None:
+            return False
+        quantities[(official_part_id, color)] += multiplier
+        if color not in known_color_codes:
+            add_issue(
+                "unknown_color",
+                f"Color code {color} is not present in the indexed official colors",
+                reference_name,
+                count=multiplier,
+            )
+        return True
+
+    def auto_mapped_part(stem: str) -> str | None:
+        for candidate in _auto_map_candidates(stem):
+            match = normalized_parts.get(candidate)
+            if match is not None:
+                return match
+        return None
 
     def traverse(
         section_key: str, parent_color: int | None, multiplier: int, stack: tuple[str, ...]
@@ -264,11 +323,24 @@ def parse_ldraw_model(
             if normalized_ref in sections:
                 embedded = sections[normalized_ref]
                 if embedded.name is not None and embedded.name.lower().endswith(".dat"):
-                    add_issue(
-                        "unsupported_custom_part",
-                        "Embedded custom parts cannot be mapped to the official catalog",
-                        embedded.name,
-                    )
+                    mapped = auto_mapped_part(PurePosixPath(normalized_ref).stem)
+                    if mapped is None:
+                        add_issue(
+                            "unsupported_custom_part",
+                            "Embedded custom parts cannot be mapped to the official catalog",
+                            embedded.name,
+                            count=multiplier,
+                        )
+                    elif count_physical_part(
+                        mapped, reference.color_code, parent_color, normalized_ref, multiplier
+                    ):
+                        add_issue(
+                            "custom_part_auto_mapped",
+                            f"Automatically mapped to official part '{mapped}'",
+                            embedded.name,
+                            count=multiplier,
+                            severity="info",
+                        )
                     continue
                 traverse(
                     normalized_ref,
@@ -286,25 +358,31 @@ def parse_ldraw_model(
 
             part_id = path.stem.lower()
             official_part_id = normalized_parts.get(part_id)
+            auto_mapped = False
             if official_part_id is None:
                 if normalized_ref in known_primitive_names:
                     continue
+                official_part_id = auto_mapped_part(part_id)
+                auto_mapped = official_part_id is not None
+            if official_part_id is None:
                 add_issue(
                     "unresolved_reference",
                     "Reference is not an embedded submodel or indexed official part",
                     normalized_ref,
+                    count=multiplier,
                 )
                 continue
 
-            color = effective_color(reference.color_code, parent_color, normalized_ref)
-            if color is None:
-                continue
-            quantities[(official_part_id, color)] += multiplier
-            if color not in known_color_codes:
+            counted = count_physical_part(
+                official_part_id, reference.color_code, parent_color, normalized_ref, multiplier
+            )
+            if auto_mapped and counted:
                 add_issue(
-                    "unknown_color",
-                    f"Color code {color} is not present in the indexed official colors",
+                    "custom_part_auto_mapped",
+                    f"Automatically mapped to official part '{official_part_id}'",
                     normalized_ref,
+                    count=multiplier,
+                    severity="info",
                 )
 
         if (

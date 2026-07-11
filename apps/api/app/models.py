@@ -179,3 +179,4 @@ class ModelImportIssue(Base):
     code: Mapped[str] = mapped_column(String(64))
     message: Mapped[str] = mapped_column(String(512))
     referenced_filename: Mapped[str | None] = mapped_column(String(255))
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=1, server_default="1")

@@ -986,6 +986,8 @@ export interface components {
             message: string;
             /** Referencedfilename */
             referencedFilename: string | null;
+            /** Occurrencecount */
+            occurrenceCount: number;
         };
         /** ModelOccurrenceResponse */
         ModelOccurrenceResponse: {
