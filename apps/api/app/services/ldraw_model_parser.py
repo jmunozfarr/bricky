@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
@@ -160,8 +161,8 @@ def _parse_reference(line: str) -> _Reference:
 def parse_ldraw_model(
     content: bytes,
     *,
-    official_part_ids: set[str],
-    known_color_codes: set[int],
+    official_part_ids: AbstractSet[str],
+    known_color_codes: AbstractSet[int],
 ) -> ParsedModel:
     text, encoding = decode_model_source(content)
     sections, main_key, main_name = _split_sections(text)

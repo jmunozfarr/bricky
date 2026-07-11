@@ -14,7 +14,6 @@ from app.api.helpers import (
     SCOPE_COMPLEXITY_DETAIL,
     ModelsRouterContext,
     _inventory_for_requirements,
-    _managed_source_path,
 )
 from app.schemas.instructions import (
     BuildManifestResponse,
@@ -39,6 +38,7 @@ from app.services.instruction_playback import (
 )
 from app.services.ldraw_model_parser import ModelParseError
 from app.services.ldraw_pack import LDrawPackError, LDrawPackLimitError
+from app.services.model_import import managed_source_path
 
 
 def register_instruction_routes(router: APIRouter, context: ModelsRouterContext) -> None:
@@ -297,7 +297,7 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
         model = context.find_model(session, model_id)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
-        source_path = _managed_source_path(context.storage_root, model)
+        source_path = managed_source_path(context.storage_root, model)
         if source_path is None or not source_path.is_file():
             raise HTTPException(status_code=404, detail="Model source not found")
         try:
