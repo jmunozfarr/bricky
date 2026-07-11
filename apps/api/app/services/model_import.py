@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import uuid
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
@@ -34,6 +35,7 @@ from app.services.ldraw_model_parser import (
     ModelParseError,
     ParsedModel,
     ParseIssue,
+    ReferenceResolution,
     parse_ldraw_model,
 )
 from app.services.local_workspace import LOCAL_WORKSPACE_SLUG, resolve_local_workspace
@@ -65,6 +67,7 @@ UNRESOLVED_ISSUE_CODES = frozenset(
     {
         "unresolved_reference",
         "unsupported_custom_part",
+        "generated_section_without_parts",
         "malformed_type1_reference",
         "moved_alias_cycle",
         "moved_alias_missing_target",
@@ -109,7 +112,10 @@ def load_catalog_context(session: Session) -> CatalogContext:
 
 
 def derive_parsed_model(
-    source_bytes: bytes, catalog: CatalogContext, library_root: Path
+    source_bytes: bytes,
+    catalog: CatalogContext,
+    library_root: Path,
+    reference_resolutions: Mapping[str, ReferenceResolution] | None = None,
 ) -> ParsedModel:
     """Run the full source-to-BOM pipeline shared by import and reprocess."""
     parsed = parse_ldraw_model(
@@ -117,6 +123,7 @@ def derive_parsed_model(
         official_part_ids=catalog.official_part_ids,
         known_color_codes=catalog.known_color_codes,
         known_primitive_names=catalog.known_primitive_names,
+        reference_resolutions=reference_resolutions,
     )
     return _canonicalize_moved_aliases(
         parsed,

@@ -279,6 +279,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/models/{model_id}/resolutions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Reference Resolution */
+        put: operations["upsert_reference_resolution_api_models__model_id__resolutions_put"];
+        post?: never;
+        /** Delete Reference Resolution */
+        delete: operations["delete_reference_resolution_api_models__model_id__resolutions_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models/{model_id}/source": {
         parameters: {
             query?: never;
@@ -975,6 +993,8 @@ export interface components {
             bom: components["schemas"]["ModelBomItemResponse"][];
             /** Issues */
             issues: components["schemas"]["ModelIssueResponse"][];
+            /** Resolutions */
+            resolutions: components["schemas"]["ModelResolutionResponse"][];
         };
         /** ModelIssueResponse */
         ModelIssueResponse: {
@@ -1008,6 +1028,31 @@ export interface components {
             traversalOrder: number;
             /** Childoccurrenceids */
             childOccurrenceIds: string[];
+        };
+        /** ModelResolutionRequest */
+        ModelResolutionRequest: {
+            /** Sourcereference */
+            sourceReference: string;
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "map" | "ignore";
+            /** Partid */
+            partId?: string | null;
+            /** Colorcode */
+            colorCode?: number | null;
+        };
+        /** ModelResolutionResponse */
+        ModelResolutionResponse: {
+            /** Sourcereference */
+            sourceReference: string;
+            /** Action */
+            action: string;
+            /** Partid */
+            partId: string | null;
+            /** Colorcode */
+            colorCode: number | null;
         };
         /** ModelSummaryResponse */
         ModelSummaryResponse: {
@@ -1677,6 +1722,74 @@ export interface operations {
     reprocess_imported_model_api_models__model_id__reprocess_post: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_reference_resolution_api_models__model_id__resolutions_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                model_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelResolutionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_reference_resolution_api_models__model_id__resolutions_delete: {
+        parameters: {
+            query: {
+                source: string;
+            };
             header?: never;
             path: {
                 model_id: string;

@@ -205,6 +205,93 @@ def test_reprocess_missing_model_and_source_errors(
     assert client.post(f"/api/models/{public_id}/reprocess").status_code == 404
 
 
+def flex_path_source() -> bytes:
+    return "\n".join(
+        [
+            "0 FILE main.ldr",
+            f"1 4 {IDENTITY} flexAxle.ldr",
+            f"1 4 {IDENTITY} 3001.dat",
+            "0 FILE flexAxle.ldr",
+            "0 !LDCAD PATH_POINT [posOri=1]",
+            "2 24 0 0 0 1 1 1",
+        ]
+    ).encode()
+
+
+def test_resolution_endpoints_map_ignore_and_delete(
+    catalog_session_factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    seed_catalog(catalog_session_factory, ["3001", "3020"])
+    client = client_for(catalog_session_factory, tmp_path)
+    response = client.post(
+        "/api/models",
+        files={"file": ("flex.mpd", flex_path_source(), "text/plain")},
+        data={"name": "Flex demo"},
+    )
+    assert response.status_code == 201
+    model_id = response.json()["modelId"]
+    assert response.json()["importStatus"] == "ready_with_warnings"
+
+    detail = client.get(f"/api/models/{model_id}").json()
+    assert [issue["code"] for issue in detail["issues"]] == ["generated_section_without_parts"]
+
+    resolutions_url = f"/api/models/{model_id}/resolutions"
+    invalid_part = client.put(
+        resolutions_url,
+        json={"sourceReference": "flexAxle.ldr", "action": "map", "partId": "nope"},
+    )
+    assert invalid_part.status_code == 422
+    invalid_color = client.put(
+        resolutions_url,
+        json={
+            "sourceReference": "flexAxle.ldr",
+            "action": "map",
+            "partId": "3020",
+            "colorCode": 999,
+        },
+    )
+    assert invalid_color.status_code == 422
+    missing_part = client.put(
+        resolutions_url, json={"sourceReference": "flexAxle.ldr", "action": "map"}
+    )
+    assert missing_part.status_code == 422
+
+    mapped = client.put(
+        resolutions_url,
+        json={"sourceReference": "flexAxle.ldr", "action": "map", "partId": "3020"},
+    )
+    assert mapped.status_code == 200
+    payload = mapped.json()
+    assert payload["importStatus"] == "ready"
+    assert [item["partId"] for item in payload["bom"]] == ["3001", "3020"]
+    assert payload["resolutions"] == [
+        {
+            "sourceReference": "flexaxle.ldr",
+            "action": "map",
+            "partId": "3020",
+            "colorCode": None,
+        }
+    ]
+    assert [issue["code"] for issue in payload["issues"]] == ["reference_manually_mapped"]
+
+    ignored = client.put(
+        resolutions_url, json={"sourceReference": "FLEXAXLE.LDR", "action": "ignore"}
+    )
+    assert ignored.status_code == 200
+    assert ignored.json()["importStatus"] == "ready"
+    assert [item["partId"] for item in ignored.json()["bom"]] == ["3001"]
+    assert ignored.json()["resolutions"][0]["action"] == "ignore"
+
+    removed = client.delete(resolutions_url, params={"source": "flexaxle.ldr"})
+    assert removed.status_code == 200
+    assert removed.json()["importStatus"] == "ready_with_warnings"
+    assert removed.json()["resolutions"] == []
+
+    repeat = client.delete(resolutions_url, params={"source": "flexaxle.ldr"})
+    assert repeat.status_code == 200
+    assert repeat.json()["importStatus"] == "ready_with_warnings"
+
+
 def test_cli_reprocess_targets_reports_transitions_and_failures(
     catalog_session_factory: sessionmaker[Session],
     tmp_path: Path,

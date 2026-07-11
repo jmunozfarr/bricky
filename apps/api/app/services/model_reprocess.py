@@ -10,8 +10,12 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.models import ImportedModel
-from app.services.ldraw_model_parser import ModelParseError, ParsedModel
+from app.models import ImportedModel, ModelReferenceResolution
+from app.services.ldraw_model_parser import (
+    ModelParseError,
+    ParsedModel,
+    ReferenceResolution,
+)
 from app.services.local_workspace import resolve_local_workspace
 from app.services.model_import import (
     ModelImportError,
@@ -38,6 +42,20 @@ class ModelSourceUnavailableError(ModelReprocessError):
 
 class ModelSourceIntegrityError(ModelReprocessError):
     pass
+
+
+def load_reference_resolutions(session: Session, model_id: int) -> dict[str, ReferenceResolution]:
+    rows = session.scalars(
+        select(ModelReferenceResolution).where(ModelReferenceResolution.model_id == model_id)
+    )
+    return {
+        row.source_reference: ReferenceResolution(
+            action=row.action,
+            part_id=row.target_part_id,
+            color_code=row.color_code,
+        )
+        for row in rows
+    }
 
 
 @dataclass(frozen=True)
@@ -79,9 +97,10 @@ def reprocess_model(
                 "Stored model source no longer matches its recorded checksum"
             )
         catalog = load_catalog_context(session)
+        resolutions = load_reference_resolutions(session, model.id)
         previous_status = model.import_status
         try:
-            parsed = derive_parsed_model(source_bytes, catalog, library_root)
+            parsed = derive_parsed_model(source_bytes, catalog, library_root, resolutions)
         except ModelParseError as error:
             raise ModelImportError(str(error)) from error
         apply_model_content(model, derive_model_content(parsed))

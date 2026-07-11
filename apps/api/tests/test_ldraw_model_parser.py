@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
 
 import pytest
 
-from app.services.ldraw_model_parser import ModelParseError, ParsedModel, parse_ldraw_model
+from app.services.ldraw_model_parser import (
+    ModelParseError,
+    ParsedModel,
+    ReferenceResolution,
+    parse_ldraw_model,
+)
 
 PARTS = {"3001", "3002", "3020"}
 COLORS = {1, 2, 4, 5}
@@ -15,13 +21,18 @@ def ref(color: int, filename: str) -> str:
     return f"1 {color} {IDENTITY} {filename}"
 
 
-def parse(text: str | bytes, primitives: AbstractSet[str] = frozenset()) -> ParsedModel:
+def parse(
+    text: str | bytes,
+    primitives: AbstractSet[str] = frozenset(),
+    resolutions: Mapping[str, ReferenceResolution] | None = None,
+) -> ParsedModel:
     content = text if isinstance(text, bytes) else text.encode()
     return parse_ldraw_model(
         content,
         official_part_ids=PARTS,
         known_color_codes=COLORS,
         known_primitive_names=primitives,
+        reference_resolutions=resolutions,
     )
 
 
@@ -257,6 +268,85 @@ def test_submodel_reference_with_edge_color_still_warns() -> None:
         "edge_color_not_physical",
         "undetermined_color",
     }
+
+
+def test_manual_resolutions_map_and_ignore_references() -> None:
+    source = "\n".join(
+        [
+            "0 Model",
+            ref(4, "customhose.dat"),
+            ref(4, "sticker.dat"),
+            ref(16, "flexthing.dat"),
+        ]
+    )
+    result = parse(
+        source,
+        resolutions={
+            "customhose.dat": ReferenceResolution("map", "3001"),
+            "sticker.dat": ReferenceResolution("ignore"),
+            "flexthing.dat": ReferenceResolution("map", "3002", color_code=2),
+        },
+    )
+    assert quantities(result) == [("3001", 4, 1), ("3002", 2, 1)]
+    assert {(issue.code, issue.severity) for issue in result.issues} == {
+        ("reference_manually_mapped", "info"),
+        ("reference_ignored", "info"),
+    }
+
+
+def test_generated_path_section_is_flagged_until_resolved() -> None:
+    source = "\n".join(
+        [
+            "0 FILE main.ldr",
+            ref(4, "axlepath.ldr"),
+            ref(2, "3001.dat"),
+            "0 FILE axlepath.ldr",
+            "0 !LDCAD PATH_POINT [posOri=1]",
+            "2 24 0 0 0 1 1 1",
+        ]
+    )
+    unresolved = parse(source)
+    assert quantities(unresolved) == [("3001", 2, 1)]
+    flagged = [
+        issue for issue in unresolved.issues if issue.code == "generated_section_without_parts"
+    ]
+    assert len(flagged) == 1
+    assert flagged[0].severity == "warning"
+    assert flagged[0].referenced_filename == "axlepath.ldr"
+
+    mapped = parse(source, resolutions={"axlepath.ldr": ReferenceResolution("map", "3020")})
+    assert quantities(mapped) == [("3001", 2, 1), ("3020", 4, 1)]
+    assert {issue.code for issue in mapped.issues} == {"reference_manually_mapped"}
+
+    ignored = parse(source, resolutions={"axlepath.ldr": ReferenceResolution("ignore")})
+    assert quantities(ignored) == [("3001", 2, 1)]
+    assert {issue.code for issue in ignored.issues} == {"reference_ignored"}
+
+
+def test_generated_section_flagged_only_at_outermost_level() -> None:
+    source = "\n".join(
+        [
+            "0 FILE main.ldr",
+            ref(4, "flex.ldr"),
+            ref(2, "assembly.ldr"),
+            "0 FILE flex.ldr",
+            "0 !LDCAD PATH_POINT [posOri=1]",
+            ref(16, "flexfallback.ldr"),
+            "0 FILE flexfallback.ldr",
+            "0 !LDCAD GENERATED [generator=LDCad]",
+            "3 16 0 0 0 1 0 0 0 1 0",
+            "0 FILE assembly.ldr",
+            ref(16, "3001.dat"),
+        ]
+    )
+    result = parse(source)
+    assert quantities(result) == [("3001", 2, 1)]
+    flagged = [
+        issue.referenced_filename
+        for issue in result.issues
+        if issue.code == "generated_section_without_parts"
+    ]
+    assert flagged == ["flex.ldr"]
 
 
 def test_utf8_bom_and_cp1252_fallback() -> None:

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Literal
+
+from pydantic import Field
 
 from app.schemas import CamelModel
 from app.services.model_coverage import CoverageStatus
@@ -61,12 +64,27 @@ class ModelIssueResponse(CamelModel):
     occurrence_count: int
 
 
+class ModelResolutionRequest(CamelModel):
+    source_reference: str = Field(min_length=1, max_length=255)
+    action: Literal["map", "ignore"]
+    part_id: str | None = Field(default=None, max_length=64)
+    color_code: int | None = None
+
+
+class ModelResolutionResponse(CamelModel):
+    source_reference: str
+    action: str
+    part_id: str | None
+    color_code: int | None
+
+
 class ModelDetailResponse(ModelSummaryResponse):
     source_sha256: str
     source_url: str
     updated_at: datetime
     bom: list[ModelBomItemResponse]
     issues: list[ModelIssueResponse]
+    resolutions: list[ModelResolutionResponse]
 
 
 class ModelCoverageItemResponse(CamelModel):
