@@ -11,13 +11,14 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import (
     ImportedModel,
     LDrawColor,
+    LDrawPrimitive,
     ModelBomItem,
     ModelImportIssue,
     Part,
@@ -58,6 +59,132 @@ class DuplicateModelError(ModelImportError):
 class ModelImportOutcome:
     public_id: uuid.UUID
     parsed: ParsedModel
+
+
+UNRESOLVED_ISSUE_CODES = frozenset(
+    {
+        "unresolved_reference",
+        "unsupported_custom_part",
+        "malformed_type1_reference",
+        "moved_alias_cycle",
+        "moved_alias_missing_target",
+        "moved_alias_malformed",
+        "moved_alias_depth_exceeded",
+    }
+)
+
+
+@dataclass(frozen=True)
+class CatalogContext:
+    """Catalog rows needed to derive a model's physical BOM, loaded in one session."""
+
+    part_records: tuple[OfficialPartRecord, ...]
+    official_part_ids: frozenset[str]
+    known_color_codes: frozenset[int]
+    known_primitive_names: frozenset[str]
+
+
+@dataclass(frozen=True)
+class DerivedModelContent:
+    import_status: str
+    declared_step_count: int
+    total_part_quantity: int
+    unique_part_color_count: int
+    unresolved_reference_count: int
+
+
+def load_catalog_context(session: Session) -> CatalogContext:
+    part_records = tuple(
+        OfficialPartRecord(part_id=part_id, description=description, relative_path=relative_path)
+        for part_id, description, relative_path in session.execute(
+            select(Part.part_id, Part.name, Part.relative_path).where(Part.is_subpart.is_(False))
+        )
+    )
+    return CatalogContext(
+        part_records=part_records,
+        official_part_ids=frozenset(part.part_id for part in part_records),
+        known_color_codes=frozenset(session.scalars(select(LDrawColor.code))),
+        known_primitive_names=frozenset(session.scalars(select(LDrawPrimitive.name))),
+    )
+
+
+def derive_parsed_model(
+    source_bytes: bytes, catalog: CatalogContext, library_root: Path
+) -> ParsedModel:
+    """Run the full source-to-BOM pipeline shared by import and reprocess."""
+    parsed = parse_ldraw_model(
+        source_bytes,
+        official_part_ids=catalog.official_part_ids,
+        known_color_codes=catalog.known_color_codes,
+        known_primitive_names=catalog.known_primitive_names,
+    )
+    return _canonicalize_moved_aliases(
+        parsed,
+        LDrawMovedAliasResolver(library_root, catalog.part_records),
+    )
+
+
+def derive_model_content(parsed: ParsedModel) -> DerivedModelContent:
+    return DerivedModelContent(
+        import_status="ready_with_warnings" if parsed.issues else "ready",
+        declared_step_count=parsed.declared_step_count,
+        total_part_quantity=sum(item.quantity for item in parsed.bom),
+        unique_part_color_count=len(parsed.bom),
+        unresolved_reference_count=sum(
+            1 for issue in parsed.issues if issue.code in UNRESOLVED_ISSUE_CODES
+        ),
+    )
+
+
+def apply_model_content(model: ImportedModel, content: DerivedModelContent) -> None:
+    model.import_status = content.import_status
+    model.declared_step_count = content.declared_step_count
+    model.total_part_quantity = content.total_part_quantity
+    model.unique_part_color_count = content.unique_part_color_count
+    model.unresolved_reference_count = content.unresolved_reference_count
+
+
+def replace_model_rows(session: Session, model_id: int, parsed: ParsedModel) -> None:
+    session.execute(delete(ModelBomItem).where(ModelBomItem.model_id == model_id))
+    session.execute(delete(ModelImportIssue).where(ModelImportIssue.model_id == model_id))
+    session.add_all(
+        ModelBomItem(
+            model_id=model_id,
+            part_id=item.part_id,
+            color_code=item.color_code,
+            quantity=item.quantity,
+        )
+        for item in parsed.bom
+    )
+    session.add_all(
+        ModelImportIssue(
+            model_id=model_id,
+            severity=issue.severity,
+            code=issue.code,
+            message=issue.message,
+            referenced_filename=issue.referenced_filename,
+        )
+        for issue in parsed.issues
+    )
+
+
+def managed_source_path(storage_root: Path, model: ImportedModel) -> Path | None:
+    """Resolve a model's immutable original inside the managed storage root."""
+    relative = PurePosixPath(model.relative_storage_path)
+    expected_prefix = ("originals", str(model.public_id))
+    if (
+        relative.is_absolute()
+        or ".." in relative.parts
+        or len(relative.parts) != 3
+        or relative.parts[:2] != expected_prefix
+        or relative.name != model.safe_filename
+    ):
+        return None
+    root = storage_root.resolve()
+    candidate = (root / Path(*relative.parts)).resolve()
+    if not candidate.is_relative_to(root):
+        return None
+    return candidate
 
 
 def _clean_original_filename(filename: str | None) -> str:
@@ -210,32 +337,11 @@ def import_model(
             duplicate = _find_duplicate(session, source_sha256)
             if duplicate is not None:
                 raise DuplicateModelError(duplicate.public_id)
-            part_records = [
-                OfficialPartRecord(
-                    part_id=part_id,
-                    description=description,
-                    relative_path=relative_path,
-                )
-                for part_id, description, relative_path in session.execute(
-                    select(Part.part_id, Part.name, Part.relative_path).where(
-                        Part.is_subpart.is_(False)
-                    )
-                )
-            ]
-            official_parts = {part.part_id for part in part_records}
-            known_colors = set(session.scalars(select(LDrawColor.code)))
+            catalog = load_catalog_context(session)
 
         source_bytes = temp_source.read_bytes()
         try:
-            parsed = parse_ldraw_model(
-                source_bytes,
-                official_part_ids=official_parts,
-                known_color_codes=known_colors,
-            )
-            parsed = _canonicalize_moved_aliases(
-                parsed,
-                LDrawMovedAliasResolver(library_root, part_records),
-            )
+            parsed = derive_parsed_model(source_bytes, catalog, library_root)
         except ModelParseError as error:
             raise ModelImportError(str(error)) from error
 
@@ -247,15 +353,6 @@ def import_model(
             PurePosixPath("originals") / str(public_id) / safe_filename
         ).as_posix()
 
-        unresolved_codes = {
-            "unresolved_reference",
-            "unsupported_custom_part",
-            "malformed_type1_reference",
-            "moved_alias_cycle",
-            "moved_alias_missing_target",
-            "moved_alias_malformed",
-            "moved_alias_depth_exceeded",
-        }
         try:
             with session_factory.begin() as session:
                 workspace = resolve_local_workspace(session)
@@ -271,35 +368,11 @@ def import_model(
                     source_format=source_format,
                     relative_storage_path=relative_storage_path,
                     source_sha256=source_sha256,
-                    import_status="ready_with_warnings" if parsed.issues else "ready",
-                    declared_step_count=parsed.declared_step_count,
-                    total_part_quantity=sum(item.quantity for item in parsed.bom),
-                    unique_part_color_count=len(parsed.bom),
-                    unresolved_reference_count=sum(
-                        1 for issue in parsed.issues if issue.code in unresolved_codes
-                    ),
                 )
+                apply_model_content(model, derive_model_content(parsed))
                 session.add(model)
                 session.flush()
-                session.add_all(
-                    ModelBomItem(
-                        model_id=model.id,
-                        part_id=item.part_id,
-                        color_code=item.color_code,
-                        quantity=item.quantity,
-                    )
-                    for item in parsed.bom
-                )
-                session.add_all(
-                    ModelImportIssue(
-                        model_id=model.id,
-                        severity=issue.severity,
-                        code=issue.code,
-                        message=issue.message,
-                        referenced_filename=issue.referenced_filename,
-                    )
-                    for issue in parsed.issues
-                )
+                replace_model_rows(session, model.id, parsed)
         except IntegrityError as error:
             with session_factory() as lookup_session:
                 duplicate = _find_duplicate(lookup_session, source_sha256)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Literal
 
 from fastapi import HTTPException
@@ -44,6 +44,7 @@ from app.services.model_coverage import (
     calculate_model_coverage,
     normalize_part_id,
 )
+from app.services.model_import import managed_source_path
 
 SessionDependency = Callable[[], Iterator[Session]]
 
@@ -75,7 +76,7 @@ class ModelsRouterContext:
         )
 
     def playback_data_for(self, model: ImportedModel) -> PlaybackData:
-        source_path = _managed_source_path(self.storage_root, model)
+        source_path = managed_source_path(self.storage_root, model)
         if source_path is None or not source_path.is_file():
             raise HTTPException(status_code=404, detail="Model source not found")
         try:
@@ -194,24 +195,6 @@ def _coverage_by_model(
         model_id: calculate_model_coverage(requirements, inventory)
         for model_id, requirements in requirements_by_model.items()
     }
-
-
-def _managed_source_path(storage_root: Path, model: ImportedModel) -> Path | None:
-    relative = PurePosixPath(model.relative_storage_path)
-    expected_prefix = ("originals", str(model.public_id))
-    if (
-        relative.is_absolute()
-        or ".." in relative.parts
-        or len(relative.parts) != 3
-        or relative.parts[:2] != expected_prefix
-        or relative.name != model.safe_filename
-    ):
-        return None
-    root = storage_root.resolve()
-    candidate = (root / Path(*relative.parts)).resolve()
-    if not candidate.is_relative_to(root):
-        return None
-    return candidate
 
 
 def _bom_response(

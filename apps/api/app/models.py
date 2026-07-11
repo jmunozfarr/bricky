@@ -60,6 +60,14 @@ class LDrawColor(Base):
     finish: Mapped[str | None] = mapped_column(String(64))
 
 
+class LDrawPrimitive(Base):
+    """Rebuildable index of p/ primitive filenames, relative to p/ and lowercase."""
+
+    __tablename__ = "ldraw_primitives"
+
+    name: Mapped[str] = mapped_column(String(255), primary_key=True)
+
+
 class CatalogIndexState(Base):
     __tablename__ = "catalog_index_state"
 

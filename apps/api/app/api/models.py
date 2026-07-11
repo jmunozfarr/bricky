@@ -32,7 +32,6 @@ from app.api.helpers import (
     _coverage_item_response,
     _coverage_summary,
     _inventory_for_requirements,
-    _managed_source_path,
     _summary,
 )
 from app.models import (
@@ -64,9 +63,46 @@ from app.services.model_import import (
     ModelImportError,
     ModelTooLargeError,
     import_model,
+    managed_source_path,
+)
+from app.services.model_reprocess import (
+    ModelReprocessError,
+    ModelSourceIntegrityError,
+    reprocess_model,
 )
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _detail_response(session: Session, model: ImportedModel) -> ModelDetailResponse:
+    bom_rows = session.execute(
+        select(ModelBomItem, Part, LDrawColor)
+        .outerjoin(Part, func.lower(Part.part_id) == func.lower(ModelBomItem.part_id))
+        .outerjoin(LDrawColor, LDrawColor.code == ModelBomItem.color_code)
+        .where(ModelBomItem.model_id == model.id)
+        .order_by(func.lower(ModelBomItem.part_id), ModelBomItem.color_code)
+    ).all()
+    issues = session.scalars(
+        select(ModelImportIssue)
+        .where(ModelImportIssue.model_id == model.id)
+        .order_by(ModelImportIssue.id)
+    ).all()
+    return ModelDetailResponse(
+        **_summary(model).model_dump(),
+        source_sha256=model.source_sha256,
+        source_url=f"/api/models/{quote(str(model.public_id), safe='')}/source",
+        updated_at=model.updated_at,
+        bom=[_bom_response(*row) for row in bom_rows],
+        issues=[
+            ModelIssueResponse(
+                severity=issue.severity,
+                code=issue.code,
+                message=issue.message,
+                referenced_filename=issue.referenced_filename,
+            )
+            for issue in issues
+        ],
+    )
 
 
 def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> None:
@@ -273,34 +309,29 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         model = context.find_model(session, model_id)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
-        bom_rows = session.execute(
-            select(ModelBomItem, Part, LDrawColor)
-            .outerjoin(Part, func.lower(Part.part_id) == func.lower(ModelBomItem.part_id))
-            .outerjoin(LDrawColor, LDrawColor.code == ModelBomItem.color_code)
-            .where(ModelBomItem.model_id == model.id)
-            .order_by(func.lower(ModelBomItem.part_id), ModelBomItem.color_code)
-        ).all()
-        issues = session.scalars(
-            select(ModelImportIssue)
-            .where(ModelImportIssue.model_id == model.id)
-            .order_by(ModelImportIssue.id)
-        ).all()
-        return ModelDetailResponse(
-            **_summary(model).model_dump(),
-            source_sha256=model.source_sha256,
-            source_url=f"/api/models/{quote(str(model.public_id), safe='')}/source",
-            updated_at=model.updated_at,
-            bom=[_bom_response(*row) for row in bom_rows],
-            issues=[
-                ModelIssueResponse(
-                    severity=issue.severity,
-                    code=issue.code,
-                    message=issue.message,
-                    referenced_filename=issue.referenced_filename,
-                )
-                for issue in issues
-            ],
-        )
+        return _detail_response(session, model)
+
+    @router.post("/{model_id}/reprocess", response_model=ModelDetailResponse)
+    def reprocess_imported_model(
+        model_id: uuid.UUID, session: Session = Depends(context.session_dependency)
+    ) -> ModelDetailResponse:
+        try:
+            reprocess_model(
+                context.session_factory,
+                context.storage_root,
+                context.library_root,
+                model_id,
+            )
+        except ModelSourceIntegrityError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+        except ModelReprocessError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ModelImportError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        model = context.find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        return _detail_response(session, model)
 
     @router.get("/{model_id}/source", response_class=FileResponse)
     def model_source(
@@ -311,7 +342,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         model = context.find_model(session, model_id)
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
-        source_path = _managed_source_path(context.storage_root, model)
+        source_path = managed_source_path(context.storage_root, model)
         if source_path is None or not source_path.is_file():
             raise HTTPException(status_code=404, detail="Model source not found")
         # Imported sources are immutable, so the stored hash is the ETag.
@@ -336,7 +367,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         if model is None:
             session.commit()
             return Response(status_code=204)
-        source_path = _managed_source_path(context.storage_root, model)
+        source_path = managed_source_path(context.storage_root, model)
         model_directory = source_path.parent if source_path is not None else None
         session.execute(delete(ImportedModel).where(ImportedModel.id == model.id))
         session.commit()

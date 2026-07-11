@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Set as AbstractSet
+
 import pytest
 
 from app.services.ldraw_model_parser import ModelParseError, ParsedModel, parse_ldraw_model
@@ -13,9 +15,14 @@ def ref(color: int, filename: str) -> str:
     return f"1 {color} {IDENTITY} {filename}"
 
 
-def parse(text: str | bytes) -> ParsedModel:
+def parse(text: str | bytes, primitives: AbstractSet[str] = frozenset()) -> ParsedModel:
     content = text if isinstance(text, bytes) else text.encode()
-    return parse_ldraw_model(content, official_part_ids=PARTS, known_color_codes=COLORS)
+    return parse_ldraw_model(
+        content,
+        official_part_ids=PARTS,
+        known_color_codes=COLORS,
+        known_primitive_names=primitives,
+    )
 
 
 def quantities(result: ParsedModel) -> list[tuple[str, int, int]]:
@@ -124,6 +131,68 @@ def test_official_part_is_not_expanded_as_an_mpd_section() -> None:
     )
     assert quantities(result) == []
     assert result.issues[0].code == "unsupported_custom_part"
+
+
+def test_bare_primitive_references_are_rendering_only() -> None:
+    source = "\n".join(
+        [
+            "0 Model",
+            ref(4, "3001.dat"),
+            ref(16, "axlehol8.dat"),
+            ref(0, "4-4cyli.dat"),
+        ]
+    )
+    with_index = parse(source, primitives={"axlehol8.dat", "4-4cyli.dat"})
+    assert quantities(with_index) == [("3001", 4, 1)]
+    assert with_index.issues == ()
+
+    without_index = parse(source)
+    assert quantities(without_index) == [("3001", 4, 1)]
+    assert {issue.code for issue in without_index.issues} == {"unresolved_reference"}
+
+
+def test_official_part_shadows_primitive_name() -> None:
+    result = parse(f"0 Model\n{ref(4, '3001.dat')}", primitives={"3001.dat"})
+    assert quantities(result) == [("3001", 4, 1)]
+
+
+def test_submodel_reference_with_color_16_at_top_level_is_standard() -> None:
+    result = parse(
+        "\n".join(
+            [
+                "0 FILE main.ldr",
+                ref(16, "body.ldr"),
+                "0 FILE body.ldr",
+                ref(4, "3001.dat"),
+            ]
+        )
+    )
+    assert quantities(result) == [("3001", 4, 1)]
+    assert result.issues == ()
+
+
+def test_leaf_color_16_without_parent_still_warns_and_is_dropped() -> None:
+    result = parse(f"0 Model\n{ref(16, '3001.dat')}\n{ref(4, '3002.dat')}")
+    assert quantities(result) == [("3002", 4, 1)]
+    assert [issue.code for issue in result.issues] == ["undetermined_color"]
+
+
+def test_submodel_reference_with_edge_color_still_warns() -> None:
+    result = parse(
+        "\n".join(
+            [
+                "0 FILE main.ldr",
+                ref(24, "sub.ldr"),
+                "0 FILE sub.ldr",
+                ref(16, "3001.dat"),
+            ]
+        )
+    )
+    assert quantities(result) == []
+    assert {issue.code for issue in result.issues} == {
+        "edge_color_not_physical",
+        "undetermined_color",
+    }
 
 
 def test_utf8_bom_and_cp1252_fallback() -> None:

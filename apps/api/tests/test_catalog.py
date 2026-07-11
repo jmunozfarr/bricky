@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.main import create_app
-from app.models import Part
+from app.models import LDrawPrimitive, Part
 from app.services.ldraw_catalog import CatalogError, get_catalog_status, rebuild_catalog
 from app.services.ldraw_library import manifest_path_for
 
@@ -78,9 +78,11 @@ def test_successful_rebuild_and_idempotency(
     assert first.indexed_part_count == 3
     assert first.skipped_subpart_count == 1
     assert first.indexed_color_count == 2
+    assert first.indexed_primitive_count == 1
     assert second.indexed_part_count == first.indexed_part_count
     with catalog_session_factory() as session:
         assert session.scalar(select(func.count()).select_from(Part)) == 3
+        assert session.scalars(select(LDrawPrimitive.name)).all() == ["box.dat"]
 
 
 def test_failed_rebuild_rolls_back_previous_catalog(

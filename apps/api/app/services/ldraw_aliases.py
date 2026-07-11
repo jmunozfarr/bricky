@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
@@ -81,7 +81,7 @@ class LDrawMovedAliasResolver:
     def __init__(
         self,
         library_root: Path,
-        parts: list[OfficialPartRecord],
+        parts: Iterable[OfficialPartRecord],
         *,
         maximum_depth: int = 16,
     ) -> None:
