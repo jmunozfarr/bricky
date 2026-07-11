@@ -125,13 +125,16 @@ def derive_parsed_model(
 
 
 def derive_model_content(parsed: ParsedModel) -> DerivedModelContent:
+    has_warnings = any(issue.severity == "warning" for issue in parsed.issues)
     return DerivedModelContent(
-        import_status="ready_with_warnings" if parsed.issues else "ready",
+        import_status="ready_with_warnings" if has_warnings else "ready",
         declared_step_count=parsed.declared_step_count,
         total_part_quantity=sum(item.quantity for item in parsed.bom),
         unique_part_color_count=len(parsed.bom),
         unresolved_reference_count=sum(
-            1 for issue in parsed.issues if issue.code in UNRESOLVED_ISSUE_CODES
+            1
+            for issue in parsed.issues
+            if issue.severity == "warning" and issue.code in UNRESOLVED_ISSUE_CODES
         ),
     )
 
@@ -163,6 +166,7 @@ def replace_model_rows(session: Session, model_id: int, parsed: ParsedModel) -> 
             code=issue.code,
             message=issue.message,
             referenced_filename=issue.referenced_filename,
+            occurrence_count=issue.occurrence_count,
         )
         for issue in parsed.issues
     )

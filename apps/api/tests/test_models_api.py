@@ -108,6 +108,37 @@ def test_successful_ldr_import_preserves_bytes_and_exposes_detail(
     assert len(stored) == 1 and stored[0].read_bytes() == original
 
 
+def test_auto_mapped_customs_import_as_ready_with_info_issues(
+    catalog_session_factory: sessionmaker[Session], tmp_path: Path
+) -> None:
+    seed_catalog(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+    mpd = "\n".join(
+        [
+            "0 FILE main.ldr",
+            f"1 4 {IDENTITY} 9999 - 3001.dat",
+            "0 FILE 9999 - 3001.dat",
+            "3 16 0 0 0 1 0 0 0 1 0",
+        ]
+    ).encode()
+    response = upload(client, mpd, "wrapped.mpd")
+    assert response.status_code == 201
+    assert response.json()["importStatus"] == "ready"
+    assert response.json()["unresolvedReferenceCount"] == 0
+
+    detail = client.get(f"/api/models/{response.json()['modelId']}").json()
+    assert [item["partId"] for item in detail["bom"]] == ["3001"]
+    assert detail["issues"] == [
+        {
+            "severity": "info",
+            "code": "custom_part_auto_mapped",
+            "message": "Automatically mapped to official part '3001'",
+            "referencedFilename": "9999 - 3001.dat",
+            "occurrenceCount": 1,
+        }
+    ]
+
+
 def test_mpd_warning_duplicate_search_and_pagination(
     catalog_session_factory: sessionmaker[Session], tmp_path: Path
 ) -> None:

@@ -118,7 +118,7 @@ def test_unresolved_malformed_and_cycle_are_nonfatal() -> None:
     }
 
 
-def test_official_part_is_not_expanded_as_an_mpd_section() -> None:
+def test_embedded_section_shadowing_official_part_maps_without_expansion() -> None:
     result = parse(
         "\n".join(
             [
@@ -129,8 +129,72 @@ def test_official_part_is_not_expanded_as_an_mpd_section() -> None:
             ]
         )
     )
+    assert quantities(result) == [("3001", 4, 1)]
+    assert len(result.issues) == 1
+    assert result.issues[0].code == "custom_part_auto_mapped"
+    assert result.issues[0].severity == "info"
+
+
+def test_set_wrapper_and_bent_customs_auto_map_to_official_parts() -> None:
+    result = parse(
+        "\n".join(
+            [
+                "0 FILE main.ldr",
+                ref(4, "42083 - 3020.dat"),
+                ref(1, "3001_bended.dat"),
+                ref(4, "sub.ldr"),
+                "0 FILE sub.ldr",
+                ref(2, "42083 - 3020.dat"),
+                "0 FILE 42083 - 3020.dat",
+                "3 16 0 0 0 1 0 0 0 1 0",
+            ]
+        )
+    )
+    assert quantities(result) == [("3001", 1, 1), ("3020", 2, 1), ("3020", 4, 1)]
+    mapped = {
+        (issue.code, issue.severity, issue.referenced_filename, issue.occurrence_count)
+        for issue in result.issues
+    }
+    assert mapped == {
+        ("custom_part_auto_mapped", "info", "42083 - 3020.dat", 2),
+        ("custom_part_auto_mapped", "info", "3001_bended.dat", 1),
+    }
+
+
+def test_unmappable_custom_wrapper_keeps_warning_with_count() -> None:
+    result = parse(
+        "\n".join(
+            [
+                "0 FILE main.ldr",
+                ref(4, "42083 - ldcflexaxlemid.dat"),
+                ref(2, "42083 - ldcflexaxlemid.dat"),
+                "0 FILE 42083 - ldcflexaxlemid.dat",
+                "3 16 0 0 0 1 0 0 0 1 0",
+            ]
+        )
+    )
     assert quantities(result) == []
-    assert result.issues[0].code == "unsupported_custom_part"
+    assert len(result.issues) == 1
+    issue = result.issues[0]
+    assert issue.code == "unsupported_custom_part"
+    assert issue.severity == "warning"
+    assert issue.occurrence_count == 2
+
+
+def test_auto_mapped_wrapper_with_undetermined_color_is_not_counted() -> None:
+    result = parse(
+        "\n".join(
+            [
+                "0 FILE main.ldr",
+                ref(16, "42083 - 3020.dat"),
+                ref(4, "3001.dat"),
+                "0 FILE 42083 - 3020.dat",
+                "3 16 0 0 0 1 0 0 0 1 0",
+            ]
+        )
+    )
+    assert quantities(result) == [("3001", 4, 1)]
+    assert {issue.code for issue in result.issues} == {"undetermined_color"}
 
 
 def test_bare_primitive_references_are_rendering_only() -> None:
