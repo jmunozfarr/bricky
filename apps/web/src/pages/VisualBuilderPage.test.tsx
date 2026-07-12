@@ -40,6 +40,7 @@ const model = {
   sourceUrl: "/source",
   totalPartQuantity: 2,
   issues: [],
+  resolutions: [],
   bom: [
     {
       partId: "3001",

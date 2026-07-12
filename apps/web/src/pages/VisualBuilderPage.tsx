@@ -27,6 +27,7 @@ import {
 import { WebGlLifecycle } from "../components/ldraw/WebGlLifecycle";
 import { maximumViewerDpr } from "../components/ldraw/viewerQuality";
 import { loadStepMemory, saveStepMemory } from "../builder/stepMemory";
+import { ImportHealthPanel } from "../components/models/ImportHealthPanel";
 import { InstructionGraphPanel } from "../components/models/InstructionGraphPanel";
 import { ModelCoveragePanel } from "../components/models/ModelCoveragePanel";
 import { PartThumbnail } from "../components/parts/PartThumbnail";
@@ -420,22 +421,7 @@ function BuilderWorkspace({
                 )}
               </div>
               <ModelCoveragePanel modelId={model.modelId} />
-              {model.issues.length > 0 && (
-                <details className="builder-import-warnings">
-                  <summary>Import warnings · {model.issues.length}</summary>
-                  <ul className="issue-list">
-                    {model.issues.map((issue, index) => (
-                      <li key={`${issue.code}-${index}`}>
-                        <strong>{issue.code.replaceAll("_", " ")}</strong>
-                        <span>
-                          {issue.message}
-                          {issue.referencedFilename ? ` — ${issue.referencedFilename}` : ""}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
+              <ImportHealthPanel model={model} />
             </>
           ) : (
             <>

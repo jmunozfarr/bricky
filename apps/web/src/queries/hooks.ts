@@ -36,6 +36,7 @@ import {
 import {
   CoverageQuery,
   deleteModel,
+  deleteModelResolution,
   getBuildManifest,
   getModel,
   getModelCoverage,
@@ -43,10 +44,14 @@ import {
   getInstructionPlayback,
   getModelsReadinessSummary,
   listModels,
+  ModelDetail,
+  ModelResolutionInput,
   ModelsQuery,
+  reprocessModel,
   serializeCoverageQuery,
   serializeModelsQuery,
   uploadModel,
+  upsertModelResolution,
 } from "../api/models";
 
 export interface HealthStatus {
@@ -237,5 +242,44 @@ export function useDeleteModel() {
   return useMutation({
     mutationFn: (modelId: string) => deleteModel(modelId),
     onSuccess: () => client.invalidateQueries({ queryKey: ["models"] }),
+  });
+}
+
+/**
+ * Reprocess-style mutations return the re-derived model detail: write it
+ * through immediately, then refresh everything derived from the model
+ * (list facts, coverage, readiness, playback).
+ */
+function useApplyModelDetail() {
+  const client = useQueryClient();
+  return async (detail: ModelDetail) => {
+    client.setQueryData(["models", "detail", detail.modelId], detail);
+    await client.invalidateQueries({ queryKey: ["models"] });
+  };
+}
+
+export function useReprocessModel() {
+  const apply = useApplyModelDetail();
+  return useMutation({
+    mutationFn: (modelId: string) => reprocessModel(modelId),
+    onSuccess: apply,
+  });
+}
+
+export function useUpsertModelResolution() {
+  const apply = useApplyModelDetail();
+  return useMutation({
+    mutationFn: ({ modelId, input }: { modelId: string; input: ModelResolutionInput }) =>
+      upsertModelResolution(modelId, input),
+    onSuccess: apply,
+  });
+}
+
+export function useDeleteModelResolution() {
+  const apply = useApplyModelDetail();
+  return useMutation({
+    mutationFn: ({ modelId, sourceReference }: { modelId: string; sourceReference: string }) =>
+      deleteModelResolution(modelId, sourceReference),
+    onSuccess: apply,
   });
 }
