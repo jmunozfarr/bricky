@@ -46,6 +46,16 @@ export interface ModelImportIssue {
   code: string;
   message: string;
   referencedFilename: string | null;
+  occurrenceCount: number;
+}
+
+export type ModelResolutionAction = "map" | "ignore";
+
+export interface ModelReferenceResolution {
+  sourceReference: string;
+  action: ModelResolutionAction;
+  partId: string | null;
+  colorCode: number | null;
 }
 
 export interface ModelDetail extends ModelSummary {
@@ -54,6 +64,7 @@ export interface ModelDetail extends ModelSummary {
   updatedAt: string;
   bom: ModelBomItem[];
   issues: ModelImportIssue[];
+  resolutions: ModelReferenceResolution[];
 }
 
 export interface InstructionTransform {
@@ -453,4 +464,44 @@ export function deleteModel(modelId: string): Promise<void> {
   return fetchNoContent(`/api/models/${encodeURIComponent(modelId)}`, {
     method: "DELETE",
   });
+}
+
+export function reprocessModel(modelId: string): Promise<ModelDetail> {
+  return fetchJson<ModelDetail>(`/api/models/${encodeURIComponent(modelId)}/reprocess`, undefined, {
+    method: "POST",
+  });
+}
+
+export interface ModelResolutionInput {
+  sourceReference: string;
+  action: ModelResolutionAction;
+  partId?: string;
+  colorCode?: number;
+}
+
+export function upsertModelResolution(
+  modelId: string,
+  input: ModelResolutionInput,
+): Promise<ModelDetail> {
+  return fetchJson<ModelDetail>(
+    `/api/models/${encodeURIComponent(modelId)}/resolutions`,
+    undefined,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function deleteModelResolution(
+  modelId: string,
+  sourceReference: string,
+): Promise<ModelDetail> {
+  const params = new URLSearchParams({ source: sourceReference });
+  return fetchJson<ModelDetail>(
+    `/api/models/${encodeURIComponent(modelId)}/resolutions?${params}`,
+    undefined,
+    { method: "DELETE" },
+  );
 }

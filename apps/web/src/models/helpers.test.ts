@@ -9,8 +9,13 @@ import {
   filterModelBom,
   filterCoverageItems,
   formatCoveragePercentage,
+  importIssueLabel,
+  isResolvableIssue,
   modelStatusLabel,
   modelUploadError,
+  resolutionLabel,
+  sortImportIssues,
+  suggestedMapQuery,
   validateModelUpload,
 } from "./helpers";
 
@@ -119,5 +124,61 @@ describe("model coverage presentation", () => {
       "You have all the pieces required for this model.",
     );
     expect(coverageEmptyMessage(true, true)).toBe("No model parts match these filters.");
+  });
+});
+
+describe("import health presentation", () => {
+  const issue = (overrides: Partial<Parameters<typeof isResolvableIssue>[0]>) => ({
+    severity: "warning",
+    code: "unresolved_reference",
+    message: "Reference is not an embedded submodel or indexed official part",
+    referencedFilename: "42083 - 98138pt1.dat",
+    occurrenceCount: 1,
+    ...overrides,
+  });
+
+  it("labels known issue codes and falls back to the raw code", () => {
+    expect(importIssueLabel("generated_section_without_parts")).toBe(
+      "Generated section without parts",
+    );
+    expect(importIssueLabel("some_future_code")).toBe("some future code");
+  });
+
+  it("marks only referenced remediable codes as resolvable", () => {
+    expect(isResolvableIssue(issue({}))).toBe(true);
+    expect(isResolvableIssue(issue({ code: "generated_section_without_parts" }))).toBe(true);
+    expect(isResolvableIssue(issue({ referencedFilename: null }))).toBe(false);
+    expect(isResolvableIssue(issue({ code: "malformed_type1_reference" }))).toBe(false);
+  });
+
+  it("sorts warnings ahead of informational notices, otherwise stable", () => {
+    const info = issue({ severity: "info", code: "custom_part_auto_mapped" });
+    const first = issue({ referencedFilename: "a.dat" });
+    const second = issue({ referencedFilename: "b.dat" });
+    expect(sortImportIssues([info, first, second])).toEqual([first, second, info]);
+  });
+
+  it("summarizes resolutions including the optional colour override", () => {
+    expect(
+      resolutionLabel({
+        sourceReference: "x.dat",
+        action: "ignore",
+        partId: null,
+        colorCode: null,
+      }),
+    ).toBe("Excluded from the BOM");
+    expect(
+      resolutionLabel({ sourceReference: "x.dat", action: "map", partId: "3001", colorCode: null }),
+    ).toBe("Mapped to 3001");
+    expect(
+      resolutionLabel({ sourceReference: "x.dat", action: "map", partId: "3001", colorCode: 71 }),
+    ).toBe("Mapped to 3001 in colour 71");
+  });
+
+  it("suggests catalog queries from wrapper and bent-variant filenames", () => {
+    expect(suggestedMapQuery("42083 - 98138pt1.dat")).toBe("98138pt1");
+    expect(suggestedMapQuery("axle 11l_bended.dat")).toBe("axle 11l");
+    expect(suggestedMapQuery("technicFlexAxle-1.ldr")).toBe("technicFlexAxle-1");
+    expect(suggestedMapQuery("sub/dir/4-4cyli.dat")).toBe("4-4cyli");
   });
 });
