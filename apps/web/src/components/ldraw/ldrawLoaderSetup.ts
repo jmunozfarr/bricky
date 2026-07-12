@@ -9,10 +9,12 @@ export function createLDrawLoader(): LDrawLoader {
 
 /**
  * Prepares a loader for official-library sources: parts resolve against the
- * library path, the LDConfig palette is preloaded, and unresolved color-16
- * geometry falls back to red so missing color context is visible instead of
- * silently grey. Shared by the main thread and the parse worker so both
- * resolve the exact same material palette.
+ * library path and the LDConfig palette is preloaded. Shared by the main
+ * thread and the parse worker so both resolve the exact same palette. Every
+ * palette material must keep its own LDConfig code in userData: the worker
+ * hands scenes over by that code (ldrawSceneTransfer), so a material
+ * relabelled to another code is re-resolved to that code's colour on the
+ * main thread.
  */
 export async function prepareOfficialLoader(
   loader: LDrawLoader,
@@ -21,10 +23,4 @@ export async function prepareOfficialLoader(
 ): Promise<void> {
   loader.setPartsLibraryPath(partsLibraryPath);
   await loader.preloadMaterials(materialsUrl);
-  const redMaterial = loader.getMaterial("4");
-  if (redMaterial !== null) {
-    const materialData = redMaterial.userData as Record<string, unknown>;
-    materialData.code = "16";
-    loader.addMaterial(redMaterial);
-  }
 }
