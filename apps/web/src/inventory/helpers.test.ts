@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { ApiError } from "../api/client";
+import type { InventoryImportResult } from "../api/inventory";
 import {
   colorSwatchValue,
   decrementQuantity,
+  importErrorMessage,
+  importToastMessage,
   incrementQuantity,
   inventoryEmptyMessage,
   parseQuantityInput,
+  validateInventoryCsv,
 } from "./helpers";
 
 describe("inventory quantity helpers", () => {
@@ -33,5 +38,60 @@ describe("inventory presentation helpers", () => {
   it("formats transparent colors and falls back for invalid hex", () => {
     expect(colorSwatchValue("#C91A09", 128)).toBe("rgba(201, 26, 9, 0.502)");
     expect(colorSwatchValue("invalid", 255)).toBe("rgba(128, 128, 128, 1.000)");
+  });
+});
+
+describe("inventory import helpers", () => {
+  const importResult = (overrides: Partial<InventoryImportResult>): InventoryImportResult => ({
+    strategy: "add",
+    includeUnknown: true,
+    appliedRowCount: 0,
+    createdCount: 0,
+    updatedCount: 0,
+    unchangedCount: 0,
+    skippedUnknownRowCount: 0,
+    invalidRowCount: 0,
+    quantityDelta: 0,
+    ...overrides,
+  });
+
+  it("validates the selected CSV file before any request", () => {
+    expect(validateInventoryCsv(null)).toBe("Choose a CSV file.");
+    expect(validateInventoryCsv({ name: "inventory.txt", size: 10 })).toContain(".csv");
+    expect(validateInventoryCsv({ name: "inventory.csv", size: 0 })).toContain("empty");
+    expect(validateInventoryCsv({ name: "inventory.csv", size: 1024 * 1024 + 1 })).toContain(
+      "1 MiB",
+    );
+    expect(validateInventoryCsv({ name: "Inventory.CSV", size: 42 })).toBeNull();
+  });
+
+  it("maps import errors to actionable messages", () => {
+    expect(importErrorMessage(new ApiError(413, "too big", "too big"))).toContain("upload-size");
+    expect(importErrorMessage(new ApiError(422, "The CSV has no header row", "detail"))).toBe(
+      "The CSV has no header row",
+    );
+    expect(importErrorMessage(new Error("network down"))).toBe("network down");
+    expect(importErrorMessage("boom")).toBe("Inventory import failed.");
+  });
+
+  it("summarizes an applied import including skips and invalid rows", () => {
+    expect(importToastMessage(importResult({ appliedRowCount: 1, createdCount: 1 }))).toBe(
+      "Imported 1 row (1 new, 0 updated).",
+    );
+    expect(
+      importToastMessage(
+        importResult({
+          appliedRowCount: 5,
+          createdCount: 2,
+          updatedCount: 2,
+          unchangedCount: 1,
+          skippedUnknownRowCount: 1,
+          invalidRowCount: 2,
+        }),
+      ),
+    ).toBe(
+      "Imported 5 rows (2 new, 2 updated, 1 unchanged). " +
+        "Skipped 1 row not in the catalog. Ignored 2 rows with errors.",
+    );
   });
 });

@@ -22,13 +22,16 @@ import {
 } from "../api/catalog";
 import { fetchJson } from "../api/client";
 import {
+  applyInventoryImport,
   deleteInventoryItem,
   getInventorySummary,
   getInventoryVariants,
+  InventoryImportStrategy,
   InventoryItem,
   InventoryPage,
   InventoryQuery,
   InventorySummary,
+  previewInventoryImport,
   searchInventory,
   serializeInventoryQuery,
   setInventoryQuantity,
@@ -160,6 +163,29 @@ export function useDeleteInventoryItem() {
   return useMutation({
     mutationFn: ({ partId, colorCode }: { partId: string; colorCode: number }) =>
       deleteInventoryItem(partId, colorCode),
+    onSuccess: invalidate,
+  });
+}
+
+export function usePreviewInventoryImport() {
+  return useMutation({
+    mutationFn: ({ file, strategy }: { file: File; strategy: InventoryImportStrategy }) =>
+      previewInventoryImport(file, strategy),
+  });
+}
+
+export function useApplyInventoryImport() {
+  const invalidate = useInvalidateInventoryDependents();
+  return useMutation({
+    mutationFn: ({
+      file,
+      strategy,
+      includeUnknown,
+    }: {
+      file: File;
+      strategy: InventoryImportStrategy;
+      includeUnknown: boolean;
+    }) => applyInventoryImport(file, strategy, includeUnknown),
     onSuccess: invalidate,
   });
 }

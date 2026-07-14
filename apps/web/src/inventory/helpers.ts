@@ -1,4 +1,8 @@
+import { ApiError } from "../api/client";
+import type { InventoryImportResult } from "../api/inventory";
+
 export const MAX_INVENTORY_QUANTITY = 999_999;
+export const INVENTORY_CSV_LIMIT_BYTES = 1024 * 1024;
 
 export function parseQuantityInput(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
@@ -20,6 +24,41 @@ export function inventoryEmptyMessage(hasFilters: boolean): string {
   return hasFilters
     ? "No inventory items match these filters."
     : "Your personal inventory is empty.";
+}
+
+export function validateInventoryCsv(file: Pick<File, "name" | "size"> | null): string | null {
+  if (file === null) return "Choose a CSV file.";
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  if (extension !== "csv") return "Only .csv files are supported.";
+  if (file.size === 0) return "The selected file is empty.";
+  if (file.size > INVENTORY_CSV_LIMIT_BYTES) return "The selected file exceeds 1 MiB.";
+  return null;
+}
+
+export function importErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 413) return "The CSV exceeds the server upload-size limit.";
+    if (error.status === 422) return error.message;
+  }
+  return error instanceof Error ? error.message : "Inventory import failed.";
+}
+
+function countRows(count: number): string {
+  return `${count} row${count === 1 ? "" : "s"}`;
+}
+
+export function importToastMessage(result: InventoryImportResult): string {
+  const buckets = [`${result.createdCount} new`, `${result.updatedCount} updated`];
+  if (result.unchangedCount > 0) buckets.push(`${result.unchangedCount} unchanged`);
+  const summary = `Imported ${countRows(result.appliedRowCount)} (${buckets.join(", ")}).`;
+  const notes: string[] = [];
+  if (result.skippedUnknownRowCount > 0) {
+    notes.push(`Skipped ${countRows(result.skippedUnknownRowCount)} not in the catalog.`);
+  }
+  if (result.invalidRowCount > 0) {
+    notes.push(`Ignored ${countRows(result.invalidRowCount)} with errors.`);
+  }
+  return [summary, ...notes].join(" ");
 }
 
 export function colorSwatchValue(colorHex: string, alpha: number): string {
