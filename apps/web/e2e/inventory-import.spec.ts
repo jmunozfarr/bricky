@@ -1,22 +1,38 @@
 import AxeBuilder from "@axe-core/playwright";
 import { APIRequestContext, expect, Page, test } from "@playwright/test";
 
-import { importSyntheticModel, SYNTHETIC_MPD } from "./synthetic";
+import { importSyntheticModel } from "./synthetic";
 
 const MODEL_NAME = "e2e-inventory-import";
 
-// Keys the CSV writes: two synthetic-model parts plus a part that can never
-// exist in the catalog. Quantities cover 3 of the model's 5 required pieces.
+// Specs run fully parallel against one shared personal database, so this
+// test only touches part+colour keys no other spec writes or covers
+// (core-loop.spec owns 3020/2 and the shared fixture's 3001 rows). The
+// model requires 5 pieces; the CSV covers 3 of them.
+const INVENTORY_MPD = [
+  "0 FILE main.ldr",
+  "0 Name: main.ldr",
+  "1 71 0 0 0 1 0 0 0 1 0 0 0 1 3005.dat",
+  "0 STEP",
+  "1 19 0 -24 0 1 0 0 0 1 0 0 0 1 3004.dat",
+  "1 19 0 -48 0 1 0 0 0 1 0 0 0 1 3004.dat",
+  "0 STEP",
+  "1 27 60 0 0 1 0 0 0 1 0 0 0 1 3622.dat",
+  "1 27 60 -24 0 1 0 0 0 1 0 0 0 1 3622.dat",
+  "0 NOFILE",
+  "",
+].join("\n");
+
 const CSV_KEYS = [
-  { partId: "3001", colorCode: 4, quantity: 1 },
-  { partId: "3020", colorCode: 2, quantity: 2 },
+  { partId: "3005", colorCode: 71, quantity: 1 },
+  { partId: "3004", colorCode: 19, quantity: 2 },
   { partId: "e2e-mystery-part", colorCode: 4, quantity: 2 },
 ] as const;
 
 const IMPORT_CSV = [
   "part_id,color_code,quantity",
   ...CSV_KEYS.map((key) => `${key.partId},${key.colorCode},${key.quantity}`),
-  "3001,16,1", // colour 16 is non-physical: reported as an invalid row
+  "3005,16,1", // colour 16 is non-physical: reported as an invalid row
   "",
 ].join("\n");
 
@@ -47,14 +63,10 @@ async function totalPieces(page: Page): Promise<number> {
 test("inventory import: preview, apply, coverage refresh", async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "The import flow runs once in Chromium.");
 
-  const modelId = await importSyntheticModel(
-    request,
-    MODEL_NAME,
-    SYNTHETIC_MPD.replace("0 Name: main.ldr", "0 Name: main.ldr\n0 // e2e-inventory variant"),
-  );
+  const modelId = await importSyntheticModel(request, MODEL_NAME, INVENTORY_MPD);
 
-  // The e2e stack shares the personal database: snapshot the rows this test
-  // writes, start them from a clean slate, and restore them afterwards.
+  // Snapshot the rows this test writes, start them from a clean slate, and
+  // restore them afterwards.
   const previous = [];
   for (const key of CSV_KEYS) {
     previous.push({ ...key, quantity: await quantityFor(request, key.partId, key.colorCode) });
@@ -63,7 +75,6 @@ test("inventory import: preview, apply, coverage refresh", async ({ page, reques
 
   try {
     await page.goto("/inventory");
-    const baseline = await totalPieces(page);
 
     await page.getByRole("button", { name: "Import CSV" }).click();
     const dialog = page.getByRole("dialog");
@@ -101,24 +112,40 @@ test("inventory import: preview, apply, coverage refresh", async ({ page, reques
     const accessibility = await new AxeBuilder({ page }).analyze();
     expect(accessibility.violations, "axe violations with the import dialog open").toEqual([]);
 
-    // 4. Apply, toast, and the refreshed summary tiles. The toast waits for
-    // the apply round trip plus the inventory/models refetches, which can be
-    // slow on a cold dev server with both browser projects running.
+    // 4. Apply and toast. The toast waits for the apply round trip plus the
+    // inventory/models refetches, which can be slow on a cold dev server
+    // with both browser projects running.
     await dialog.getByRole("button", { name: "Import", exact: true }).click();
     await expect(page.getByText(/Imported 3 rows \(3 new, 0 updated\)/)).toBeVisible({
       timeout: 20_000,
     });
     await expect(dialog).toBeHidden();
-    await expect.poll(() => totalPieces(page), { timeout: 15_000 }).toBe(baseline + 5);
 
-    // 5. The catalog-unknown row is a first-class inventory item.
+    // 5. Exact per-key persistence, then the summary tile catching up to the
+    // server without a reload (the absolute total is shared with concurrent
+    // specs, so assert convergence rather than a fixed number).
+    for (const key of CSV_KEYS) {
+      expect(await quantityFor(request, key.partId, key.colorCode)).toBe(key.quantity);
+    }
+    await expect
+      .poll(
+        async () => {
+          const summary = await request.get("/api/inventory/summary");
+          const { totalQuantity } = (await summary.json()) as { totalQuantity: number };
+          return (await totalPieces(page)) === totalQuantity ? "in sync" : "stale";
+        },
+        { timeout: 15_000 },
+      )
+      .toBe("in sync");
+
+    // 6. The catalog-unknown row is a first-class inventory item.
     await page.getByLabel("Search inventory").fill("e2e-mystery-part");
     const orphan = page.locator(".inventory-card", { hasText: "e2e-mystery-part" });
     await expect(orphan).toHaveCount(1);
     await expect(orphan).toContainText("× 2");
     await expect(orphan).toContainText("Catalog metadata unavailable");
 
-    // 6. Model coverage reflects the import without any manual refresh:
+    // 7. Model coverage reflects the import without any manual refresh:
     // 3 of the 5 required pieces are now owned.
     await page.goto(`/models?query=${MODEL_NAME}`);
     const modelCard = page.locator(".model-card", { hasText: MODEL_NAME });
