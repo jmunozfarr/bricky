@@ -39,6 +39,11 @@ Constraints that bear on every item below (details in `CLAUDE.md`):
 
 ## 1. Bulk inventory input (highest leverage)
 
+> **Status (2026-07-14).** Phase A shipped: native CSV import with dry-run
+> preview, add/replace strategy, alias canonicalization, and unknown-row
+> handling — see `docs/BULK_INVENTORY.md`. Phases B/C remain open and are
+> blocked on user-provided sample export/dump files.
+
 **Why.** Coverage/readiness is the app's core promise, but it is only as good
 as the inventory behind it, and per-row manual entry does not scale past a
 handful of parts. Every other roadmap item compounds on real inventory data.

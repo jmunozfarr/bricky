@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { InventoryItem } from "../api/inventory";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
+import { InventoryImportDialog } from "../components/inventory/InventoryImportDialog";
 import { PartThumbnail } from "../components/parts/PartThumbnail";
 import { Alert, EmptyState, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
@@ -35,6 +36,7 @@ export default function InventoryPage() {
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const selectedPartId = params.get("part");
   const [searchInput, setSearchInput] = useState(query);
+  const [importing, setImporting] = useState(false);
   const summary = toAsyncState(useInventorySummary());
   const results = toAsyncState(useInventorySearch({ query, category, colorCode, page }));
   // Filter options are best-effort decoration; failures fall back to empty.
@@ -104,8 +106,14 @@ export default function InventoryPage() {
           <p className="eyebrow">Local workspace</p>
           <h2 id="inventory-title">Personal inventory</h2>
         </div>
-        <p>Every change is saved to your local workspace</p>
+        <div className="inventory-heading-actions">
+          <p>Every change is saved to your local workspace</p>
+          <button type="button" onClick={() => setImporting(true)}>
+            Import CSV
+          </button>
+        </div>
       </div>
+      {importing && <InventoryImportDialog onClose={() => setImporting(false)} />}
 
       {summary.kind === "ready" ? (
         <div className="inventory-summary">

@@ -192,6 +192,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inventory/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Import */
+        post: operations["preview_import_api_inventory_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/import/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Import */
+        post: operations["apply_import_api_inventory_import_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models": {
         parameters: {
             query?: never;
@@ -403,6 +437,28 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_apply_import_api_inventory_import_apply_post */
+        Body_apply_import_api_inventory_import_apply_post: {
+            /** File */
+            file: string;
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "add" | "replace";
+            /** Includeunknown */
+            includeUnknown: boolean;
+        };
+        /** Body_preview_import_api_inventory_import_preview_post */
+        Body_preview_import_api_inventory_import_preview_post: {
+            /** File */
+            file: string;
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "add" | "replace";
+        };
         /** Body_upload_model_api_models_post */
         Body_upload_model_api_models_post: {
             /** File */
@@ -592,6 +648,66 @@ export interface components {
             /** Database */
             database: string;
         };
+        /** ImportBucketSummaryResponse */
+        ImportBucketSummaryResponse: {
+            /** Rowcount */
+            rowCount: number;
+            /** Createcount */
+            createCount: number;
+            /** Updatecount */
+            updateCount: number;
+            /** Unchangedcount */
+            unchangedCount: number;
+            /** Quantitydelta */
+            quantityDelta: number;
+            /** Missingpartcount */
+            missingPartCount: number;
+            /** Missingcolorcount */
+            missingColorCount: number;
+        };
+        /** ImportPreviewRowResponse */
+        ImportPreviewRowResponse: {
+            /** Partid */
+            partId: string;
+            /** Sourcepartid */
+            sourcePartId: string;
+            /** Canonicalizedfrom */
+            canonicalizedFrom: string | null;
+            /** Colorcode */
+            colorCode: number;
+            /** Quantity */
+            quantity: number;
+            /** Currentquantity */
+            currentQuantity: number;
+            /** Resultingquantity */
+            resultingQuantity: number;
+            /**
+             * Change
+             * @enum {string}
+             */
+            change: "create" | "update" | "unchanged";
+            /** Unknownreason */
+            unknownReason: ("part" | "color") | null;
+            /** Partname */
+            partName: string | null;
+            /** Colorname */
+            colorName: string | null;
+            /** Colorhex */
+            colorHex: string | null;
+            /** Alpha */
+            alpha: number | null;
+            /** Renderasseturl */
+            renderAssetUrl: string | null;
+        };
+        /** ImportRowIssueResponse */
+        ImportRowIssueResponse: {
+            /** Linenumber */
+            lineNumber: number;
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
         /** InstructionGraphIssueResponse */
         InstructionGraphIssueResponse: {
             /** Severity */
@@ -761,6 +877,62 @@ export interface components {
                 number,
                 number
             ];
+        };
+        /** InventoryImportApplyResponse */
+        InventoryImportApplyResponse: {
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "add" | "replace";
+            /** Includeunknown */
+            includeUnknown: boolean;
+            /** Appliedrowcount */
+            appliedRowCount: number;
+            /** Createdcount */
+            createdCount: number;
+            /** Updatedcount */
+            updatedCount: number;
+            /** Unchangedcount */
+            unchangedCount: number;
+            /** Skippedunknownrowcount */
+            skippedUnknownRowCount: number;
+            /** Invalidrowcount */
+            invalidRowCount: number;
+            /** Quantitydelta */
+            quantityDelta: number;
+        };
+        /** InventoryImportPreviewResponse */
+        InventoryImportPreviewResponse: {
+            /** Filename */
+            fileName: string;
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "add" | "replace";
+            /** Totaldatarows */
+            totalDataRows: number;
+            /** Plannedrowcount */
+            plannedRowCount: number;
+            /** Duplicaterowcount */
+            duplicateRowCount: number;
+            /** Aliascanonicalizedcount */
+            aliasCanonicalizedCount: number;
+            /** Ignoredcolumns */
+            ignoredColumns: string[];
+            /** Invalidrowcount */
+            invalidRowCount: number;
+            known: components["schemas"]["ImportBucketSummaryResponse"];
+            unknown: components["schemas"]["ImportBucketSummaryResponse"];
+            /** Rows */
+            rows: components["schemas"]["ImportPreviewRowResponse"][];
+            /** Rowstruncated */
+            rowsTruncated: boolean;
+            /** Issues */
+            issues: components["schemas"]["ImportRowIssueResponse"][];
+            /** Issuestruncated */
+            issuesTruncated: boolean;
         };
         /** InventoryItemResponse */
         InventoryItemResponse: {
@@ -1526,6 +1698,72 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_import_api_inventory_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_import_api_inventory_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_import_api_inventory_import_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_apply_import_api_inventory_import_apply_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryImportApplyResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

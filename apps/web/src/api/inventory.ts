@@ -85,3 +85,98 @@ export function deleteInventoryItem(partId: string, colorCode: number): Promise<
     method: "DELETE",
   });
 }
+
+export type InventoryImportStrategy = "add" | "replace";
+export type InventoryImportChange = "create" | "update" | "unchanged";
+export type InventoryImportUnknownReason = "part" | "color";
+
+export interface InventoryImportBucketSummary {
+  rowCount: number;
+  createCount: number;
+  updateCount: number;
+  unchangedCount: number;
+  quantityDelta: number;
+  missingPartCount: number;
+  missingColorCount: number;
+}
+
+export interface InventoryImportPreviewRow {
+  partId: string;
+  sourcePartId: string;
+  canonicalizedFrom: string | null;
+  colorCode: number;
+  quantity: number;
+  currentQuantity: number;
+  resultingQuantity: number;
+  change: InventoryImportChange;
+  unknownReason: InventoryImportUnknownReason | null;
+  partName: string | null;
+  colorName: string | null;
+  colorHex: string | null;
+  alpha: number | null;
+  renderAssetUrl: string | null;
+}
+
+export interface InventoryImportRowIssue {
+  lineNumber: number;
+  code: string;
+  message: string;
+}
+
+export interface InventoryImportPreview {
+  fileName: string;
+  strategy: InventoryImportStrategy;
+  totalDataRows: number;
+  plannedRowCount: number;
+  duplicateRowCount: number;
+  aliasCanonicalizedCount: number;
+  ignoredColumns: string[];
+  invalidRowCount: number;
+  known: InventoryImportBucketSummary;
+  unknown: InventoryImportBucketSummary;
+  rows: InventoryImportPreviewRow[];
+  rowsTruncated: boolean;
+  issues: InventoryImportRowIssue[];
+  issuesTruncated: boolean;
+}
+
+export interface InventoryImportResult {
+  strategy: InventoryImportStrategy;
+  includeUnknown: boolean;
+  appliedRowCount: number;
+  createdCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  skippedUnknownRowCount: number;
+  invalidRowCount: number;
+  quantityDelta: number;
+}
+
+export function previewInventoryImport(
+  file: File,
+  strategy: InventoryImportStrategy,
+  signal?: AbortSignal,
+): Promise<InventoryImportPreview> {
+  const body = new FormData();
+  body.set("file", file);
+  body.set("strategy", strategy);
+  return fetchJson<InventoryImportPreview>("/api/inventory/import/preview", signal, {
+    method: "POST",
+    body,
+  });
+}
+
+export function applyInventoryImport(
+  file: File,
+  strategy: InventoryImportStrategy,
+  includeUnknown: boolean,
+): Promise<InventoryImportResult> {
+  const body = new FormData();
+  body.set("file", file);
+  body.set("strategy", strategy);
+  body.set("includeUnknown", includeUnknown ? "true" : "false");
+  return fetchJson<InventoryImportResult>("/api/inventory/import/apply", undefined, {
+    method: "POST",
+    body,
+  });
+}
