@@ -18,6 +18,7 @@ from app.services.instruction_playback import (
     DEFAULT_RENDER_MAX_EXPANDED_OCCURRENCES,
     RenderComplexityLimits,
 )
+from app.services.inventory_import import DEFAULT_MAX_CSV_UPLOAD_BYTES
 from app.services.model_import import DEFAULT_MAX_UPLOAD_BYTES
 
 
@@ -36,6 +37,7 @@ class Settings(BaseSettings):
     model_storage_root: Path = Path("/data/models")
     part_thumbnail_root: Path = Path("/data/thumbnails")
     model_max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
+    inventory_max_upload_bytes: int = DEFAULT_MAX_CSV_UPLOAD_BYTES
 
     instruction_graph_max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH
     instruction_graph_max_expanded_occurrences: int = DEFAULT_MAX_EXPANDED_OCCURRENCES

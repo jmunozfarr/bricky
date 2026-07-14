@@ -50,6 +50,7 @@ def create_app(
     instruction_graph_limits: InstructionGraphLimits | None = None,
     render_complexity_limits: RenderComplexityLimits | None = None,
     part_thumbnail_root: Path | None = None,
+    inventory_max_upload_bytes: int | None = None,
 ) -> FastAPI:
     settings = get_settings()
     resolved_library_root = library_root or settings.ldraw_library_root
@@ -59,6 +60,9 @@ def create_app(
     active_session_factory = session_factory or get_session_factory()
     resolved_model_storage_root = model_storage_root or settings.model_storage_root
     resolved_model_max_upload_bytes = model_max_upload_bytes or settings.model_max_upload_bytes
+    resolved_inventory_max_upload_bytes = (
+        inventory_max_upload_bytes or settings.inventory_max_upload_bytes
+    )
     resolved_instruction_graph_limits = (
         instruction_graph_limits or settings.instruction_graph_limits()
     )
@@ -98,7 +102,11 @@ def create_app(
         )
 
     application.include_router(create_catalog_router(resolved_library_root, catalog_session))
-    application.include_router(create_inventory_router(catalog_session))
+    application.include_router(
+        create_inventory_router(
+            resolved_library_root, catalog_session, resolved_inventory_max_upload_bytes
+        )
+    )
     application.include_router(
         create_models_router(
             catalog_session,
