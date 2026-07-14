@@ -41,8 +41,12 @@ Constraints that bear on every item below (details in `CLAUDE.md`):
 
 > **Status (2026-07-14).** Phase A shipped: native CSV import with dry-run
 > preview, add/replace strategy, alias canonicalization, and unknown-row
-> handling — see `docs/BULK_INVENTORY.md`. Phases B/C remain open and are
-> blocked on user-provided sample export/dump files.
+> handling — see `docs/BULK_INVENTORY.md`. Phase B is unblocked: sample
+> files are verified and committed in `docs/`, the mapping source is
+> confirmed (Rebrickable API v3; public dumps carry no external IDs), and
+> the user's key is in `.env` as `REBRICKABLE_API_KEY` — prerequisites,
+> findings, and the suggested opening prompt are all in
+> `docs/BULK_INVENTORY.md`.
 
 **Why.** Coverage/readiness is the app's core promise, but it is only as good
 as the inventory behind it, and per-row manual entry does not scale past a

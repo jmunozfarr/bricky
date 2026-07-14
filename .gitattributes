@@ -1,0 +1,3 @@
+# Real-world import samples: preserve original bytes (incl. CRLF) exactly.
+docs/rebrickable_parts_*.csv -text
+docs/rb16b-bricklink.xml -text
