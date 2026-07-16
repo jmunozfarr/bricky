@@ -79,6 +79,67 @@ class CatalogIndexState(Base):
     indexer_version: Mapped[str] = mapped_column(String(32))
 
 
+class ExternalPartIdMap(Base):
+    """Rebuildable Rebrickable/BrickLink -> LDraw part ID cross-reference.
+
+    Populated by `python -m app.cli.rebrickable_mapping populate` from the
+    Rebrickable API; never referenced by personal rows (inventory keys off
+    natural LDraw identifiers, not a FK here).
+    """
+
+    __tablename__ = "external_part_id_map"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_system",
+            "source_part_id",
+            "ldraw_part_id",
+            name="uq_external_part_id_map_candidate",
+        ),
+        CheckConstraint(
+            "source_system IN ('rebrickable', 'bricklink')",
+            name="ck_external_part_id_map_source_system",
+        ),
+        Index("ix_external_part_id_map_lookup", "source_system", "source_part_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_system: Mapped[str] = mapped_column(String(16))
+    source_part_id: Mapped[str] = mapped_column(String(64))
+    ldraw_part_id: Mapped[str] = mapped_column(String(64))
+    is_preferred: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ExternalColorMap(Base):
+    """Rebuildable Rebrickable/BrickLink -> LDraw color code cross-reference."""
+
+    __tablename__ = "external_color_map"
+    __table_args__ = (
+        UniqueConstraint("source_system", "source_color_id", name="uq_external_color_map_source"),
+        CheckConstraint(
+            "source_system IN ('rebrickable', 'bricklink')",
+            name="ck_external_color_map_source_system",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_system: Mapped[str] = mapped_column(String(16))
+    source_color_id: Mapped[int] = mapped_column(Integer)
+    ldraw_color_code: Mapped[int] = mapped_column(Integer)
+
+
+class ExternalIdMapState(Base):
+    """Single-row freshness tracker for the external ID mapping tables."""
+
+    __tablename__ = "external_id_map_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    populated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    part_mapping_count: Mapped[int] = mapped_column(Integer)
+    color_mapping_count: Mapped[int] = mapped_column(Integer)
+    ambiguous_part_count: Mapped[int] = mapped_column(Integer)
+    fetcher_version: Mapped[str] = mapped_column(String(32))
+
+
 class Workspace(Base):
     __tablename__ = "workspaces"
 

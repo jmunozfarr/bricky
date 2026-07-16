@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     part_thumbnail_root: Path = Path("/data/thumbnails")
     model_max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
     inventory_max_upload_bytes: int = DEFAULT_MAX_CSV_UPLOAD_BYTES
+    # Used only by `python -m app.cli.rebrickable_mapping populate`, never in
+    # the request path — the app stays offline-first at runtime.
+    rebrickable_api_key: str | None = None
 
     instruction_graph_max_nesting_depth: int = DEFAULT_MAX_NESTING_DEPTH
     instruction_graph_max_expanded_occurrences: int = DEFAULT_MAX_EXPANDED_OCCURRENCES
