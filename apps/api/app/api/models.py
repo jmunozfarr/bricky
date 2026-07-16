@@ -31,7 +31,7 @@ from app.api.helpers import (
     _coverage_by_model,
     _coverage_item_response,
     _coverage_summary,
-    _inventory_for_requirements,
+    _model_coverage_for,
     _summary,
 )
 from app.models import (
@@ -57,9 +57,15 @@ from app.services.instruction_playback import clear_playback_cache
 from app.services.ldraw_model_parser import normalize_reference
 from app.services.ldraw_pack import PACKED_SOURCE_CACHE
 from app.services.local_workspace import resolve_local_workspace
+from app.services.missing_parts_export import (
+    MissingPartRow,
+    resolve_bricklink_export_rows,
+    write_bricklink_wanted_list_xml,
+    write_missing_parts_csv,
+)
 from app.services.model_coverage import (
+    CoverageItem,
     CoverageRequirement,
-    calculate_model_coverage,
     normalize_part_id,
 )
 from app.services.model_import import (
@@ -73,6 +79,10 @@ from app.services.model_reprocess import (
     ModelReprocessError,
     ModelSourceIntegrityError,
     reprocess_model,
+)
+from app.services.rebrickable_mapping import (
+    load_reverse_color_mapping,
+    load_reverse_part_mapping,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -272,28 +282,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         workspace = resolve_local_workspace(session)
-        bom_rows = session.execute(
-            select(ModelBomItem, Part, LDrawColor)
-            .outerjoin(Part, func.lower(Part.part_id) == func.lower(ModelBomItem.part_id))
-            .outerjoin(LDrawColor, LDrawColor.code == ModelBomItem.color_code)
-            .where(ModelBomItem.model_id == model.id)
-        ).all()
-        requirements = [
-            CoverageRequirement(
-                part_id=item.part_id,
-                color_code=item.color_code,
-                required_quantity=item.quantity,
-            )
-            for item, _part, _color in bom_rows
-        ]
-        coverage = calculate_model_coverage(
-            requirements,
-            _inventory_for_requirements(session, workspace.id, requirements),
-        )
-        metadata = {
-            (normalize_part_id(item.part_id), item.color_code): (part, color)
-            for item, part, color in bom_rows
-        }
+        coverage, metadata = _model_coverage_for(session, workspace.id, model)
         normalized_query = query.strip().lower()
         response_items: list[ModelCoverageItemResponse] = []
         for item in sorted(
@@ -319,6 +308,64 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
             model_id=model.public_id,
             summary=_coverage_summary(coverage.summary),
             items=response_items,
+        )
+
+    @router.get("/{model_id}/missing-parts")
+    def missing_parts_export(
+        model_id: uuid.UUID,
+        export_format: Literal["csv", "bricklink-xml"] = Query(default="csv", alias="format"),
+        session: Session = Depends(context.session_dependency),
+    ) -> Response:
+        model = context.find_model(session, model_id)
+        if model is None:
+            raise HTTPException(status_code=404, detail="Model not found")
+        workspace = resolve_local_workspace(session)
+        coverage, metadata = _model_coverage_for(session, workspace.id, model)
+
+        def missing_row(item: CoverageItem) -> MissingPartRow:
+            part, color = metadata[(normalize_part_id(item.part_id), item.color_code)]
+            return MissingPartRow(
+                part_id=item.part_id,
+                color_code=item.color_code,
+                quantity=item.missing_quantity,
+                part_name=part.name if part is not None else item.part_id,
+                color_name=color.name if color is not None else f"Color {item.color_code}",
+            )
+
+        missing_rows = sorted(
+            (missing_row(item) for item in coverage.items if item.missing_quantity > 0),
+            key=lambda row: (normalize_part_id(row.part_id), row.color_code),
+        )
+
+        encoded_model_name = quote(model.name, safe="")
+        if export_format == "csv":
+            return Response(
+                content=write_missing_parts_csv(missing_rows),
+                media_type="text/csv; charset=utf-8",
+                headers={
+                    "Content-Disposition": (
+                        f"attachment; filename*=UTF-8''{encoded_model_name}-missing-parts.csv"
+                    )
+                },
+            )
+
+        part_map = load_reverse_part_mapping(
+            session, "bricklink", {row.part_id for row in missing_rows}
+        )
+        color_map = load_reverse_color_mapping(
+            session, "bricklink", {row.color_code for row in missing_rows}
+        )
+        result = resolve_bricklink_export_rows(missing_rows, part_map=part_map, color_map=color_map)
+        return Response(
+            content=write_bricklink_wanted_list_xml(result.rows),
+            media_type="application/xml; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f"attachment; filename*=UTF-8''{encoded_model_name}-missing-parts.xml"
+                ),
+                "X-Missing-Parts-Skipped": str(result.skipped_count),
+                "X-Missing-Parts-Total": str(result.total_count),
+            },
         )
 
     @router.get("/{model_id}", response_model=ModelDetailResponse)
