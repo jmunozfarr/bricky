@@ -82,19 +82,21 @@ feed the same plan/apply core; the new ingredient is a rebuildable ID-mapping
 table, populated once by an operator CLI (classified like the catalog:
 droppable and rebuildable, never referenced by personal rows).
 
-**Verified sample files**, committed under `docs/` (same 249-row MOC in both
-formats — use them as cross-validating fixtures; a correct importer converges
-both to nearly identical LDraw rows):
+**Verified sample files**, committed under `apps/api/tests/fixtures/` (same
+249-row MOC in both formats — used as cross-validating test fixtures; a
+correct importer converges both to nearly identical LDraw rows):
 
-- `rebrickable_parts_moc-76717-…csv` — Rebrickable MOC parts export. Header
+- `rebrickable_parts_moc.csv` — Rebrickable MOC parts export. Header
   `Part,Color,Quantity,Is Spare`; Rebrickable colour IDs (Black = 0); print
   suffixes like `32296pr0001`; assembly IDs like `78c07`. The sample has only
-  `Is Spare=False` rows — the spare-row policy is an open decision.
-- `rb16b-bricklink.xml` — BrickLink wanted list. Single-line `<INVENTORY>` of
-  `<ITEM>` elements with `ITEMTYPE` (`P` throughout the sample), `ITEMID`,
-  `COLOR`, `MINQTY`; BrickLink colour IDs (Black = 11); print suffixes like
-  `32296pb01`; legacy IDs `x136`/`x346`. Parsers must tolerate the optional
-  wanted-list fields absent here (`CONDITION`, `NOTIFY`, `REMARKS`, …).
+  `Is Spare=False` rows — Phase B always imports spares (they are parts the
+  user physically owns), reported via a `spareRowCount` in the preview.
+- `bricklink_wanted_list.xml` — BrickLink wanted list. Single-line
+  `<INVENTORY>` of `<ITEM>` elements with `ITEMTYPE` (`P` throughout the
+  sample), `ITEMID`, `COLOR`, `MINQTY`; BrickLink colour IDs (Black = 11);
+  print suffixes like `32296pb01`; legacy IDs `x136`/`x346`. Parsers must
+  tolerate the optional wanted-list fields absent here (`CONDITION`,
+  `NOTIFY`, `REMARKS`, …).
 
 The colour namespaces provably differ (part 32200 is colour `0` in the CSV
 and colour `11` in the XML for the same black piece), as do printed-part
