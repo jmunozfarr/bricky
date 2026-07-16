@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { SubmitEvent } from "react";
 
 import { InventoryImportPreviewRow, InventoryImportStrategy } from "../../api/inventory";
 import {
@@ -7,9 +8,15 @@ import {
   importFormatLabel,
   importToastMessage,
   validateInventoryImportFile,
+  validateSetNumber,
 } from "../../inventory/helpers";
 import { formatFileSize } from "../../models/helpers";
-import { useApplyInventoryImport, usePreviewInventoryImport } from "../../queries/hooks";
+import {
+  useApplyInventoryImport,
+  useApplySetImport,
+  usePreviewInventoryImport,
+  usePreviewSetImport,
+} from "../../queries/hooks";
 import { PartThumbnail } from "../parts/PartThumbnail";
 import { SegmentedControl } from "../ui/primitives";
 import { useToast } from "../ui/ToastProvider";
@@ -19,22 +26,39 @@ const STRATEGY_OPTIONS = [
   { value: "replace", label: "Replace quantities" },
 ] as const;
 
+const SOURCE_OPTIONS = [
+  { value: "file", label: "Upload file" },
+  { value: "set", label: "LEGO set number" },
+] as const;
+
+type ImportSource = "file" | "set";
+
 /**
- * CSV bulk-import flow: pick a file, review the server-computed dry run
- * (nothing is written), then apply with an explicit merge strategy. Built on
- * the native <dialog>; rendered only while open, so the modal is shown on
- * mount and jsdom falls back to the non-modal `open` attribute.
+ * Bulk-import flow: pick a source (an uploaded file, or an official LEGO
+ * set number expanded via the local Rebrickable set data), review the
+ * server-computed dry run (nothing is written), then apply with an
+ * explicit merge strategy. Built on the native <dialog>; rendered only
+ * while open, so the modal is shown on mount and jsdom falls back to the
+ * non-modal `open` attribute.
  */
 export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [source, setSource] = useState<ImportSource>("file");
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [setNum, setSetNum] = useState("");
+  const [setNumError, setSetNumError] = useState<string | null>(null);
   const [strategy, setStrategy] = useState<InventoryImportStrategy>("add");
   const [includeUnknown, setIncludeUnknown] = useState(true);
   const [dragActive, setDragActive] = useState(false);
-  const preview = usePreviewInventoryImport();
-  const apply = useApplyInventoryImport();
+  const filePreview = usePreviewInventoryImport();
+  const fileApply = useApplyInventoryImport();
+  const setPreview = usePreviewSetImport();
+  const setApply = useApplySetImport();
   const showToast = useToast();
+
+  const preview = source === "file" ? filePreview : setPreview;
+  const apply = source === "file" ? fileApply : setApply;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -45,47 +69,90 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
 
   const busy = apply.isPending;
 
+  function switchSource(next: ImportSource) {
+    setSource(next);
+    filePreview.reset();
+    fileApply.reset();
+    setPreview.reset();
+    setApply.reset();
+    setFile(null);
+    setFileError(null);
+    setSetNum("");
+    setSetNumError(null);
+  }
+
   function choose(candidate: File | null) {
-    apply.reset();
+    fileApply.reset();
     if (candidate === null) {
       setFile(null);
       setFileError(null);
-      preview.reset();
+      filePreview.reset();
       return;
     }
     const problem = validateInventoryImportFile(candidate);
     if (problem !== null) {
       setFile(null);
       setFileError(problem);
-      preview.reset();
+      filePreview.reset();
       return;
     }
     setFile(candidate);
     setFileError(null);
-    preview.mutate({ file: candidate, strategy });
+    filePreview.mutate({ file: candidate, strategy });
+  }
+
+  function lookupSet(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setApply.reset();
+    const trimmed = setNum.trim();
+    const problem = validateSetNumber(trimmed);
+    if (problem !== null) {
+      setSetNumError(problem);
+      setPreview.reset();
+      return;
+    }
+    setSetNumError(null);
+    setPreview.mutate({ setNum: trimmed, strategy });
   }
 
   function switchStrategy(next: InventoryImportStrategy) {
     setStrategy(next);
     apply.reset();
-    if (file !== null) preview.mutate({ file, strategy: next });
+    if (source === "file" && file !== null) {
+      filePreview.mutate({ file, strategy: next });
+    } else if (source === "set" && setPreview.isSuccess) {
+      setPreview.mutate({ setNum: setNum.trim(), strategy: next });
+    }
   }
 
   function runApply() {
-    if (file === null) return;
-    apply.mutate(
-      { file, strategy, includeUnknown, format: preview.data?.format },
-      {
-        onSuccess: (result) => {
-          showToast(importToastMessage(result));
-          onClose();
+    if (source === "file") {
+      if (file === null) return;
+      fileApply.mutate(
+        { file, strategy, includeUnknown, format: filePreview.data?.format },
+        {
+          onSuccess: (result) => {
+            showToast(importToastMessage(result));
+            onClose();
+          },
         },
-      },
-    );
+      );
+    } else {
+      if (!setPreview.isSuccess) return;
+      setApply.mutate(
+        { setNum: setNum.trim(), strategy, includeUnknown },
+        {
+          onSuccess: (result) => {
+            showToast(importToastMessage(result));
+            onClose();
+          },
+        },
+      );
+    }
   }
 
   const error =
-    fileError ??
+    (source === "file" ? fileError : setNumError) ??
     (preview.isError ? importErrorMessage(preview.error) : null) ??
     (apply.isError ? importErrorMessage(apply.error) : null);
   const data = preview.data;
@@ -105,40 +172,67 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
     >
       <h2 id="inventory-import-title">Import inventory</h2>
       <p>
-        Native CSV (<code>part_id,color_code,quantity</code>), a Rebrickable MOC parts export, or a
-        BrickLink wanted-list XML. Nothing changes until you import.
+        Native CSV (<code>part_id,color_code,quantity</code>), a Rebrickable MOC parts export, a
+        BrickLink wanted-list XML, or an official LEGO set number. Nothing changes until you import.
       </p>
-      <div
-        className={`inventory-import-dropzone${dragActive ? " inventory-import-dropzone--drag" : ""}`}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={() => setDragActive(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragActive(false);
-          if (busy) return;
-          const dropped = event.dataTransfer.files[0] ?? null;
-          if (dropped !== null) choose(dropped);
-        }}
-      >
-        <label>
-          <span>Import file</span>
-          <input
-            type="file"
-            accept=".csv,.xml"
-            disabled={busy}
-            onChange={(event) => choose(event.currentTarget.files?.[0] ?? null)}
-          />
-        </label>
-        <p className="inventory-import-hint">Drop a .csv or .xml file anywhere in this box</p>
-        {file !== null && (
-          <p className="file-preview">
-            {file.name} · {formatFileSize(file.size)}
-          </p>
-        )}
-      </div>
+
+      <SegmentedControl
+        className="segmented-control"
+        label="Import source"
+        value={source}
+        options={SOURCE_OPTIONS}
+        onChange={switchSource}
+      />
+
+      {source === "file" ? (
+        <div
+          className={`inventory-import-dropzone${dragActive ? " inventory-import-dropzone--drag" : ""}`}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragActive(true);
+          }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragActive(false);
+            if (busy) return;
+            const dropped = event.dataTransfer.files[0] ?? null;
+            if (dropped !== null) choose(dropped);
+          }}
+        >
+          <label>
+            <span>Import file</span>
+            <input
+              type="file"
+              accept=".csv,.xml"
+              disabled={busy}
+              onChange={(event) => choose(event.currentTarget.files?.[0] ?? null)}
+            />
+          </label>
+          <p className="inventory-import-hint">Drop a .csv or .xml file anywhere in this box</p>
+          {file !== null && (
+            <p className="file-preview">
+              {file.name} · {formatFileSize(file.size)}
+            </p>
+          )}
+        </div>
+      ) : (
+        <form className="inventory-import-set-lookup" onSubmit={lookupSet}>
+          <label>
+            <span>LEGO set number</span>
+            <input
+              type="text"
+              placeholder="e.g. 7922 or 7922-1"
+              value={setNum}
+              disabled={busy}
+              onChange={(event) => setSetNum(event.currentTarget.value)}
+            />
+          </label>
+          <button type="submit" disabled={busy || setPreview.isPending}>
+            {setPreview.isPending ? "Looking up…" : "Look up"}
+          </button>
+        </form>
+      )}
 
       {error !== null && (
         <p className="inline-error" role="alert">
@@ -154,6 +248,14 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
       {data !== undefined && (
         <div className="inventory-import-preview">
           <p className="inventory-import-hint">Detected format: {importFormatLabel(data.format)}</p>
+          {data.format === "set" && data.setName !== null && (
+            <p className="inventory-import-hint">
+              {data.officialPartCount !== null && data.expandedQuantity !== null
+                ? `${data.setName} · Official count: ${data.officialPartCount.toLocaleString()} ` +
+                  `· Expanded: ${data.expandedQuantity.toLocaleString()}`
+                : data.setName}
+            </p>
+          )}
           {!data.mappingAvailable && (
             <p className="inline-error" role="alert">
               The Rebrickable/BrickLink ID mapping table isn&apos;t populated yet — run{" "}

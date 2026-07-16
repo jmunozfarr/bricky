@@ -23,6 +23,7 @@ import {
 import { fetchJson } from "../api/client";
 import {
   applyInventoryImport,
+  applySetImport,
   deleteInventoryItem,
   getInventorySummary,
   getInventoryVariants,
@@ -33,6 +34,7 @@ import {
   InventoryQuery,
   InventorySummary,
   previewInventoryImport,
+  previewSetImport,
   searchInventory,
   serializeInventoryQuery,
   setInventoryQuantity,
@@ -189,6 +191,29 @@ export function useApplyInventoryImport() {
       includeUnknown: boolean;
       format?: InventoryImportFormat;
     }) => applyInventoryImport(file, strategy, includeUnknown, format),
+    onSuccess: invalidate,
+  });
+}
+
+export function usePreviewSetImport() {
+  return useMutation({
+    mutationFn: ({ setNum, strategy }: { setNum: string; strategy: InventoryImportStrategy }) =>
+      previewSetImport(setNum, strategy),
+  });
+}
+
+export function useApplySetImport() {
+  const invalidate = useInvalidateInventoryDependents();
+  return useMutation({
+    mutationFn: ({
+      setNum,
+      strategy,
+      includeUnknown,
+    }: {
+      setNum: string;
+      strategy: InventoryImportStrategy;
+      includeUnknown: boolean;
+    }) => applySetImport(setNum, strategy, includeUnknown),
     onSuccess: invalidate,
   });
 }

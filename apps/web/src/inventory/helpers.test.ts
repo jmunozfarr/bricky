@@ -12,6 +12,7 @@ import {
   inventoryEmptyMessage,
   parseQuantityInput,
   validateInventoryImportFile,
+  validateSetNumber,
 } from "./helpers";
 
 describe("inventory quantity helpers", () => {
@@ -54,6 +55,8 @@ describe("inventory import helpers", () => {
     skippedUnknownRowCount: 0,
     invalidRowCount: 0,
     quantityDelta: 0,
+    setNum: null,
+    setName: null,
     ...overrides,
   });
 
@@ -72,6 +75,14 @@ describe("inventory import helpers", () => {
     expect(importFormatLabel("native")).toBe("Native CSV");
     expect(importFormatLabel("rebrickable")).toBe("Rebrickable CSV");
     expect(importFormatLabel("bricklink")).toBe("BrickLink XML");
+    expect(importFormatLabel("set")).toBe("LEGO set");
+  });
+
+  it("validates the set number input before any request", () => {
+    expect(validateSetNumber("")).toContain("Enter a set number");
+    expect(validateSetNumber("   ")).toContain("Enter a set number");
+    expect(validateSetNumber("7922")).toBeNull();
+    expect(validateSetNumber("7922-1")).toBeNull();
   });
 
   it("maps import errors to actionable messages", () => {
