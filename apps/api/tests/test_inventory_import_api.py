@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi.testclient import TestClient
@@ -9,7 +11,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.main import create_app
-from app.models import InventoryItem, LDrawColor, Part
+from app.models import (
+    ExternalColorMap,
+    ExternalIdMapState,
+    ExternalPartIdMap,
+    InventoryItem,
+    LDrawColor,
+    Part,
+)
 from app.services.ldraw_catalog import rebuild_catalog
 from app.services.ldraw_library import manifest_path_for
 
@@ -66,6 +75,70 @@ def seed_catalog(factory: sessionmaker[Session]) -> None:
         )
 
 
+def seed_mapping(factory: sessionmaker[Session]) -> None:
+    """Synthetic external-ID mappings mirroring the seeded catalog (3001 red,
+    3070b blue): distinct BrickLink source IDs/colors from the Rebrickable
+    ones, exercising the same translation path the real fixtures exercise."""
+    with factory.begin() as session:
+        session.add_all(
+            [
+                ExternalPartIdMap(
+                    source_system="rebrickable",
+                    source_part_id="3001",
+                    ldraw_part_id="3001",
+                    is_preferred=True,
+                ),
+                ExternalPartIdMap(
+                    source_system="rebrickable",
+                    source_part_id="3070b",
+                    ldraw_part_id="3070b",
+                    is_preferred=True,
+                ),
+                ExternalPartIdMap(
+                    source_system="bricklink",
+                    source_part_id="bl3001",
+                    ldraw_part_id="3001",
+                    is_preferred=True,
+                ),
+                ExternalPartIdMap(
+                    source_system="bricklink",
+                    source_part_id="bl3070b",
+                    ldraw_part_id="3070b",
+                    is_preferred=True,
+                ),
+                ExternalColorMap(
+                    source_system="rebrickable", source_color_id=0, ldraw_color_code=4
+                ),
+                ExternalColorMap(
+                    source_system="rebrickable", source_color_id=7, ldraw_color_code=1
+                ),
+                ExternalColorMap(source_system="bricklink", source_color_id=11, ldraw_color_code=4),
+                ExternalColorMap(source_system="bricklink", source_color_id=5, ldraw_color_code=1),
+                ExternalIdMapState(
+                    id=1,
+                    populated_at=datetime.now(UTC),
+                    part_mapping_count=4,
+                    color_mapping_count=4,
+                    ambiguous_part_count=0,
+                    fetcher_version="test",
+                ),
+            ]
+        )
+
+
+def rebrickable_csv_bytes(*rows: str) -> bytes:
+    return "\n".join(("Part,Color,Quantity,Is Spare", *rows, "")).encode()
+
+
+def bricklink_xml_bytes(*items: tuple[str, int, int]) -> bytes:
+    body = "".join(
+        f"<ITEM><ITEMTYPE>P</ITEMTYPE><ITEMID>{part_id}</ITEMID>"
+        f"<COLOR>{color}</COLOR><MINQTY>{quantity}</MINQTY></ITEM>"
+        for part_id, color, quantity in items
+    )
+    return f"<INVENTORY>{body}</INVENTORY>".encode()
+
+
 def client_for(
     factory: sessionmaker[Session],
     tmp_path: Path,
@@ -91,11 +164,16 @@ def post_preview(
     content: bytes,
     strategy: str = "add",
     filename: str = "inventory.csv",
+    format: str | None = None,
 ) -> httpx.Response:
+    data = {"strategy": strategy}
+    if format is not None:
+        data["format"] = format
+    content_type = "application/xml" if filename.endswith(".xml") else "text/csv"
     return client.post(
         "/api/inventory/import/preview",
-        files={"file": (filename, content, "text/csv")},
-        data={"strategy": strategy},
+        files={"file": (filename, content, content_type)},
+        data=data,
     )
 
 
@@ -105,14 +183,19 @@ def post_apply(
     strategy: str = "add",
     include_unknown: bool = True,
     filename: str = "inventory.csv",
+    format: str | None = None,
 ) -> httpx.Response:
+    data = {
+        "strategy": strategy,
+        "includeUnknown": "true" if include_unknown else "false",
+    }
+    if format is not None:
+        data["format"] = format
+    content_type = "application/xml" if filename.endswith(".xml") else "text/csv"
     return client.post(
         "/api/inventory/import/apply",
-        files={"file": (filename, content, "text/csv")},
-        data={
-            "strategy": strategy,
-            "includeUnknown": "true" if include_unknown else "false",
-        },
+        files={"file": (filename, content, content_type)},
+        data=data,
     )
 
 
@@ -196,6 +279,7 @@ def test_preview_reports_buckets_issues_and_row_details(
     assert response.status_code == 200
     payload = response.json()
     assert payload["fileName"] == "inventory.csv"
+    assert payload["format"] == "native"
     assert payload["strategy"] == "add"
     assert payload["totalDataRows"] == 8
     assert payload["plannedRowCount"] == 5
@@ -203,6 +287,8 @@ def test_preview_reports_buckets_issues_and_row_details(
     assert payload["aliasCanonicalizedCount"] == 0
     assert payload["ignoredColumns"] == ["Notes"]
     assert payload["invalidRowCount"] == 2
+    assert payload["spareRowCount"] == 0
+    assert payload["mappingAvailable"] is True
     assert payload["known"] == {
         "rowCount": 3,
         "createCount": 2,
@@ -211,6 +297,7 @@ def test_preview_reports_buckets_issues_and_row_details(
         "quantityDelta": 11,
         "missingPartCount": 0,
         "missingColorCount": 0,
+        "missingMappingCount": 0,
     }
     assert payload["unknown"] == {
         "rowCount": 2,
@@ -220,6 +307,7 @@ def test_preview_reports_buckets_issues_and_row_details(
         "quantityDelta": 3,
         "missingPartCount": 1,
         "missingColorCount": 1,
+        "missingMappingCount": 0,
     }
     assert payload["rowsTruncated"] is False
     assert payload["issuesTruncated"] is False
@@ -281,6 +369,7 @@ def test_apply_add_sums_and_clamps_quantities(
 
     assert response.status_code == 200
     assert response.json() == {
+        "format": "native",
         "strategy": "add",
         "includeUnknown": True,
         "appliedRowCount": 3,
@@ -440,3 +529,195 @@ def test_import_rejects_files_over_the_row_cap(
     assert response.status_code == 422
     assert "20000" in response.json()["detail"]
     assert inventory_rows(catalog_session_factory) == {}
+
+
+def test_preview_detects_rebrickable_csv_by_header(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    seed_catalog(catalog_session_factory)
+    seed_mapping(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    response = post_preview(
+        client,
+        rebrickable_csv_bytes("3001,0,3,False", "3070b,7,2,True"),
+        filename="export.csv",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["format"] == "rebrickable"
+    assert payload["spareRowCount"] == 1
+    assert payload["mappingAvailable"] is True
+    by_key = {(row["partId"], row["colorCode"]): row for row in payload["rows"]}
+    assert by_key[("3001", 4)]["unknownReason"] is None
+    assert by_key[("3070b", 1)]["unknownReason"] is None
+
+
+def test_preview_detects_bricklink_xml_by_extension(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    seed_catalog(catalog_session_factory)
+    seed_mapping(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    response = post_preview(
+        client,
+        bricklink_xml_bytes(("bl3001", 11, 3), ("bl3070b", 5, 2)),
+        filename="wanted.xml",
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["format"] == "bricklink"
+    assert payload["spareRowCount"] == 0
+    by_key = {(row["partId"], row["colorCode"]): row for row in payload["rows"]}
+    assert by_key[("3001", 4)]["quantity"] == 3
+    assert by_key[("3070b", 1)]["quantity"] == 2
+
+
+def test_rebrickable_and_bricklink_previews_converge(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    """Same physical build in both export formats: different source
+    namespaces, same resulting LDraw plan once mapped and translated."""
+    seed_catalog(catalog_session_factory)
+    seed_mapping(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    rebrickable = post_preview(
+        client, rebrickable_csv_bytes("3001,0,3,False", "3070b,7,2,False")
+    ).json()
+    bricklink = post_preview(
+        client, bricklink_xml_bytes(("bl3001", 11, 3), ("bl3070b", 5, 2)), filename="wanted.xml"
+    ).json()
+
+    def known_totals(payload: Any) -> set[tuple[str, int, int]]:
+        return {(row["partId"], row["colorCode"], row["quantity"]) for row in payload["rows"]}
+
+    assert known_totals(rebrickable) == known_totals(bricklink) == {("3001", 4, 3), ("3070b", 1, 2)}
+
+
+def test_preview_reports_unmapped_source_id(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    seed_catalog(catalog_session_factory)
+    seed_mapping(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    response = post_preview(client, rebrickable_csv_bytes("3001,0,1,False", "99999,0,1,False"))
+
+    payload = response.json()
+    by_key = {row["partId"]: row for row in payload["rows"]}
+    assert by_key["99999"]["unknownReason"] == "unmapped"
+    assert payload["unknown"]["missingMappingCount"] == 1
+
+
+def test_preview_reports_mapping_unavailable_when_table_empty(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    seed_catalog(catalog_session_factory)
+    # Color mapping present (so the row reaches the part-mapping stage) but
+    # no ExternalIdMapState row — simulates "populate CLI never run".
+    with catalog_session_factory.begin() as session:
+        session.add(
+            ExternalColorMap(source_system="rebrickable", source_color_id=0, ldraw_color_code=4)
+        )
+    client = client_for(catalog_session_factory, tmp_path)
+
+    response = post_preview(client, rebrickable_csv_bytes("3001,0,1,False"))
+
+    payload = response.json()
+    assert payload["mappingAvailable"] is False
+    assert payload["rows"][0]["unknownReason"] == "unmapped"
+
+
+def test_preview_unmapped_color_is_reported_as_an_issue_not_a_row(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    seed_catalog(catalog_session_factory)
+    seed_mapping(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    response = post_preview(client, rebrickable_csv_bytes("3001,999,1,False"))
+
+    payload = response.json()
+    assert payload["rows"] == []
+    assert payload["issues"][0]["code"] == "unmapped_color"
+
+
+def test_explicit_format_field_overrides_detection(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    seed_catalog(catalog_session_factory)
+    seed_mapping(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    # A .csv file whose header would auto-detect as native, forced to
+    # rebrickable — must fail (part_id/color_code/quantity is not the
+    # Rebrickable header shape) rather than silently succeeding as native.
+    response = post_preview(
+        client, csv_bytes("3001,4,1"), filename="ambiguous.csv", format="rebrickable"
+    )
+    assert response.status_code == 422
+
+
+def test_apply_rebrickable_csv_persists_translated_rows(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    seed_catalog(catalog_session_factory)
+    seed_mapping(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    response = post_apply(client, rebrickable_csv_bytes("3001,0,3,True"))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["format"] == "rebrickable"
+    assert inventory_rows(catalog_session_factory) == {("3001", 4): 3}
+
+
+def test_apply_bricklink_xml_persists_translated_rows(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    seed_catalog(catalog_session_factory)
+    seed_mapping(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    response = post_apply(client, bricklink_xml_bytes(("bl3001", 11, 4)), filename="wanted.xml")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["format"] == "bricklink"
+    assert inventory_rows(catalog_session_factory) == {("3001", 4): 4}
+
+
+def test_real_fixture_files_are_detected_and_parsed(
+    tmp_path: Path, catalog_session_factory: sessionmaker[Session]
+) -> None:
+    """Smoke-test the committed sample files through the real upload path
+    (no mapping table seeded — this only exercises parsing/detection, not
+    translation; full-pipeline convergence against real Rebrickable/BrickLink
+    IDs is verified manually against the live-populated mapping table, see
+    docs/BULK_INVENTORY.md)."""
+    fixtures = Path(__file__).parent / "fixtures"
+    seed_catalog(catalog_session_factory)
+    client = client_for(catalog_session_factory, tmp_path)
+
+    rebrickable_response = post_preview(
+        client,
+        (fixtures / "rebrickable_parts_moc.csv").read_bytes(),
+        filename="rebrickable_parts_moc.csv",
+    )
+    bricklink_response = post_preview(
+        client,
+        (fixtures / "bricklink_wanted_list.xml").read_bytes(),
+        filename="bricklink_wanted_list.xml",
+    )
+
+    assert rebrickable_response.status_code == 200
+    assert bricklink_response.status_code == 200
+    assert rebrickable_response.json()["format"] == "rebrickable"
+    assert bricklink_response.json()["format"] == "bricklink"
+    assert rebrickable_response.json()["totalDataRows"] == 249
+    assert bricklink_response.json()["totalDataRows"] == 249

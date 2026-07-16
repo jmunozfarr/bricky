@@ -448,6 +448,8 @@ export interface components {
             strategy: "add" | "replace";
             /** Includeunknown */
             includeUnknown: boolean;
+            /** Format */
+            format?: ("native" | "rebrickable" | "bricklink") | null;
         };
         /** Body_preview_import_api_inventory_import_preview_post */
         Body_preview_import_api_inventory_import_preview_post: {
@@ -458,6 +460,8 @@ export interface components {
              * @enum {string}
              */
             strategy: "add" | "replace";
+            /** Format */
+            format?: ("native" | "rebrickable" | "bricklink") | null;
         };
         /** Body_upload_model_api_models_post */
         Body_upload_model_api_models_post: {
@@ -664,6 +668,8 @@ export interface components {
             missingPartCount: number;
             /** Missingcolorcount */
             missingColorCount: number;
+            /** Missingmappingcount */
+            missingMappingCount: number;
         };
         /** ImportPreviewRowResponse */
         ImportPreviewRowResponse: {
@@ -687,7 +693,7 @@ export interface components {
              */
             change: "create" | "update" | "unchanged";
             /** Unknownreason */
-            unknownReason: ("part" | "color") | null;
+            unknownReason: ("part" | "color" | "unmapped") | null;
             /** Partname */
             partName: string | null;
             /** Colorname */
@@ -881,6 +887,11 @@ export interface components {
         /** InventoryImportApplyResponse */
         InventoryImportApplyResponse: {
             /**
+             * Format
+             * @enum {string}
+             */
+            format: "native" | "rebrickable" | "bricklink";
+            /**
              * Strategy
              * @enum {string}
              */
@@ -907,6 +918,11 @@ export interface components {
             /** Filename */
             fileName: string;
             /**
+             * Format
+             * @enum {string}
+             */
+            format: "native" | "rebrickable" | "bricklink";
+            /**
              * Strategy
              * @enum {string}
              */
@@ -923,6 +939,10 @@ export interface components {
             ignoredColumns: string[];
             /** Invalidrowcount */
             invalidRowCount: number;
+            /** Sparerowcount */
+            spareRowCount: number;
+            /** Mappingavailable */
+            mappingAvailable: boolean;
             known: components["schemas"]["ImportBucketSummaryResponse"];
             unknown: components["schemas"]["ImportBucketSummaryResponse"];
             /** Rows */
