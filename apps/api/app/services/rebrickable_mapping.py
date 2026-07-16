@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, insert
+from sqlalchemy import delete, insert, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import ExternalColorMap, ExternalIdMapState, ExternalPartIdMap
@@ -347,3 +347,39 @@ def get_mapping_status(session: Session) -> MappingStatus:
         ambiguous_part_count=state.ambiguous_part_count,
         fetcher_version=state.fetcher_version,
     )
+
+
+def load_preferred_part_mapping(
+    session: Session, source_system: str, source_part_ids: Iterable[str]
+) -> dict[str, str]:
+    """Bounded lookup of the preferred LDraw part ID for each given source
+    ID. Always includes an entry for every ID it finds (no identity
+    omission), matching `build_import_plan(require_explicit_mapping=True)`'s
+    contract that `canonical_by_source.keys()` doubles as the mapped-ID set."""
+    ids = sorted(set(source_part_ids))
+    if not ids:
+        return {}
+    rows = session.execute(
+        select(ExternalPartIdMap.source_part_id, ExternalPartIdMap.ldraw_part_id).where(
+            ExternalPartIdMap.source_system == source_system,
+            ExternalPartIdMap.source_part_id.in_(ids),
+            ExternalPartIdMap.is_preferred.is_(True),
+        )
+    ).tuples()
+    return dict(iter(rows))
+
+
+def load_color_mapping(
+    session: Session, source_system: str, source_color_ids: Iterable[int]
+) -> dict[int, int]:
+    """Bounded lookup of the LDraw color code for each given source color ID."""
+    ids = sorted(set(source_color_ids))
+    if not ids:
+        return {}
+    rows = session.execute(
+        select(ExternalColorMap.source_color_id, ExternalColorMap.ldraw_color_code).where(
+            ExternalColorMap.source_system == source_system,
+            ExternalColorMap.source_color_id.in_(ids),
+        )
+    ).tuples()
+    return dict(iter(rows))

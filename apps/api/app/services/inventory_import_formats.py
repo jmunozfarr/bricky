@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Literal
@@ -12,7 +13,10 @@ from app.services.inventory_import import (
     DEFAULT_MAX_CSV_ROWS,
     MAX_PART_ID_LENGTH,
     MAX_ROW_QUANTITY,
+    NON_PHYSICAL_COLOR_CODES,
+    CsvRow,
     InventoryImportError,
+    ParsedCsv,
     RowIssue,
 )
 
@@ -261,3 +265,50 @@ def parse_bricklink_xml(data: bytes, *, max_rows: int = DEFAULT_MAX_CSV_ROWS) ->
             rows.append(result)
 
     return ParsedExternal(tuple(rows), tuple(issues), total_data_rows, 0)
+
+
+def translate_external_rows(parsed: ParsedExternal, *, color_map: Mapping[int, int]) -> ParsedCsv:
+    """Translate source-namespace color IDs into LDraw color codes, producing
+    the same `ParsedCsv`/`CsvRow` shape the native pipeline plans from.
+
+    Part IDs pass through unchanged (still the raw Rebrickable/BrickLink ID)
+    — the part-ID hop happens later via `build_import_plan`'s
+    `resolve_aliases` hook, which composes the external mapping table with
+    the existing `~Moved to` alias resolver and gives dedup/provenance for
+    free through the same machinery Phase A already has.
+
+    An unmapped color is a hard skip, not a lenient "unknown" row: BrickLink
+    color 11 is a *different, valid-looking* LDraw color if passed through
+    untranslated, not merely unrecognized, so silently importing it would be
+    wrong rather than just incomplete.
+    """
+    rows: list[CsvRow] = []
+    issues: list[RowIssue] = list(parsed.issues)
+    for row in parsed.rows:
+        ldraw_color_code = color_map.get(row.source_color_id)
+        if ldraw_color_code is None:
+            issues.append(
+                RowIssue(
+                    row.line_number,
+                    "unmapped_color",
+                    f"Color {row.source_color_id} has no LDraw color mapping",
+                )
+            )
+            continue
+        if ldraw_color_code in NON_PHYSICAL_COLOR_CODES:
+            issues.append(
+                RowIssue(
+                    row.line_number,
+                    "non_physical_color",
+                    f"Color {ldraw_color_code} is an LDraw placeholder, not a physical color",
+                )
+            )
+            continue
+        rows.append(CsvRow(row.line_number, row.source_part_id, ldraw_color_code, row.quantity))
+
+    return ParsedCsv(
+        rows=tuple(rows),
+        issues=tuple(issues),
+        total_data_rows=parsed.total_data_rows,
+        ignored_columns=(),
+    )

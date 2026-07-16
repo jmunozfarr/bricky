@@ -4,11 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from app.services.inventory_import import InventoryImportError
+from app.services.inventory_import import InventoryImportError, RowIssue
 from app.services.inventory_import_formats import (
+    ExternalRow,
+    ParsedExternal,
     detect_import_format,
     parse_bricklink_xml,
     parse_rebrickable_csv,
+    translate_external_rows,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -174,3 +177,59 @@ def test_real_fixtures_converge_on_row_count_and_total_quantity() -> None:
     assert sum(row.quantity for row in rebrickable.rows) == sum(
         row.quantity for row in bricklink.rows
     )
+
+
+def _external(*rows: tuple[str, int, int]) -> ParsedExternal:
+    return ParsedExternal(
+        rows=tuple(
+            ExternalRow(
+                line_number=index + 1,
+                source_part_id=part_id,
+                source_color_id=color,
+                quantity=quantity,
+                is_spare=False,
+            )
+            for index, (part_id, color, quantity) in enumerate(rows)
+        ),
+        issues=(),
+        total_data_rows=len(rows),
+        spare_row_count=0,
+    )
+
+
+class TestTranslateExternalRows:
+    def test_translates_color_and_passes_part_id_through_raw(self) -> None:
+        translated = translate_external_rows(_external(("BL3001", 11, 2)), color_map={11: 4})
+        assert len(translated.rows) == 1
+        row = translated.rows[0]
+        assert row.part_id == "BL3001"
+        assert row.color_code == 4
+        assert row.quantity == 2
+
+    def test_unmapped_color_is_a_hard_skip_not_a_fallback(self) -> None:
+        translated = translate_external_rows(_external(("BL3001", 999, 2)), color_map={})
+        assert translated.rows == ()
+        assert translated.issues[0].code == "unmapped_color"
+
+    def test_non_physical_ldraw_color_after_translation_is_skipped(self) -> None:
+        # A source color that maps to LDraw 16 ("current color" placeholder)
+        # must not pass through even though the mapping itself succeeded.
+        translated = translate_external_rows(_external(("BL3001", 5, 2)), color_map={5: 16})
+        assert translated.rows == ()
+        assert translated.issues[0].code == "non_physical_color"
+
+    def test_preserves_parse_time_issues(self) -> None:
+        parsed = ParsedExternal(
+            rows=(),
+            issues=(RowIssue(1, "bad_quantity", "bad"),),
+            total_data_rows=1,
+            spare_row_count=0,
+        )
+        translated = translate_external_rows(parsed, color_map={})
+        assert len(translated.issues) == 1
+        assert translated.issues[0].code == "bad_quantity"
+
+    def test_total_data_rows_passed_through(self) -> None:
+        translated = translate_external_rows(_external(("3001", 11, 1)), color_map={11: 4})
+        assert translated.total_data_rows == 1
+        assert translated.ignored_columns == ()

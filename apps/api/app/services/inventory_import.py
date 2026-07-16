@@ -17,7 +17,13 @@ from app.services.model_coverage import normalize_part_id
 
 Strategy = Literal["add", "replace"]
 ChangeKind = Literal["create", "update", "unchanged"]
-UnknownReason = Literal["part", "color"]
+# "unmapped" is external-format only: the source ID has no entry in the
+# Rebrickable/BrickLink -> LDraw mapping table, checked strictly (a raw ID
+# that coincidentally matches the installed catalog is still "unmapped" —
+# the mapping table is authoritative once populated). Takes precedence over
+# "part"/"color", which describe an already-LDraw-namespace ID that is
+# merely missing from the (rebuildable) installed catalog.
+UnknownReason = Literal["part", "color", "unmapped"]
 # Maps raw source part IDs to canonical official IDs; entries may be omitted
 # for identities, callers fall back to the raw ID.
 AliasMap = Callable[[set[str]], Mapping[str, str]]
@@ -102,6 +108,7 @@ class BucketSummary:
     quantity_delta: int
     missing_part_count: int
     missing_color_count: int
+    missing_mapping_count: int
 
 
 @dataclass(frozen=True)
@@ -255,13 +262,26 @@ def plan_inventory_import(
     catalog_casing_by_normalized: Mapping[str, str],
     known_color_codes: AbstractSet[int],
     current_rows: Mapping[tuple[str, int], tuple[str, int]],
+    mapped_source_part_ids: AbstractSet[str] | None = None,
 ) -> ImportPlan:
+    """`mapped_source_part_ids` is external-format only (native/Phase A callers
+    leave it `None`): when given, a row whose raw `part_id` is absent is
+    "unmapped" regardless of catalog contents, and is grouped/persisted under
+    its raw source ID rather than falling back through `canonical_by_source`
+    (which would risk a spurious match against a coincidentally-identical
+    LDraw ID)."""
     pending: dict[tuple[str, int], _PendingKey] = {}
     duplicate_row_count = 0
+    unmapped_keys: set[tuple[str, int]] = set()
     for row in parsed.rows:
-        canonical = canonical_by_source.get(row.part_id, row.part_id)
+        if mapped_source_part_ids is not None and row.part_id not in mapped_source_part_ids:
+            canonical = row.part_id
+        else:
+            canonical = canonical_by_source.get(row.part_id, row.part_id)
         normalized = normalize_part_id(canonical)
         key = (normalized, row.color_code)
+        if mapped_source_part_ids is not None and row.part_id not in mapped_source_part_ids:
+            unmapped_keys.add(key)
         entry = pending.get(key)
         if entry is None:
             entry = pending[key] = _PendingKey(0, [], None)
@@ -279,7 +299,9 @@ def plan_inventory_import(
         existing = current_rows.get((normalized, color_code))
         current_quantity = existing[1] if existing is not None else 0
         unknown_reason: UnknownReason | None = None
-        if catalog_casing is None:
+        if (normalized, color_code) in unmapped_keys:
+            unknown_reason = "unmapped"
+        elif catalog_casing is None:
             unknown_reason = "part"
         elif color_code not in known_color_codes:
             unknown_reason = "color"
@@ -331,8 +353,17 @@ def build_import_plan(
     parsed: ParsedCsv,
     strategy: Strategy,
     resolve_aliases: AliasMap,
+    *,
+    require_explicit_mapping: bool = False,
 ) -> ImportPlan:
-    """Shared preview/apply orchestration: bounded lookups feeding the pure planner."""
+    """Shared preview/apply orchestration: bounded lookups feeding the pure planner.
+
+    `require_explicit_mapping=True` is the external-format path: `resolve_aliases`
+    must then return an entry for every raw ID it successfully mapped (no
+    identity omission, unlike the native `~Moved to` resolver's contract),
+    so `canonical_by_source.keys()` doubles as the mapped-ID set passed to
+    the planner.
+    """
     raw_part_ids = {row.part_id for row in parsed.rows}
     canonical_by_source = dict(resolve_aliases(raw_part_ids)) if raw_part_ids else {}
     keys = sorted(
@@ -385,6 +416,7 @@ def build_import_plan(
         catalog_casing_by_normalized=catalog_casing_by_normalized,
         known_color_codes=known_color_codes,
         current_rows=current_rows,
+        mapped_source_part_ids=frozenset(canonical_by_source) if require_explicit_mapping else None,
     )
 
 
@@ -400,6 +432,9 @@ def summarize_changes(changes: Iterable[PlannedChange]) -> BucketSummary:
         ),
         missing_part_count=sum(1 for change in materialized if change.unknown_reason == "part"),
         missing_color_count=sum(1 for change in materialized if change.unknown_reason == "color"),
+        missing_mapping_count=sum(
+            1 for change in materialized if change.unknown_reason == "unmapped"
+        ),
     )
 
 

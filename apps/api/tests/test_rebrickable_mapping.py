@@ -239,3 +239,65 @@ class TestGetMappingStatus:
             status = mapping.get_mapping_status(session)
         assert not status.populated
         assert status.populated_at is None
+
+
+class TestLoadPreferredPartMapping:
+    def test_filters_by_system_and_preferred(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session.begin() as session:
+            session.add_all(
+                [
+                    ExternalPartIdMap(
+                        source_system="bricklink",
+                        source_part_id="3001",
+                        ldraw_part_id="3001a",
+                        is_preferred=False,
+                    ),
+                    ExternalPartIdMap(
+                        source_system="bricklink",
+                        source_part_id="3001",
+                        ldraw_part_id="3001b",
+                        is_preferred=True,
+                    ),
+                    ExternalPartIdMap(
+                        source_system="rebrickable",
+                        source_part_id="3001",
+                        ldraw_part_id="3001c",
+                        is_preferred=True,
+                    ),
+                ]
+            )
+        with synced_mapping_session() as session:
+            result = mapping.load_preferred_part_mapping(session, "bricklink", ["3001", "ghost"])
+        assert result == {"3001": "3001b"}
+
+    def test_empty_input_short_circuits(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session() as session:
+            assert mapping.load_preferred_part_mapping(session, "bricklink", []) == {}
+
+
+class TestLoadColorMapping:
+    def test_filters_by_system(self, synced_mapping_session: sessionmaker[Session]) -> None:
+        with synced_mapping_session.begin() as session:
+            session.add_all(
+                [
+                    ExternalColorMap(
+                        source_system="bricklink", source_color_id=11, ldraw_color_code=0
+                    ),
+                    ExternalColorMap(
+                        source_system="rebrickable", source_color_id=0, ldraw_color_code=0
+                    ),
+                ]
+            )
+        with synced_mapping_session() as session:
+            result = mapping.load_color_mapping(session, "bricklink", [11, 999])
+        assert result == {11: 0}
+
+    def test_empty_input_short_circuits(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session() as session:
+            assert mapping.load_color_mapping(session, "bricklink", []) == {}
