@@ -4,8 +4,9 @@ import { InventoryImportPreviewRow, InventoryImportStrategy } from "../../api/in
 import {
   colorSwatchValue,
   importErrorMessage,
+  importFormatLabel,
   importToastMessage,
-  validateInventoryCsv,
+  validateInventoryImportFile,
 } from "../../inventory/helpers";
 import { formatFileSize } from "../../models/helpers";
 import { useApplyInventoryImport, usePreviewInventoryImport } from "../../queries/hooks";
@@ -52,7 +53,7 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
       preview.reset();
       return;
     }
-    const problem = validateInventoryCsv(candidate);
+    const problem = validateInventoryImportFile(candidate);
     if (problem !== null) {
       setFile(null);
       setFileError(problem);
@@ -73,7 +74,7 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
   function runApply() {
     if (file === null) return;
     apply.mutate(
-      { file, strategy, includeUnknown },
+      { file, strategy, includeUnknown, format: preview.data?.format },
       {
         onSuccess: (result) => {
           showToast(importToastMessage(result));
@@ -102,10 +103,10 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
         if (!busy) onClose();
       }}
     >
-      <h2 id="inventory-import-title">Import inventory from CSV</h2>
+      <h2 id="inventory-import-title">Import inventory</h2>
       <p>
-        Header row with <code>part_id,color_code,quantity</code> columns. Nothing changes until you
-        import.
+        Native CSV (<code>part_id,color_code,quantity</code>), a Rebrickable MOC parts export, or a
+        BrickLink wanted-list XML. Nothing changes until you import.
       </p>
       <div
         className={`inventory-import-dropzone${dragActive ? " inventory-import-dropzone--drag" : ""}`}
@@ -123,15 +124,15 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
         }}
       >
         <label>
-          <span>CSV file</span>
+          <span>Import file</span>
           <input
             type="file"
-            accept=".csv"
+            accept=".csv,.xml"
             disabled={busy}
             onChange={(event) => choose(event.currentTarget.files?.[0] ?? null)}
           />
         </label>
-        <p className="inventory-import-hint">Drop a .csv file anywhere in this box</p>
+        <p className="inventory-import-hint">Drop a .csv or .xml file anywhere in this box</p>
         {file !== null && (
           <p className="file-preview">
             {file.name} · {formatFileSize(file.size)}
@@ -152,6 +153,13 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
 
       {data !== undefined && (
         <div className="inventory-import-preview">
+          <p className="inventory-import-hint">Detected format: {importFormatLabel(data.format)}</p>
+          {!data.mappingAvailable && (
+            <p className="inline-error" role="alert">
+              The Rebrickable/BrickLink ID mapping table isn&apos;t populated yet — run{" "}
+              <code>python -m app.cli.rebrickable_mapping populate</code>, then retry.
+            </p>
+          )}
           <SegmentedControl
             className="segmented-control"
             label="Merge strategy"
@@ -178,6 +186,9 @@ export function InventoryImportDialog({ onClose }: { onClose: () => void }) {
             )}
             {data.aliasCanonicalizedCount > 0 && (
               <li>{data.aliasCanonicalizedCount.toLocaleString()} moved part IDs renamed</li>
+            )}
+            {data.spareRowCount > 0 && (
+              <li>{data.spareRowCount.toLocaleString()} spare rows included</li>
             )}
             {data.ignoredColumns.length > 0 && (
               <li>Ignored columns: {data.ignoredColumns.join(", ")}</li>
@@ -269,6 +280,9 @@ function ImportRow({ row }: { row: InventoryImportPreviewRow }) {
           )}
           {row.unknownReason === "color" && (
             <span className="inventory-import-badge">Unknown colour</span>
+          )}
+          {row.unknownReason === "unmapped" && (
+            <span className="inventory-import-badge">No LDraw mapping</span>
           )}
           {row.canonicalizedFrom !== null && (
             <span className="inventory-import-badge">Renamed from {row.canonicalizedFrom}</span>

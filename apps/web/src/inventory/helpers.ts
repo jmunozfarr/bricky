@@ -1,8 +1,9 @@
 import { ApiError } from "../api/client";
-import type { InventoryImportResult } from "../api/inventory";
+import type { InventoryImportFormat, InventoryImportResult } from "../api/inventory";
 
 export const MAX_INVENTORY_QUANTITY = 999_999;
 export const INVENTORY_CSV_LIMIT_BYTES = 1024 * 1024;
+const IMPORT_FILE_EXTENSIONS = new Set(["csv", "xml"]);
 
 export function parseQuantityInput(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
@@ -26,13 +27,28 @@ export function inventoryEmptyMessage(hasFilters: boolean): string {
     : "Your personal inventory is empty.";
 }
 
-export function validateInventoryCsv(file: Pick<File, "name" | "size"> | null): string | null {
-  if (file === null) return "Choose a CSV file.";
+export function validateInventoryImportFile(
+  file: Pick<File, "name" | "size"> | null,
+): string | null {
+  if (file === null) return "Choose a CSV or XML file.";
   const extension = file.name.split(".").pop()?.toLowerCase();
-  if (extension !== "csv") return "Only .csv files are supported.";
+  if (extension === undefined || !IMPORT_FILE_EXTENSIONS.has(extension)) {
+    return "Only .csv or .xml files are supported.";
+  }
   if (file.size === 0) return "The selected file is empty.";
   if (file.size > INVENTORY_CSV_LIMIT_BYTES) return "The selected file exceeds 1 MiB.";
   return null;
+}
+
+export function importFormatLabel(format: InventoryImportFormat): string {
+  switch (format) {
+    case "native":
+      return "Native CSV";
+    case "rebrickable":
+      return "Rebrickable CSV";
+    case "bricklink":
+      return "BrickLink XML";
+  }
 }
 
 export function importErrorMessage(error: unknown): string {

@@ -88,7 +88,8 @@ export function deleteInventoryItem(partId: string, colorCode: number): Promise<
 
 export type InventoryImportStrategy = "add" | "replace";
 export type InventoryImportChange = "create" | "update" | "unchanged";
-export type InventoryImportUnknownReason = "part" | "color";
+export type InventoryImportUnknownReason = "part" | "color" | "unmapped";
+export type InventoryImportFormat = "native" | "rebrickable" | "bricklink";
 
 export interface InventoryImportBucketSummary {
   rowCount: number;
@@ -98,6 +99,7 @@ export interface InventoryImportBucketSummary {
   quantityDelta: number;
   missingPartCount: number;
   missingColorCount: number;
+  missingMappingCount: number;
 }
 
 export interface InventoryImportPreviewRow {
@@ -125,6 +127,7 @@ export interface InventoryImportRowIssue {
 
 export interface InventoryImportPreview {
   fileName: string;
+  format: InventoryImportFormat;
   strategy: InventoryImportStrategy;
   totalDataRows: number;
   plannedRowCount: number;
@@ -132,6 +135,8 @@ export interface InventoryImportPreview {
   aliasCanonicalizedCount: number;
   ignoredColumns: string[];
   invalidRowCount: number;
+  spareRowCount: number;
+  mappingAvailable: boolean;
   known: InventoryImportBucketSummary;
   unknown: InventoryImportBucketSummary;
   rows: InventoryImportPreviewRow[];
@@ -141,6 +146,7 @@ export interface InventoryImportPreview {
 }
 
 export interface InventoryImportResult {
+  format: InventoryImportFormat;
   strategy: InventoryImportStrategy;
   includeUnknown: boolean;
   appliedRowCount: number;
@@ -170,11 +176,13 @@ export function applyInventoryImport(
   file: File,
   strategy: InventoryImportStrategy,
   includeUnknown: boolean,
+  format?: InventoryImportFormat,
 ): Promise<InventoryImportResult> {
   const body = new FormData();
   body.set("file", file);
   body.set("strategy", strategy);
   body.set("includeUnknown", includeUnknown ? "true" : "false");
+  if (format !== undefined) body.set("format", format);
   return fetchJson<InventoryImportResult>("/api/inventory/import/apply", undefined, {
     method: "POST",
     body,

@@ -26,6 +26,7 @@ import {
   deleteInventoryItem,
   getInventorySummary,
   getInventoryVariants,
+  InventoryImportFormat,
   InventoryImportStrategy,
   InventoryItem,
   InventoryPage,
@@ -181,11 +182,13 @@ export function useApplyInventoryImport() {
       file,
       strategy,
       includeUnknown,
+      format,
     }: {
       file: File;
       strategy: InventoryImportStrategy;
       includeUnknown: boolean;
-    }) => applyInventoryImport(file, strategy, includeUnknown),
+      format?: InventoryImportFormat;
+    }) => applyInventoryImport(file, strategy, includeUnknown, format),
     onSuccess: invalidate,
   });
 }
