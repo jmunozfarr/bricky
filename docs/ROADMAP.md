@@ -37,16 +37,18 @@ Constraints that bear on every item below (details in `CLAUDE.md`):
 
 ---
 
-## 1. Bulk inventory input (highest leverage)
+## 1. Bulk inventory input (highest leverage) — done
 
-> **Status (2026-07-16).** Phases A and B shipped: native CSV import with
+> **Status (2026-07-16).** All three phases shipped: native CSV import with
 > dry-run preview, add/replace strategy, alias canonicalization, and
 > unknown-row handling; Rebrickable CSV and BrickLink wanted-list XML import
 > via a locally populated Rebrickable-API-backed ID mapping table
-> (`python -m app.cli.rebrickable_mapping populate`), cross-validated against
-> real sample files — see `docs/BULK_INVENTORY.md`. Phase C ("I own set
-> NNNN") is not started; the same mapping table and CLI are its prerequisite
-> and are already in place.
+> (`python -m app.cli.rebrickable_mapping populate`); and "I own set NNNN"
+> via locally populated set data from the public Rebrickable dumps
+> (`... populate-sets`) expanding a set number through the same mapping
+> table into the same preview/apply flow. All three cross-validated against
+> real data (sample files for A/B; the live dumps and the 7,541-piece UCS
+> Millennium Falcon for C) — see `docs/BULK_INVENTORY.md`.
 
 **Why.** Coverage/readiness is the app's core promise, but it is only as good
 as the inventory behind it, and per-row manual entry does not scale past a
@@ -60,15 +62,16 @@ handful of parts. Every other roadmap item compounds on real inventory data.
   strategy choice (add vs replace per part+colour).
 - Phase B — Rebrickable CSV exports and BrickLink wanted-list XML.
 - Phase C — "I own set NNNN" → add that set's full inventory, sourced from
-  the Rebrickable data dumps as user-downloaded files.
+  the public Rebrickable data dumps via an operator CLI (no user-provided
+  files needed; the CLI downloads them directly).
 
 **The crux: identifier mapping.** BrickLink part/colour IDs and Rebrickable
 part/colour IDs are different namespaces from LDraw's. Phase A avoids the
 problem entirely (native format speaks LDraw). Phases B/C need a local
-mapping table populated from user-provided dump files — treat schema
-verification of those files as the first design task (do not trust column
-layouts from memory; get sample files from the user). Store mappings in a
-rebuildable table, classified like the catalog.
+mapping table — treat schema verification of any dump/export files as the
+first design task (do not trust column layouts from memory; verify against
+real files). Store mappings in a rebuildable table, classified like the
+catalog.
 
 **Where.** `apps/api/app/inventory_api.py` (router factory pattern),
 `apps/api/app/services/` for the parser (framework-independent, like

@@ -6,9 +6,9 @@ the user applies; preview and apply share one parse→classify→plan code path
 (`apps/api/app/services/inventory_import.py`), so what the preview shows is
 exactly what apply does.
 
-Phase A (native CSV) and Phase B (Rebrickable CSV / BrickLink XML, via a
-locally populated ID-mapping table) are both shipped. Phase C ("I own set
-NNNN") is not; see the bottom of this document.
+All three phases are shipped: A (native CSV), B (Rebrickable CSV / BrickLink
+XML, via a locally populated ID-mapping table), and C ("I own set NNNN", via
+locally populated set data) — see the bottom of this document for C.
 
 ## Phase A: native CSV
 
@@ -136,11 +136,52 @@ catalogs occasionally diverge on which variant they associate with a given
 physical part — genuine upstream data variance, not a mapping defect, and
 exactly the ambiguity `ambiguous_part_count` exists to surface.
 
-### Phase C — "I own set NNNN"
+### Phase C — "I own set NNNN" (shipped 2026-07-16)
 
-Set data IS in the public dumps (no API key needed): `sets.csv.gz`,
-`inventories.csv.gz`, and `inventory_parts.csv.gz` (rows are
-`part_num,color_id,quantity,is_spare` per set inventory, in the Rebrickable
-namespace). The same operator CLI ingests them into rebuildable tables and a
-set number expands—through the Phase B mapping table—into rows feeding the
-same preview/apply flow.
+Set data comes from three public Rebrickable dumps (no API key —
+`sets.csv.gz`, `inventories.csv.gz`, `inventory_parts.csv.gz`), ingested by
+`python -m app.cli.rebrickable_mapping populate-sets` into rebuildable
+`rebrickable_sets`/`rebrickable_set_parts` tables. `inventory_parts.csv.gz`
+is streamed directly into a chunked bulk insert (never materialized in full)
+since it carries the per-part BOM for every set and minifig Rebrickable has
+ever catalogued — over 1.5M rows. A set number then expands, through Phase
+B's forward mapping (`load_preferred_part_mapping`/`load_color_mapping`),
+into rows feeding the exact same translate/plan/apply pipeline the
+Rebrickable CSV format already uses:
+`POST /api/inventory/import/set/preview` / `.../apply` (JSON body, no file,
+since there's nothing to upload), reusing
+`InventoryImportPreviewResponse`/`InventoryImportApplyResponse` with a
+`"set"` format value and optional set metadata.
+
+**Verified against the live dumps (2026-07-16):** `populate-sets` ingested
+27,347 sets and 1,322,937 part rows in 35 seconds. `inventories.csv`
+contains 44,411 distinct `set_num` values, of which exactly 17,064 are
+`fig-NNNNNN` minifig inventories with no row in `sets.csv` — confirmed by
+diffing the files directly, not assumed; these are excluded automatically
+since the ingest only keeps rows whose `set_num` exists in `sets.csv`.
+Previewing the 7,541-piece UCS Millennium Falcon (`75192-1`) resolved 720 of
+726 unique part/color rows cleanly (1 not in the installed catalog, 5 with
+no Rebrickable→LDraw mapping) — strong real-world confirmation of the whole
+pipeline, not just the small synthetic fixtures the test suite uses.
+
+**One winning inventory per set number: highest `version` wins.** ~4.6% of
+sets (1,270 of 27,348) have multiple inventory versions (revised BOMs) in
+the dump; the ingest resolves to one row per set at populate time, same
+philosophy as Phase B's `is_preferred`. This is a **documented working
+assumption**, not verified against rebrickable.com's own default behavior —
+plausible (higher version numbers should represent corrections) but cheap
+to flip later since the table is 100% rebuildable from public dumps.
+
+**Nested sub-inventories are an explicit, visible limitation, not a silent
+undercount.** Some sets bundle other sets or list minifigs as components
+rather than every part directly in `inventory_parts.csv` for the top-level
+inventory (Rebrickable's separate `inventory_sets.csv`/`inventory_minifigs.csv`,
+not ingested here). The preview surfaces both the official `sets.csv`
+`num_parts` count and the actually-expanded quantity side by side
+("Official count: N · Expanded: M") so a gap is visible rather than
+silently wrong — resolving nested inventories is left as future scope.
+
+Input normalization: a bare number (`7922`) falls back to the `-1` edition
+suffix Rebrickable's own `set_num` convention uses when there's no exact
+match, so the common case ("I own set 7922") works without the user typing
+the edition suffix.
