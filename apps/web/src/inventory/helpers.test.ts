@@ -6,11 +6,12 @@ import {
   colorSwatchValue,
   decrementQuantity,
   importErrorMessage,
+  importFormatLabel,
   importToastMessage,
   incrementQuantity,
   inventoryEmptyMessage,
   parseQuantityInput,
-  validateInventoryCsv,
+  validateInventoryImportFile,
 } from "./helpers";
 
 describe("inventory quantity helpers", () => {
@@ -43,6 +44,7 @@ describe("inventory presentation helpers", () => {
 
 describe("inventory import helpers", () => {
   const importResult = (overrides: Partial<InventoryImportResult>): InventoryImportResult => ({
+    format: "native",
     strategy: "add",
     includeUnknown: true,
     appliedRowCount: 0,
@@ -55,14 +57,21 @@ describe("inventory import helpers", () => {
     ...overrides,
   });
 
-  it("validates the selected CSV file before any request", () => {
-    expect(validateInventoryCsv(null)).toBe("Choose a CSV file.");
-    expect(validateInventoryCsv({ name: "inventory.txt", size: 10 })).toContain(".csv");
-    expect(validateInventoryCsv({ name: "inventory.csv", size: 0 })).toContain("empty");
-    expect(validateInventoryCsv({ name: "inventory.csv", size: 1024 * 1024 + 1 })).toContain(
+  it("validates the selected import file before any request", () => {
+    expect(validateInventoryImportFile(null)).toBe("Choose a CSV or XML file.");
+    expect(validateInventoryImportFile({ name: "inventory.txt", size: 10 })).toContain(".csv");
+    expect(validateInventoryImportFile({ name: "inventory.csv", size: 0 })).toContain("empty");
+    expect(validateInventoryImportFile({ name: "inventory.csv", size: 1024 * 1024 + 1 })).toContain(
       "1 MiB",
     );
-    expect(validateInventoryCsv({ name: "Inventory.CSV", size: 42 })).toBeNull();
+    expect(validateInventoryImportFile({ name: "Inventory.CSV", size: 42 })).toBeNull();
+    expect(validateInventoryImportFile({ name: "wanted.xml", size: 42 })).toBeNull();
+  });
+
+  it("labels each detected import format", () => {
+    expect(importFormatLabel("native")).toBe("Native CSV");
+    expect(importFormatLabel("rebrickable")).toBe("Rebrickable CSV");
+    expect(importFormatLabel("bricklink")).toBe("BrickLink XML");
   });
 
   it("maps import errors to actionable messages", () => {

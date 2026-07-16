@@ -39,14 +39,14 @@ Constraints that bear on every item below (details in `CLAUDE.md`):
 
 ## 1. Bulk inventory input (highest leverage)
 
-> **Status (2026-07-14).** Phase A shipped: native CSV import with dry-run
-> preview, add/replace strategy, alias canonicalization, and unknown-row
-> handling — see `docs/BULK_INVENTORY.md`. Phase B is unblocked: sample
-> files are verified and committed in `docs/`, the mapping source is
-> confirmed (Rebrickable API v3; public dumps carry no external IDs), and
-> the user's key is in `.env` as `REBRICKABLE_API_KEY` — prerequisites,
-> findings, and the suggested opening prompt are all in
-> `docs/BULK_INVENTORY.md`.
+> **Status (2026-07-16).** Phases A and B shipped: native CSV import with
+> dry-run preview, add/replace strategy, alias canonicalization, and
+> unknown-row handling; Rebrickable CSV and BrickLink wanted-list XML import
+> via a locally populated Rebrickable-API-backed ID mapping table
+> (`python -m app.cli.rebrickable_mapping populate`), cross-validated against
+> real sample files — see `docs/BULK_INVENTORY.md`. Phase C ("I own set
+> NNNN") is not started; the same mapping table and CLI are its prerequisite
+> and are already in place.
 
 **Why.** Coverage/readiness is the app's core promise, but it is only as good
 as the inventory behind it, and per-row manual entry does not scale past a

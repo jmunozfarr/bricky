@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path as FilesystemPath
 from pathlib import PurePosixPath
@@ -48,10 +49,22 @@ from app.services.inventory_import import (
     read_csv_upload,
     summarize_changes,
 )
+from app.services.inventory_import_formats import (
+    ImportFormat,
+    detect_import_format,
+    parse_bricklink_xml,
+    parse_rebrickable_csv,
+    translate_external_rows,
+)
 from app.services.ldraw_aliases import OfficialPartRecord, cached_moved_alias_resolver
 from app.services.ldraw_library import get_library_status
 from app.services.local_workspace import resolve_local_workspace
 from app.services.model_coverage import normalize_part_id
+from app.services.rebrickable_mapping import (
+    get_mapping_status,
+    load_color_mapping,
+    load_preferred_part_mapping,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -171,29 +184,86 @@ def _canonical_alias_map(
     }
 
 
+def _composed_external_resolver(
+    session: Session, library_root: FilesystemPath, source_system: str, source_part_ids: set[str]
+) -> dict[str, str]:
+    """source_part_id -> final LDraw canonical, composing the external
+    mapping table with the existing ~Moved to resolver. Always includes an
+    entry for every source ID with a mapping-table hit (no identity
+    omission), matching `build_import_plan(require_explicit_mapping=True)`'s
+    contract that the returned keys double as the mapped-ID set."""
+    direct = load_preferred_part_mapping(session, source_system, source_part_ids)
+    if not direct:
+        return {}
+    further = _canonical_alias_map(session, library_root, set(direct.values()))
+    return {source_id: further.get(ldraw_id, ldraw_id) for source_id, ldraw_id in direct.items()}
+
+
+@dataclass(frozen=True)
+class _UploadPlan:
+    plan: ImportPlan
+    workspace_id: int
+    file_name: str
+    resolved_format: ImportFormat
+    spare_row_count: int
+    mapping_available: bool
+
+
 def _plan_from_upload(
     session: Session,
     library_root: FilesystemPath,
     file: UploadFile,
     strategy: Strategy,
     maximum_bytes: int,
-) -> tuple[ImportPlan, int, str]:
+    requested_format: ImportFormat | None,
+) -> _UploadPlan:
     """Shared preview/apply path: one parse and one plan per uploaded file."""
     raw_filename = (file.filename or "").replace("\\", "/")
     file_name = PurePosixPath(raw_filename).name[:255]
-    if PurePosixPath(file_name).suffix.lower() != ".csv":
-        raise InventoryImportError("Only .csv files are supported")
     data = read_csv_upload(file.file, maximum_bytes)
-    parsed = parse_inventory_csv(data)
+    resolved_format = requested_format or detect_import_format(file_name, data)
     workspace = resolve_local_workspace(session)
+
+    if resolved_format == "native":
+        parsed = parse_inventory_csv(data)
+        plan = build_import_plan(
+            session,
+            workspace.id,
+            parsed,
+            strategy,
+            lambda part_ids: _canonical_alias_map(session, library_root, part_ids),
+        )
+        return _UploadPlan(plan, workspace.id, file_name, resolved_format, 0, True)
+
+    source_system = "rebrickable" if resolved_format == "rebrickable" else "bricklink"
+    parsed_external = (
+        parse_rebrickable_csv(data)
+        if resolved_format == "rebrickable"
+        else parse_bricklink_xml(data)
+    )
+    mapping_available = get_mapping_status(session).populated
+    color_map = load_color_mapping(
+        session, source_system, {row.source_color_id for row in parsed_external.rows}
+    )
+    parsed = translate_external_rows(parsed_external, color_map=color_map)
     plan = build_import_plan(
         session,
         workspace.id,
         parsed,
         strategy,
-        lambda part_ids: _canonical_alias_map(session, library_root, part_ids),
+        lambda part_ids: _composed_external_resolver(
+            session, library_root, source_system, part_ids
+        ),
+        require_explicit_mapping=True,
     )
-    return plan, workspace.id, file_name
+    return _UploadPlan(
+        plan,
+        workspace.id,
+        file_name,
+        resolved_format,
+        parsed_external.spare_row_count,
+        mapping_available,
+    )
 
 
 def _preview_row_sort_key(change: PlannedChange) -> tuple[int, str, int]:
@@ -210,6 +280,7 @@ def _bucket_response(summary: BucketSummary) -> ImportBucketSummaryResponse:
         quantity_delta=summary.quantity_delta,
         missing_part_count=summary.missing_part_count,
         missing_color_count=summary.missing_color_count,
+        missing_mapping_count=summary.missing_mapping_count,
     )
 
 
@@ -240,9 +311,8 @@ def _preview_row(
     )
 
 
-def _preview_response(
-    session: Session, plan: ImportPlan, file_name: str
-) -> InventoryImportPreviewResponse:
+def _preview_response(session: Session, uploaded: _UploadPlan) -> InventoryImportPreviewResponse:
+    plan = uploaded.plan
     known = summarize_changes(change for change in plan.changes if change.unknown_reason is None)
     unknown = summarize_changes(
         change for change in plan.changes if change.unknown_reason is not None
@@ -274,7 +344,8 @@ def _preview_response(
         }
 
     return InventoryImportPreviewResponse(
-        file_name=file_name,
+        file_name=uploaded.file_name,
+        format=uploaded.resolved_format,
         strategy=plan.strategy,
         total_data_rows=plan.total_data_rows,
         planned_row_count=len(plan.changes),
@@ -284,6 +355,8 @@ def _preview_response(
         ),
         ignored_columns=list(plan.ignored_columns),
         invalid_row_count=len(plan.issues),
+        spare_row_count=uploaded.spare_row_count,
+        mapping_available=uploaded.mapping_available,
         known=_bucket_response(known),
         unknown=_bucket_response(unknown),
         rows=[
@@ -470,13 +543,14 @@ def create_inventory_router(
     def preview_import(
         file: UploadFile = File(...),
         strategy: Strategy = Form(...),
+        format: ImportFormat | None = Form(default=None),
         session: Session = Depends(session_dependency),
     ) -> InventoryImportPreviewResponse:
         try:
-            plan, _workspace_id, file_name = _plan_from_upload(
-                session, library_root, file, strategy, import_max_upload_bytes
+            uploaded = _plan_from_upload(
+                session, library_root, file, strategy, import_max_upload_bytes, format
             )
-            return _preview_response(session, plan, file_name)
+            return _preview_response(session, uploaded)
         except InventoryImportTooLargeError as error:
             raise HTTPException(status_code=413, detail=str(error)) from error
         except InventoryImportError as error:
@@ -492,23 +566,27 @@ def create_inventory_router(
         file: UploadFile = File(...),
         strategy: Strategy = Form(...),
         include_unknown: bool = Form(alias="includeUnknown"),
+        format: ImportFormat | None = Form(default=None),
         session: Session = Depends(session_dependency),
     ) -> InventoryImportApplyResponse:
         try:
-            plan, workspace_id, _file_name = _plan_from_upload(
-                session, library_root, file, strategy, import_max_upload_bytes
+            uploaded = _plan_from_upload(
+                session, library_root, file, strategy, import_max_upload_bytes, format
             )
-            counts = apply_import_plan(session, workspace_id, plan, include_unknown=include_unknown)
+            counts = apply_import_plan(
+                session, uploaded.workspace_id, uploaded.plan, include_unknown=include_unknown
+            )
             session.commit()
             return InventoryImportApplyResponse(
-                strategy=plan.strategy,
+                format=uploaded.resolved_format,
+                strategy=uploaded.plan.strategy,
                 include_unknown=include_unknown,
                 applied_row_count=counts.applied_rows,
                 created_count=counts.created,
                 updated_count=counts.updated,
                 unchanged_count=counts.unchanged,
                 skipped_unknown_row_count=counts.skipped_unknown,
-                invalid_row_count=len(plan.issues),
+                invalid_row_count=len(uploaded.plan.issues),
                 quantity_delta=counts.quantity_delta,
             )
         except InventoryImportTooLargeError as error:

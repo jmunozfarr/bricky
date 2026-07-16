@@ -1,12 +1,16 @@
-# Bulk inventory import (native CSV)
+# Bulk inventory import
 
-Roadmap item 1, Phase A. Import personal inventory in bulk from a native CSV:
-dropzone → server-computed dry-run preview → explicit merge strategy → apply.
-Nothing is written until the user applies; preview and apply share one
-parse→classify→plan code path (`apps/api/app/services/inventory_import.py`),
-so what the preview shows is exactly what apply does.
+Roadmap item 1. Import personal inventory in bulk: dropzone → server-computed
+dry-run preview → explicit merge strategy → apply. Nothing is written until
+the user applies; preview and apply share one parse→classify→plan code path
+(`apps/api/app/services/inventory_import.py`), so what the preview shows is
+exactly what apply does.
 
-## File format
+Phase A (native CSV) and Phase B (Rebrickable CSV / BrickLink XML, via a
+locally populated ID-mapping table) are both shipped. Phase C ("I own set
+NNNN") is not; see the bottom of this document.
+
+## Phase A: native CSV
 
 ```csv
 part_id,color_code,quantity
@@ -64,79 +68,73 @@ part_id,color_code,quantity
 ## Endpoints
 
 - `POST /api/inventory/import/preview` — multipart `file` + `strategy`
-  (`add`|`replace`). Returns known/unknown bucket summaries, up to 500
-  enriched preview rows (unknown first), and up to 100 per-line issues.
+  (`add`|`replace`) + optional `format` (`native`|`rebrickable`|`bricklink`,
+  auto-detected from the filename extension and, for `.csv`, the header
+  shape, when omitted). Returns the resolved `format`, known/unknown bucket
+  summaries, up to 500 enriched preview rows (unknown first), and up to 100
+  per-line issues.
 - `POST /api/inventory/import/apply` — same fields plus `includeUnknown`.
   Re-parses and re-plans server-side (stateless — no preview token), runs
-  one batched upsert, returns applied/created/updated/skipped counts.
+  one batched upsert, returns applied/created/updated/skipped counts. The UI
+  passes the `format` the preview response resolved, so preview and apply
+  can never disagree about which parser ran.
 
-The UI lives in the inventory page's "Import CSV" dialog
+The UI lives in the inventory page's "Import" dialog
 (`apps/web/src/components/inventory/InventoryImportDialog.tsx`).
 
-## Follow-ups (not implemented)
+## Phase B: Rebrickable CSV / BrickLink XML (shipped 2026-07-16)
 
-### Phase B — Rebrickable CSV / BrickLink XML (prerequisites ready 2026-07-14)
+Per-format parsers (`apps/api/app/services/inventory_import_formats.py`)
+produce a shared `ExternalRow` shape for the Rebrickable MOC parts CSV
+(`Part,Color,Quantity,Is Spare` header) and the BrickLink wanted-list XML
+(`<INVENTORY>` of `<ITEM>` elements: `ITEMTYPE`, `ITEMID`, `COLOR`,
+`MINQTY`). `translate_external_rows` converts source-namespace colour IDs to
+LDraw colour codes (an unmapped colour is a hard skip — a wrong-but-plausible
+LDraw colour is worse than a reported gap) and produces the exact `CsvRow`
+shape the native planner already consumes; part-ID translation is composed
+into the existing `resolve_aliases` hook used for `~Moved to` resolution
+(`apps/api/app/services/inventory_import.py`), so dedup and provenance work
+identically across all three formats.
 
-Per-format adapters produce the same parsed-rows shape as the native CSV and
-feed the same plan/apply core; the new ingredient is a rebuildable ID-mapping
-table, populated once by an operator CLI (classified like the catalog:
-droppable and rebuildable, never referenced by personal rows).
+**Spare rows are always imported** (`Is Spare=True` parts are physically
+owned), reported via `spareRowCount` in the preview rather than a toggle.
+**Unmapped source IDs are strict**: a raw ID absent from the mapping table is
+reported `unknownReason: "unmapped"` even if it coincidentally matches the
+installed catalog — the mapping table is authoritative once populated. No
+special-case code for printed-part suffixes (`pr0001`/`pb01`) or BrickLink
+legacy codes (`x136`/`x346`); they map if the Rebrickable API says so and
+surface as clean "unmapped" otherwise.
 
-**Verified sample files**, committed under `docs/` (same 249-row MOC in both
-formats — use them as cross-validating fixtures; a correct importer converges
-both to nearly identical LDraw rows):
+### ID mapping table
 
-- `rebrickable_parts_moc-76717-…csv` — Rebrickable MOC parts export. Header
-  `Part,Color,Quantity,Is Spare`; Rebrickable colour IDs (Black = 0); print
-  suffixes like `32296pr0001`; assembly IDs like `78c07`. The sample has only
-  `Is Spare=False` rows — the spare-row policy is an open decision.
-- `rb16b-bricklink.xml` — BrickLink wanted list. Single-line `<INVENTORY>` of
-  `<ITEM>` elements with `ITEMTYPE` (`P` throughout the sample), `ITEMID`,
-  `COLOR`, `MINQTY`; BrickLink colour IDs (Black = 11); print suffixes like
-  `32296pb01`; legacy IDs `x136`/`x346`. Parsers must tolerate the optional
-  wanted-list fields absent here (`CONDITION`, `NOTIFY`, `REMARKS`, …).
+`external_part_id_map` and `external_color_map` (`apps/api/app/models.py`)
+are rebuildable, droppable, and never referenced by personal rows — same
+classification as the catalog. Populated once by
+`python -m app.cli.rebrickable_mapping populate` (throttled ~1 req/sec
+against the Rebrickable API v3, exponential backoff on 429/5xx, full
+replace-in-transaction so a failed run never leaves a partial table);
+`... status` reports freshness. The key lives in `.env` as
+`REBRICKABLE_API_KEY` and is read only by this CLI — imports never touch the
+network at request time.
 
-The colour namespaces provably differ (part 32200 is colour `0` in the CSV
-and colour `11` in the XML for the same black piece), as do printed-part
-suffixes (`pr0001` vs `pb01`) — mapping is mandatory, not optional.
+A Rebrickable part can list *arrays* of BrickLink/LDraw external IDs; every
+candidate is stored, with exactly one `is_preferred` per
+`(source_system, source_part_id)` chosen by a deterministic rule (exact
+match, then same-`part_num` provenance, then lexicographic). Verified
+against the live API (2026-07-16): 63,588 parts fetched, 28,935 part-mapping
+rows, only ~4% of `(source_system, source_part_id)` groups ambiguous — the
+`ambiguous_part_count` the CLI reports.
 
-**Mapping data source (verified 2026-07-14).** The public CSV dumps on
-<https://rebrickable.com/downloads/> (served from
-`cdn.rebrickable.com/media/downloads/`, refreshed daily, no account) do NOT
-contain external IDs — checked headers: `colors.csv` =
-`id,name,rgb,is_trans,num_parts,num_sets,y1,y2`; `parts.csv` =
-`part_num,name,part_cat_id,part_material`; `part_relationships.csv` and
-`elements.csv` are internal-only. Rebrickable staff confirm mappings are
-API-only (licensing). The source is the **Rebrickable API v3**
-(auth: `Authorization: key <KEY>` header or `?key=` query; ~1 request/sec
-with small bursts, 429 on breach; `page_size` max 1000):
-
-- `GET /api/v3/lego/colors/?page_size=1000` — every colour in one request,
-  each with `external_ids.{BrickLink,LDraw,LEGO,BrickOwl,Peeron}.ext_ids`.
-- `GET /api/v3/lego/parts/?page_size=1000` — paginated (~64k parts ≈ 64
-  requests), each part with `external_ids.{BrickLink,LDraw,BrickOwl}`
-  string arrays; batched `?part_nums=a,b,c` also works for targeted fetches.
-
-**The user's API key is in `.env` as `REBRICKABLE_API_KEY`** (reserved in
-`.env.example`, passed through to the api container by both compose files).
-Design constraint: the key is used only by the one-time mapping CLI
-(`python -m app.cli.<name>`, modelled on `ldraw_library install`) which
-downloads and persists the mappings locally; imports never touch the network
-at request time, keeping the app offline-first.
-
-Other open decisions for the planning session: unmapped-ID preview bucket UX
-(IDs with no LDraw mapping), whether `MINQTY` needs any special treatment
-beyond quantity, and relocating the two sample files from `docs/` to test
-fixtures.
-
-Suggested opening prompt for a fresh session:
-
-> Read docs/ROADMAP.md, docs/BULK_INVENTORY.md, CLAUDE.md, and
-> docs/ARCHITECTURE.md. I want to implement roadmap item 1 Phase B
-> (Rebrickable CSV + BrickLink XML import). The sample files and the
-> verified mapping-source findings are in docs/BULK_INVENTORY.md; my
-> Rebrickable API key is in .env as REBRICKABLE_API_KEY. Audit the relevant
-> code and propose a phased plan before writing anything.
+**Cross-validated against the two committed sample fixtures**
+(`apps/api/tests/fixtures/rebrickable_parts_moc.csv` and
+`bricklink_wanted_list.xml`, the same 249-row MOC exported both ways): both
+formats resolve all 249 rows with zero unknown/unmapped and the same total
+quantity (2,466 pieces). Row-level part IDs converge exactly for 243/249
+rows; the remaining 6 resolve to an alternate-but-equivalent LDraw mold
+variant (e.g. `32123a` vs `32123b`) because Rebrickable's and BrickLink's own
+catalogs occasionally diverge on which variant they associate with a given
+physical part — genuine upstream data variance, not a mapping defect, and
+exactly the ambiguity `ambiguous_part_count` exists to surface.
 
 ### Phase C — "I own set NNNN"
 

@@ -22,6 +22,7 @@ vi.mock("../../api/inventory", async (loadOriginal) => ({
 
 const preview: InventoryImportPreview = {
   fileName: "inventory.csv",
+  format: "native",
   strategy: "add",
   totalDataRows: 5,
   plannedRowCount: 3,
@@ -29,6 +30,8 @@ const preview: InventoryImportPreview = {
   aliasCanonicalizedCount: 1,
   ignoredColumns: ["Notes"],
   invalidRowCount: 1,
+  spareRowCount: 0,
+  mappingAvailable: true,
   known: {
     rowCount: 2,
     createCount: 1,
@@ -37,6 +40,7 @@ const preview: InventoryImportPreview = {
     quantityDelta: 8,
     missingPartCount: 0,
     missingColorCount: 0,
+    missingMappingCount: 0,
   },
   unknown: {
     rowCount: 1,
@@ -46,6 +50,7 @@ const preview: InventoryImportPreview = {
     quantityDelta: 2,
     missingPartCount: 1,
     missingColorCount: 0,
+    missingMappingCount: 0,
   },
   rows: [
     {
@@ -109,6 +114,7 @@ const preview: InventoryImportPreview = {
 };
 
 const applied: InventoryImportResult = {
+  format: "native",
   strategy: "add",
   includeUnknown: true,
   appliedRowCount: 3,
@@ -139,7 +145,7 @@ function renderDialog() {
 }
 
 async function selectCsv(file: File = csvFile) {
-  fireEvent.change(screen.getByLabelText("CSV file"), { target: { files: [file] } });
+  fireEvent.change(screen.getByLabelText("Import file"), { target: { files: [file] } });
   await screen.findByRole("group", { name: "Merge strategy" });
 }
 
@@ -174,7 +180,7 @@ describe("inventory import dialog", () => {
 
   it("rejects a non-CSV file locally without calling the API", () => {
     renderDialog();
-    fireEvent.change(screen.getByLabelText("CSV file"), {
+    fireEvent.change(screen.getByLabelText("Import file"), {
       target: { files: [new File(["x"], "inventory.txt", { type: "text/plain" })] },
     });
 
@@ -201,7 +207,9 @@ describe("inventory import dialog", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
-    await waitFor(() => expect(applyInventoryImport).toHaveBeenCalledWith(csvFile, "add", false));
+    await waitFor(() =>
+      expect(applyInventoryImport).toHaveBeenCalledWith(csvFile, "add", false, "native"),
+    );
     expect(await screen.findByText(/Imported 3 rows \(2 new, 1 updated\)/)).toBeTruthy();
     expect(onClose).toHaveBeenCalled();
   });
@@ -222,9 +230,71 @@ describe("inventory import dialog", () => {
   it("surfaces preview failures and disables the import action", async () => {
     previewInventoryImport.mockRejectedValue(new ApiError(413, "too big", "too big"));
     renderDialog();
-    fireEvent.change(screen.getByLabelText("CSV file"), { target: { files: [csvFile] } });
+    fireEvent.change(screen.getByLabelText("Import file"), { target: { files: [csvFile] } });
 
     expect((await screen.findByRole("alert")).textContent).toContain("upload-size");
     expect(screen.getByRole("button", { name: "Import" })).toHaveProperty("disabled", true);
+  });
+
+  it("accepts an .xml file locally and shows the detected BrickLink format", async () => {
+    previewInventoryImport.mockResolvedValue({
+      ...preview,
+      format: "bricklink",
+    } satisfies InventoryImportPreview);
+    renderDialog();
+    const xmlFile = new File(["<INVENTORY></INVENTORY>"], "wanted.xml", {
+      type: "application/xml",
+    });
+
+    await selectCsv(xmlFile);
+
+    expect(previewInventoryImport).toHaveBeenCalledWith(xmlFile, "add");
+    expect(screen.getByText("Detected format: BrickLink XML")).toBeTruthy();
+  });
+
+  it("shows a spare-row count and an unmapped-row badge for external formats", async () => {
+    previewInventoryImport.mockResolvedValue({
+      ...preview,
+      format: "rebrickable",
+      spareRowCount: 3,
+      rows: [
+        {
+          partId: "99999",
+          sourcePartId: "99999",
+          canonicalizedFrom: null,
+          colorCode: 4,
+          quantity: 1,
+          currentQuantity: 0,
+          resultingQuantity: 1,
+          change: "create",
+          unknownReason: "unmapped",
+          partName: null,
+          colorName: "Red",
+          colorHex: "#C91A09",
+          alpha: 255,
+          renderAssetUrl: null,
+        },
+      ],
+    } satisfies InventoryImportPreview);
+    renderDialog();
+
+    await selectCsv();
+
+    expect(screen.getByText("Detected format: Rebrickable CSV")).toBeTruthy();
+    expect(screen.getByText("3 spare rows included")).toBeTruthy();
+    expect(screen.getByText("No LDraw mapping")).toBeTruthy();
+  });
+
+  it("shows a banner when the mapping table isn't populated", async () => {
+    previewInventoryImport.mockResolvedValue({
+      ...preview,
+      format: "rebrickable",
+      mappingAvailable: false,
+    } satisfies InventoryImportPreview);
+    renderDialog();
+
+    await selectCsv();
+
+    expect(screen.getByRole("alert").textContent).toContain("rebrickable_mapping populate");
   });
 });

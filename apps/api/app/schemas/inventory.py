@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.schemas import CamelModel
 from app.services.inventory_import import ChangeKind, Strategy, UnknownReason
+from app.services.inventory_import_formats import ImportFormat
 
 
 class ImportBucketSummaryResponse(CamelModel):
@@ -12,6 +13,7 @@ class ImportBucketSummaryResponse(CamelModel):
     quantity_delta: int
     missing_part_count: int
     missing_color_count: int
+    missing_mapping_count: int
 
 
 class ImportPreviewRowResponse(CamelModel):
@@ -39,6 +41,7 @@ class ImportRowIssueResponse(CamelModel):
 
 class InventoryImportPreviewResponse(CamelModel):
     file_name: str
+    format: ImportFormat
     strategy: Strategy
     total_data_rows: int
     planned_row_count: int
@@ -46,6 +49,8 @@ class InventoryImportPreviewResponse(CamelModel):
     alias_canonicalized_count: int
     ignored_columns: list[str]
     invalid_row_count: int
+    spare_row_count: int
+    mapping_available: bool
     known: ImportBucketSummaryResponse
     unknown: ImportBucketSummaryResponse
     rows: list[ImportPreviewRowResponse]
@@ -55,6 +60,7 @@ class InventoryImportPreviewResponse(CamelModel):
 
 
 class InventoryImportApplyResponse(CamelModel):
+    format: ImportFormat
     strategy: Strategy
     include_unknown: bool
     applied_row_count: int

@@ -44,6 +44,7 @@ def plan_for(
     catalog: dict[str, str] | None = None,
     colors: frozenset[int] = frozenset({1, 4}),
     current: dict[tuple[str, int], tuple[str, int]] | None = None,
+    mapped: frozenset[str] | None = None,
 ) -> inventory_import.ImportPlan:
     return plan_inventory_import(
         parsed(*csv_rows),
@@ -52,6 +53,7 @@ def plan_for(
         catalog_casing_by_normalized=catalog if catalog is not None else {"3001": "3001"},
         known_color_codes=colors,
         current_rows=current or {},
+        mapped_source_part_ids=mapped,
     )
 
 
@@ -254,6 +256,52 @@ def test_summarize_changes_counts_buckets() -> None:
     assert unknown.missing_part_count == 1
     assert unknown.missing_color_count == 1
     assert unknown.create_count == 2
+    assert unknown.missing_mapping_count == 0
+
+
+def test_plan_unmapped_source_id_reported_regardless_of_catalog_hit() -> None:
+    # "3001" coincidentally matches the installed catalog, but with no entry
+    # in `mapped`, external-format rows must be strict: still "unmapped".
+    plan = plan_for(
+        [("3001", 4, 2)],
+        catalog={"3001": "3001"},
+        mapped=frozenset(),
+    )
+    change = plan.changes[0]
+    assert change.unknown_reason == "unmapped"
+    assert change.part_id == "3001"
+    assert change.normalized_part_id == "3001"
+
+
+def test_plan_mapped_source_id_uses_composed_canonical() -> None:
+    plan = plan_for(
+        [("BL3001", 4, 2)],
+        aliases={"BL3001": "3001"},
+        catalog={"3001": "3001"},
+        mapped=frozenset({"BL3001"}),
+    )
+    change = plan.changes[0]
+    assert change.unknown_reason is None
+    assert change.normalized_part_id == "3001"
+    assert change.part_id == "3001"
+
+
+def test_plan_mapped_none_is_the_native_no_op_default() -> None:
+    # mapped=None (the default) reproduces Phase A's exact behavior: no
+    # source ID is ever reported "unmapped".
+    plan = plan_for([("mystery", 4, 1)], catalog={})
+    assert plan.changes[0].unknown_reason == "part"
+
+
+def test_summarize_changes_counts_missing_mapping() -> None:
+    plan = plan_for(
+        [("3001", 4, 1), ("mystery", 4, 1)],
+        catalog={"3001": "3001"},
+        mapped=frozenset({"3001"}),
+    )
+    unknown = summarize_changes(c for c in plan.changes if c.unknown_reason is not None)
+    assert unknown.missing_mapping_count == 1
+    assert unknown.row_count == 1
 
 
 def seed_catalog(factory: sessionmaker[Session]) -> None:
@@ -309,6 +357,34 @@ def test_build_import_plan_uses_bounded_lookups(
     assert by_key[("3070b", 1)].change == "create"
     assert by_key[("mystery", 4)].unknown_reason == "part"
     assert by_key[("3001", 999)].unknown_reason == "color"
+
+
+def test_build_import_plan_require_explicit_mapping(
+    catalog_session_factory: sessionmaker[Session],
+) -> None:
+    seed_catalog(catalog_session_factory)
+    # External-format shape: raw source_part_id in the row is a BrickLink ID,
+    # not yet LDraw. Only "BL3001" has a mapping-table entry; "BLghost" does
+    # not, even though nothing here happens to collide with the catalog.
+    source = parse_inventory_csv(b"part_id,color_code,quantity\nBL3001,4,3\nBLghost,4,1\n")
+
+    def external_resolver(part_ids: set[str]) -> dict[str, str]:
+        return {"BL3001": "3001"}
+
+    with catalog_session_factory() as session:
+        workspace = resolve_local_workspace(session)
+        plan = build_import_plan(
+            session,
+            workspace.id,
+            source,
+            "add",
+            external_resolver,
+            require_explicit_mapping=True,
+        )
+
+    by_key = {(c.normalized_part_id, c.color_code): c for c in plan.changes}
+    assert by_key[("3001", 4)].unknown_reason is None
+    assert by_key[("blghost", 4)].unknown_reason == "unmapped"
 
 
 def test_apply_import_plan_add_replace_and_unknown_filter(
