@@ -82,19 +82,33 @@ anyway (natural keys permit it — the catalog page already handles
 
 ## 2. Missing-parts export / shopping list
 
+> **Status (2026-07-16).** Single-model export shipped:
+> `GET /api/models/{id}/missing-parts?format=csv|bricklink-xml` and two
+> export buttons in the coverage panel. Native CSV round-trips through the
+> existing import; BrickLink XML resolves LDraw IDs through item 1's
+> mapping table (new reverse lookups in `rebrickable_mapping.py`), dropping
+> and reporting a count for rows with no BrickLink match rather than
+> guessing. Aggregation across multiple selected models is not built —
+> see the note below.
+
 **Why.** Turns "73% covered" from a fact into an action: buy exactly what is
 missing.
 
-**What.** Export the missing-parts list for one model — and later an
-aggregate across selected models ("what do I need to build these three?") —
-as a native CSV first; BrickLink wanted-list XML becomes feasible once item
-1's mapping table exists (shared infrastructure, LDraw→BrickLink direction).
+**What.** Export the missing-parts list for one model — done — and later an
+aggregate across selected models ("what do I need to build these three?").
 
-**Where.** All the arithmetic already exists in
-`apps/api/app/services/model_coverage.py`; export can be a thin endpoint or
-even client-side generation from the existing coverage response. Aggregation
-across models needs a small new endpoint (sum required per part+colour over
-n models, then subtract owned once — do not double-count owned stock).
+**Where.** The coverage arithmetic lives in
+`apps/api/app/services/model_coverage.py`; the export serializers are pure
+functions in `apps/api/app/services/missing_parts_export.py` (row records
+in, CSV/XML string out — no model ID or session), so an aggregation
+endpoint can reuse them unchanged. **Caveat for that future endpoint:**
+`calculate_model_coverage` does not merge duplicate `(part, color)`
+requirements — each requirement row independently looks up the full owned
+quantity, so naively concatenating BOMs from multiple models would
+double-count owned stock. The aggregation endpoint must pre-sum required
+quantities per `(part, color)` across the selected models before calling
+`calculate_model_coverage`, sum owned once, and only then compute
+missing = required − available.
 
 ## 3. Built-model allocation
 
