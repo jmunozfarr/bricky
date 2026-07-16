@@ -1,4 +1,4 @@
-import { ApiError, fetchJson, fetchNoContent } from "./client";
+import { ApiError, fetchBlob, fetchJson, fetchNoContent, triggerBrowserDownload } from "./client";
 
 export type ModelImportStatus = "ready" | "ready_with_warnings" | "failed";
 export type CoverageStatus = "complete" | "partial" | "missing";
@@ -356,6 +356,38 @@ export function getModelCoverage(
     `/api/models/${encodeURIComponent(modelId)}/coverage${suffix}`,
     signal,
   );
+}
+
+export type MissingPartsFormat = "csv" | "bricklink-xml";
+
+export interface MissingPartsExport {
+  /** Only present for the bricklink-xml format. */
+  skippedCount: number | null;
+  totalCount: number | null;
+}
+
+const MISSING_PARTS_DEFAULT_FILENAME: Record<MissingPartsFormat, string> = {
+  csv: "missing-parts.csv",
+  "bricklink-xml": "missing-parts.xml",
+};
+
+export async function downloadMissingParts(
+  modelId: string,
+  format: MissingPartsFormat,
+): Promise<MissingPartsExport> {
+  const download = await fetchBlob(
+    `/api/models/${encodeURIComponent(modelId)}/missing-parts?format=${format}`,
+  );
+  triggerBrowserDownload(
+    download.blob,
+    download.filename ?? MISSING_PARTS_DEFAULT_FILENAME[format],
+  );
+  const skipped = download.headers.get("x-missing-parts-skipped");
+  const total = download.headers.get("x-missing-parts-total");
+  return {
+    skippedCount: skipped !== null ? Number(skipped) : null,
+    totalCount: total !== null ? Number(total) : null,
+  };
 }
 
 export function getModelsReadinessSummary(signal?: AbortSignal): Promise<ModelsReadinessSummary> {
