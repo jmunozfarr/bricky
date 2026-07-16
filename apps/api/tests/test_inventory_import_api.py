@@ -379,6 +379,8 @@ def test_apply_add_sums_and_clamps_quantities(
         "skippedUnknownRowCount": 0,
         "invalidRowCount": 0,
         "quantityDelta": 10,
+        "setNum": None,
+        "setName": None,
     }
     assert inventory_rows(catalog_session_factory) == {
         ("3001", 4): 999_999,

@@ -34,6 +34,8 @@ from app.schemas.inventory import (
     ImportRowIssueResponse,
     InventoryImportApplyResponse,
     InventoryImportPreviewResponse,
+    SetImportApplyRequest,
+    SetImportPreviewRequest,
 )
 from app.services.inventory_import import (
     DEFAULT_MAX_CSV_UPLOAD_BYTES,
@@ -51,6 +53,7 @@ from app.services.inventory_import import (
 )
 from app.services.inventory_import_formats import (
     ImportFormat,
+    ParsedExternal,
     detect_import_format,
     parse_bricklink_xml,
     parse_rebrickable_csv,
@@ -65,6 +68,7 @@ from app.services.rebrickable_mapping import (
     load_color_mapping,
     load_preferred_part_mapping,
 )
+from app.services.rebrickable_sets import SetMeta, get_set_data_status, load_set_parts
 
 LOGGER = logging.getLogger(__name__)
 
@@ -209,6 +213,38 @@ class _UploadPlan:
     mapping_available: bool
 
 
+def _plan_from_external(
+    session: Session,
+    library_root: FilesystemPath,
+    parsed_external: ParsedExternal,
+    source_system: str,
+    strategy: Strategy,
+    workspace_id: int,
+) -> tuple[ImportPlan, int, bool]:
+    """The shared external-format tail: color translation, mapping-table
+    freshness check, composed resolver, and require_explicit_mapping plan
+    build. Used by both the upload-based Rebrickable/BrickLink path and the
+    set-import path -- both speak the same Rebrickable-namespace source
+    rows once parsed into `ParsedExternal`. Returns (plan, spare_row_count,
+    mapping_available)."""
+    mapping_available = get_mapping_status(session).populated
+    color_map = load_color_mapping(
+        session, source_system, {row.source_color_id for row in parsed_external.rows}
+    )
+    parsed = translate_external_rows(parsed_external, color_map=color_map)
+    plan = build_import_plan(
+        session,
+        workspace_id,
+        parsed,
+        strategy,
+        lambda part_ids: _composed_external_resolver(
+            session, library_root, source_system, part_ids
+        ),
+        require_explicit_mapping=True,
+    )
+    return plan, parsed_external.spare_row_count, mapping_available
+
+
 def _plan_from_upload(
     session: Session,
     library_root: FilesystemPath,
@@ -241,27 +277,15 @@ def _plan_from_upload(
         if resolved_format == "rebrickable"
         else parse_bricklink_xml(data)
     )
-    mapping_available = get_mapping_status(session).populated
-    color_map = load_color_mapping(
-        session, source_system, {row.source_color_id for row in parsed_external.rows}
-    )
-    parsed = translate_external_rows(parsed_external, color_map=color_map)
-    plan = build_import_plan(
-        session,
-        workspace.id,
-        parsed,
-        strategy,
-        lambda part_ids: _composed_external_resolver(
-            session, library_root, source_system, part_ids
-        ),
-        require_explicit_mapping=True,
+    plan, spare_row_count, mapping_available = _plan_from_external(
+        session, library_root, parsed_external, source_system, strategy, workspace.id
     )
     return _UploadPlan(
         plan,
         workspace.id,
         file_name,
         resolved_format,
-        parsed_external.spare_row_count,
+        spare_row_count,
         mapping_available,
     )
 
@@ -311,7 +335,13 @@ def _preview_row(
     )
 
 
-def _preview_response(session: Session, uploaded: _UploadPlan) -> InventoryImportPreviewResponse:
+def _preview_response(
+    session: Session,
+    uploaded: _UploadPlan,
+    *,
+    set_meta: SetMeta | None = None,
+    expanded_quantity: int | None = None,
+) -> InventoryImportPreviewResponse:
     plan = uploaded.plan
     known = summarize_changes(change for change in plan.changes if change.unknown_reason is None)
     unknown = summarize_changes(
@@ -375,6 +405,10 @@ def _preview_response(session: Session, uploaded: _UploadPlan) -> InventoryImpor
             for issue in plan.issues[:_PREVIEW_ISSUE_CAP]
         ],
         issues_truncated=len(plan.issues) > _PREVIEW_ISSUE_CAP,
+        set_num=set_meta.set_num if set_meta is not None else None,
+        set_name=set_meta.name if set_meta is not None else None,
+        official_part_count=set_meta.num_parts if set_meta is not None else None,
+        expanded_quantity=expanded_quantity,
     )
 
 
@@ -596,5 +630,107 @@ def create_inventory_router(
         except Exception as error:
             LOGGER.exception("Unexpected inventory import apply failure")
             raise HTTPException(status_code=500, detail="Inventory import failed") from error
+
+    def _set_not_found(session: Session, set_num: str) -> HTTPException:
+        if not get_set_data_status(session).populated:
+            return HTTPException(
+                status_code=404,
+                detail=(
+                    "Set data has not been populated yet; run "
+                    "python -m app.cli.rebrickable_mapping populate-sets"
+                ),
+            )
+        return HTTPException(status_code=404, detail=f"Set {set_num!r} was not found")
+
+    @router.post("/import/set/preview", response_model=InventoryImportPreviewResponse)
+    def preview_set_import(
+        payload: SetImportPreviewRequest,
+        session: Session = Depends(session_dependency),
+    ) -> InventoryImportPreviewResponse:
+        loaded = load_set_parts(session, payload.set_num)
+        if loaded is None:
+            raise _set_not_found(session, payload.set_num)
+        set_meta, rows = loaded
+
+        try:
+            parsed_external = ParsedExternal(
+                rows=rows,
+                issues=(),
+                total_data_rows=len(rows),
+                spare_row_count=sum(1 for row in rows if row.is_spare),
+            )
+            workspace = resolve_local_workspace(session)
+            plan, spare_row_count, mapping_available = _plan_from_external(
+                session,
+                library_root,
+                parsed_external,
+                "rebrickable",
+                payload.strategy,
+                workspace.id,
+            )
+            uploaded = _UploadPlan(
+                plan, workspace.id, set_meta.set_num, "set", spare_row_count, mapping_available
+            )
+            return _preview_response(
+                session,
+                uploaded,
+                set_meta=set_meta,
+                expanded_quantity=sum(row.quantity for row in rows),
+            )
+        except InventoryImportError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except Exception as error:
+            LOGGER.exception("Unexpected set import preview failure")
+            raise HTTPException(status_code=500, detail="Set import preview failed") from error
+
+    @router.post("/import/set/apply", response_model=InventoryImportApplyResponse)
+    def apply_set_import(
+        payload: SetImportApplyRequest,
+        session: Session = Depends(session_dependency),
+    ) -> InventoryImportApplyResponse:
+        loaded = load_set_parts(session, payload.set_num)
+        if loaded is None:
+            raise _set_not_found(session, payload.set_num)
+        set_meta, rows = loaded
+
+        try:
+            parsed_external = ParsedExternal(
+                rows=rows,
+                issues=(),
+                total_data_rows=len(rows),
+                spare_row_count=sum(1 for row in rows if row.is_spare),
+            )
+            workspace = resolve_local_workspace(session)
+            plan, _spare_row_count, _mapping_available = _plan_from_external(
+                session,
+                library_root,
+                parsed_external,
+                "rebrickable",
+                payload.strategy,
+                workspace.id,
+            )
+            counts = apply_import_plan(
+                session, workspace.id, plan, include_unknown=payload.include_unknown
+            )
+            session.commit()
+            return InventoryImportApplyResponse(
+                format="set",
+                strategy=plan.strategy,
+                include_unknown=payload.include_unknown,
+                applied_row_count=counts.applied_rows,
+                created_count=counts.created,
+                updated_count=counts.updated,
+                unchanged_count=counts.unchanged,
+                skipped_unknown_row_count=counts.skipped_unknown,
+                invalid_row_count=len(plan.issues),
+                quantity_delta=counts.quantity_delta,
+                set_num=set_meta.set_num,
+                set_name=set_meta.name,
+            )
+        except InventoryImportError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        except Exception as error:
+            LOGGER.exception("Unexpected set import apply failure")
+            raise HTTPException(status_code=500, detail="Set import failed") from error
 
     return router

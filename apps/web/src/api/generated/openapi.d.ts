@@ -226,6 +226,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/inventory/import/set/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Set Import */
+        post: operations["preview_set_import_api_inventory_import_set_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/inventory/import/set/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Set Import */
+        post: operations["apply_set_import_api_inventory_import_set_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models": {
         parameters: {
             query?: never;
@@ -466,7 +500,7 @@ export interface components {
             /** Includeunknown */
             includeUnknown: boolean;
             /** Format */
-            format?: ("native" | "rebrickable" | "bricklink") | null;
+            format?: ("native" | "rebrickable" | "bricklink" | "set") | null;
         };
         /** Body_preview_import_api_inventory_import_preview_post */
         Body_preview_import_api_inventory_import_preview_post: {
@@ -478,7 +512,7 @@ export interface components {
              */
             strategy: "add" | "replace";
             /** Format */
-            format?: ("native" | "rebrickable" | "bricklink") | null;
+            format?: ("native" | "rebrickable" | "bricklink" | "set") | null;
         };
         /** Body_upload_model_api_models_post */
         Body_upload_model_api_models_post: {
@@ -907,7 +941,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "native" | "rebrickable" | "bricklink";
+            format: "native" | "rebrickable" | "bricklink" | "set";
             /**
              * Strategy
              * @enum {string}
@@ -929,6 +963,10 @@ export interface components {
             invalidRowCount: number;
             /** Quantitydelta */
             quantityDelta: number;
+            /** Setnum */
+            setNum?: string | null;
+            /** Setname */
+            setName?: string | null;
         };
         /** InventoryImportPreviewResponse */
         InventoryImportPreviewResponse: {
@@ -938,7 +976,7 @@ export interface components {
              * Format
              * @enum {string}
              */
-            format: "native" | "rebrickable" | "bricklink";
+            format: "native" | "rebrickable" | "bricklink" | "set";
             /**
              * Strategy
              * @enum {string}
@@ -970,6 +1008,14 @@ export interface components {
             issues: components["schemas"]["ImportRowIssueResponse"][];
             /** Issuestruncated */
             issuesTruncated: boolean;
+            /** Setnum */
+            setNum?: string | null;
+            /** Setname */
+            setName?: string | null;
+            /** Officialpartcount */
+            officialPartCount?: number | null;
+            /** Expandedquantity */
+            expandedQuantity?: number | null;
         };
         /** InventoryItemResponse */
         InventoryItemResponse: {
@@ -1408,6 +1454,28 @@ export interface components {
             /** Estimatedderivedsourcebytes */
             estimatedDerivedSourceBytes: number;
         };
+        /** SetImportApplyRequest */
+        SetImportApplyRequest: {
+            /** Setnum */
+            setNum: string;
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "add" | "replace";
+            /** Includeunknown */
+            includeUnknown: boolean;
+        };
+        /** SetImportPreviewRequest */
+        SetImportPreviewRequest: {
+            /** Setnum */
+            setNum: string;
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "add" | "replace";
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1790,6 +1858,72 @@ export interface operations {
         requestBody: {
             content: {
                 "multipart/form-data": components["schemas"]["Body_apply_import_api_inventory_import_apply_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryImportApplyResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_set_import_api_inventory_import_set_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetImportPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryImportPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_set_import_api_inventory_import_set_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetImportApplyRequest"];
             };
         };
         responses: {
