@@ -301,3 +301,138 @@ class TestLoadColorMapping:
     ) -> None:
         with synced_mapping_session() as session:
             assert mapping.load_color_mapping(session, "bricklink", []) == {}
+
+
+class TestLoadReversePartMapping:
+    def test_single_candidate(self, synced_mapping_session: sessionmaker[Session]) -> None:
+        with synced_mapping_session.begin() as session:
+            session.add(
+                ExternalPartIdMap(
+                    source_system="bricklink",
+                    source_part_id="3001",
+                    ldraw_part_id="3001",
+                    is_preferred=True,
+                )
+            )
+        with synced_mapping_session() as session:
+            result = mapping.load_reverse_part_mapping(session, "bricklink", ["3001", "ghost"])
+        assert result == {"3001": "3001"}
+
+    def test_mutually_preferred_candidate_wins(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        # Two BrickLink IDs both map to LDraw "32123a"; only "bl-b" is
+        # mutually preferred (its own forward mapping targets 32123a too).
+        with synced_mapping_session.begin() as session:
+            session.add_all(
+                [
+                    ExternalPartIdMap(
+                        source_system="bricklink",
+                        source_part_id="bl-a",
+                        ldraw_part_id="32123a",
+                        is_preferred=False,
+                    ),
+                    ExternalPartIdMap(
+                        source_system="bricklink",
+                        source_part_id="bl-b",
+                        ldraw_part_id="32123a",
+                        is_preferred=True,
+                    ),
+                ]
+            )
+        with synced_mapping_session() as session:
+            result = mapping.load_reverse_part_mapping(session, "bricklink", ["32123a"])
+        assert result == {"32123a": "bl-b"}
+
+    def test_falls_back_to_lexicographic_smallest_when_none_preferred(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session.begin() as session:
+            session.add_all(
+                [
+                    ExternalPartIdMap(
+                        source_system="bricklink",
+                        source_part_id="bl-z",
+                        ldraw_part_id="3001",
+                        is_preferred=False,
+                    ),
+                    ExternalPartIdMap(
+                        source_system="bricklink",
+                        source_part_id="bl-a",
+                        ldraw_part_id="3001",
+                        is_preferred=False,
+                    ),
+                ]
+            )
+        with synced_mapping_session() as session:
+            result = mapping.load_reverse_part_mapping(session, "bricklink", ["3001"])
+        assert result == {"3001": "bl-a"}
+
+    def test_no_candidate_is_absent_from_result(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session() as session:
+            result = mapping.load_reverse_part_mapping(session, "bricklink", ["nowhere"])
+        assert result == {}
+
+    def test_normalizes_case(self, synced_mapping_session: sessionmaker[Session]) -> None:
+        with synced_mapping_session.begin() as session:
+            session.add(
+                ExternalPartIdMap(
+                    source_system="bricklink",
+                    source_part_id="3070B",
+                    ldraw_part_id="3070B",
+                    is_preferred=True,
+                )
+            )
+        with synced_mapping_session() as session:
+            result = mapping.load_reverse_part_mapping(session, "bricklink", ["3070b"])
+        assert result == {"3070b": "3070B"}
+
+    def test_empty_input_short_circuits(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session() as session:
+            assert mapping.load_reverse_part_mapping(session, "bricklink", []) == {}
+
+
+class TestLoadReverseColorMapping:
+    def test_single_candidate(self, synced_mapping_session: sessionmaker[Session]) -> None:
+        with synced_mapping_session.begin() as session:
+            session.add(
+                ExternalColorMap(source_system="bricklink", source_color_id=11, ldraw_color_code=0)
+            )
+        with synced_mapping_session() as session:
+            result = mapping.load_reverse_color_mapping(session, "bricklink", [0, 999])
+        assert result == {0: 11}
+
+    def test_falls_back_to_smallest_id_on_fan_in(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session.begin() as session:
+            session.add_all(
+                [
+                    ExternalColorMap(
+                        source_system="bricklink", source_color_id=99, ldraw_color_code=4
+                    ),
+                    ExternalColorMap(
+                        source_system="bricklink", source_color_id=5, ldraw_color_code=4
+                    ),
+                ]
+            )
+        with synced_mapping_session() as session:
+            result = mapping.load_reverse_color_mapping(session, "bricklink", [4])
+        assert result == {4: 5}
+
+    def test_no_candidate_is_absent_from_result(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session() as session:
+            result = mapping.load_reverse_color_mapping(session, "bricklink", [4])
+        assert result == {}
+
+    def test_empty_input_short_circuits(
+        self, synced_mapping_session: sessionmaker[Session]
+    ) -> None:
+        with synced_mapping_session() as session:
+            assert mapping.load_reverse_color_mapping(session, "bricklink", []) == {}
