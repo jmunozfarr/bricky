@@ -9,15 +9,20 @@ import type { InventoryImportPreview, InventoryImportResult } from "../../api/in
 import { ToastProvider } from "../ui/ToastProvider";
 import { InventoryImportDialog } from "./InventoryImportDialog";
 
-const { previewInventoryImport, applyInventoryImport } = vi.hoisted(() => ({
-  previewInventoryImport: vi.fn(),
-  applyInventoryImport: vi.fn(),
-}));
+const { previewInventoryImport, applyInventoryImport, previewSetImport, applySetImport } =
+  vi.hoisted(() => ({
+    previewInventoryImport: vi.fn(),
+    applyInventoryImport: vi.fn(),
+    previewSetImport: vi.fn(),
+    applySetImport: vi.fn(),
+  }));
 
 vi.mock("../../api/inventory", async (loadOriginal) => ({
   ...(await loadOriginal<typeof import("../../api/inventory")>()),
   previewInventoryImport,
   applyInventoryImport,
+  previewSetImport,
+  applySetImport,
 }));
 
 const preview: InventoryImportPreview = {
@@ -32,6 +37,10 @@ const preview: InventoryImportPreview = {
   invalidRowCount: 1,
   spareRowCount: 0,
   mappingAvailable: true,
+  setNum: null,
+  setName: null,
+  officialPartCount: null,
+  expandedQuantity: null,
   known: {
     rowCount: 2,
     createCount: 1,
@@ -124,6 +133,8 @@ const applied: InventoryImportResult = {
   skippedUnknownRowCount: 0,
   invalidRowCount: 1,
   quantityDelta: 10,
+  setNum: null,
+  setName: null,
 };
 
 const csvFile = new File(["part_id,color_code,quantity\n3001,4,1\n"], "inventory.csv", {
@@ -153,6 +164,8 @@ describe("inventory import dialog", () => {
   beforeEach(() => {
     previewInventoryImport.mockResolvedValue(preview);
     applyInventoryImport.mockResolvedValue(applied);
+    previewSetImport.mockResolvedValue(preview);
+    applySetImport.mockResolvedValue(applied);
   });
 
   afterEach(() => {
@@ -296,5 +309,75 @@ describe("inventory import dialog", () => {
     await selectCsv();
 
     expect(screen.getByRole("alert").textContent).toContain("rebrickable_mapping populate");
+  });
+
+  it("looks up a set number and shows its official-vs-expanded count", async () => {
+    previewSetImport.mockResolvedValue({
+      ...preview,
+      format: "set",
+      setNum: "7922-1",
+      setName: "Yoda's Starfighter",
+      officialPartCount: 309,
+      expandedQuantity: 300,
+    } satisfies InventoryImportPreview);
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "LEGO set number" }));
+    fireEvent.change(screen.getByLabelText("LEGO set number"), {
+      target: { value: "7922" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+
+    await waitFor(() => expect(previewSetImport).toHaveBeenCalledWith("7922", "add"));
+    expect(screen.getByText("Detected format: LEGO set")).toBeTruthy();
+    expect(screen.getByText(/Yoda's Starfighter.*Official count: 309.*Expanded: 300/)).toBeTruthy();
+  });
+
+  it("rejects an empty set number locally without calling the API", () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "LEGO set number" }));
+    fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+
+    expect(screen.getByRole("alert").textContent).toContain("Enter a set number");
+    expect(previewSetImport).not.toHaveBeenCalled();
+  });
+
+  it("applies a set import and shows a toast", async () => {
+    previewSetImport.mockResolvedValue({
+      ...preview,
+      format: "set",
+      setNum: "7922-1",
+      setName: "Yoda's Starfighter",
+    } satisfies InventoryImportPreview);
+    applySetImport.mockResolvedValue({
+      ...applied,
+      format: "set",
+      setNum: "7922-1",
+      setName: "Yoda's Starfighter",
+    } satisfies InventoryImportResult);
+    const onClose = renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: "LEGO set number" }));
+    fireEvent.change(screen.getByLabelText("LEGO set number"), {
+      target: { value: "7922-1" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+    await screen.findByRole("group", { name: "Merge strategy" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+
+    await waitFor(() => expect(applySetImport).toHaveBeenCalledWith("7922-1", "add", true));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("clears file state when switching from file to set source", async () => {
+    renderDialog();
+    await selectCsv();
+
+    fireEvent.click(screen.getByRole("button", { name: "LEGO set number" }));
+
+    expect(screen.queryByText("inventory.csv")).toBeNull();
+    expect(screen.getByLabelText("LEGO set number")).toHaveProperty("value", "");
   });
 });

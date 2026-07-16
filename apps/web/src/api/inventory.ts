@@ -89,7 +89,7 @@ export function deleteInventoryItem(partId: string, colorCode: number): Promise<
 export type InventoryImportStrategy = "add" | "replace";
 export type InventoryImportChange = "create" | "update" | "unchanged";
 export type InventoryImportUnknownReason = "part" | "color" | "unmapped";
-export type InventoryImportFormat = "native" | "rebrickable" | "bricklink";
+export type InventoryImportFormat = "native" | "rebrickable" | "bricklink" | "set";
 
 export interface InventoryImportBucketSummary {
   rowCount: number;
@@ -143,6 +143,11 @@ export interface InventoryImportPreview {
   rowsTruncated: boolean;
   issues: InventoryImportRowIssue[];
   issuesTruncated: boolean;
+  /** Only present for format === "set". */
+  setNum: string | null;
+  setName: string | null;
+  officialPartCount: number | null;
+  expandedQuantity: number | null;
 }
 
 export interface InventoryImportResult {
@@ -156,6 +161,8 @@ export interface InventoryImportResult {
   skippedUnknownRowCount: number;
   invalidRowCount: number;
   quantityDelta: number;
+  setNum: string | null;
+  setName: string | null;
 }
 
 export function previewInventoryImport(
@@ -186,5 +193,29 @@ export function applyInventoryImport(
   return fetchJson<InventoryImportResult>("/api/inventory/import/apply", undefined, {
     method: "POST",
     body,
+  });
+}
+
+export function previewSetImport(
+  setNum: string,
+  strategy: InventoryImportStrategy,
+  signal?: AbortSignal,
+): Promise<InventoryImportPreview> {
+  return fetchJson<InventoryImportPreview>("/api/inventory/import/set/preview", signal, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ setNum, strategy }),
+  });
+}
+
+export function applySetImport(
+  setNum: string,
+  strategy: InventoryImportStrategy,
+  includeUnknown: boolean,
+): Promise<InventoryImportResult> {
+  return fetchJson<InventoryImportResult>("/api/inventory/import/set/apply", undefined, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ setNum, strategy, includeUnknown }),
   });
 }

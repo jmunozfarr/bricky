@@ -20,7 +20,7 @@ from app.services.inventory_import import (
     RowIssue,
 )
 
-ImportFormat = Literal["native", "rebrickable", "bricklink"]
+ImportFormat = Literal["native", "rebrickable", "bricklink", "set"]
 
 NATIVE_HEADER_COLUMNS = frozenset({"part_id", "color_code", "quantity"})
 REBRICKABLE_HEADER_COLUMNS = frozenset({"part", "color", "quantity"})

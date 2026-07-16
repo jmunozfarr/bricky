@@ -140,6 +140,52 @@ class ExternalIdMapState(Base):
     fetcher_version: Mapped[str] = mapped_column(String(32))
 
 
+class RebrickableSet(Base):
+    """Rebuildable Rebrickable set catalog, one winning inventory version
+    per set number (highest `version` in the public dump). Populated by
+    `python -m app.cli.rebrickable_mapping populate-sets` from the public
+    Rebrickable data dumps (no API key); never referenced by personal rows.
+    """
+
+    __tablename__ = "rebrickable_sets"
+
+    set_num: Mapped[str] = mapped_column(String(32), primary_key=True)
+    name: Mapped[str] = mapped_column(String(256))
+    num_parts: Mapped[int] = mapped_column(Integer)
+    chosen_version: Mapped[int] = mapped_column(Integer)
+
+
+class RebrickableSetPart(Base):
+    """One BOM row (Rebrickable-namespace part/color) from a set's winning
+    inventory. Duplicate `(part_num, color_id, is_spare)` rows within a set
+    are expected in the source dump and summed at query time, not
+    deduplicated here."""
+
+    __tablename__ = "rebrickable_set_parts"
+    __table_args__ = (Index("ix_rebrickable_set_parts_set_num", "set_num"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    set_num: Mapped[str] = mapped_column(String(32))
+    part_num: Mapped[str] = mapped_column(String(64))
+    color_id: Mapped[int] = mapped_column(Integer)
+    quantity: Mapped[int] = mapped_column(Integer)
+    is_spare: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class RebrickableSetDataState(Base):
+    """Single-row freshness tracker for the set-data tables. Independent
+    lifecycle from `ExternalIdMapState` -- populating one must not wipe the
+    other."""
+
+    __tablename__ = "rebrickable_set_data_state"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    populated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    set_count: Mapped[int] = mapped_column(Integer)
+    part_row_count: Mapped[int] = mapped_column(Integer)
+    fetcher_version: Mapped[str] = mapped_column(String(32))
+
+
 class Workspace(Base):
     __tablename__ = "workspaces"
 

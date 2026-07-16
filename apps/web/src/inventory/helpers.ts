@@ -48,7 +48,13 @@ export function importFormatLabel(format: InventoryImportFormat): string {
       return "Rebrickable CSV";
     case "bricklink":
       return "BrickLink XML";
+    case "set":
+      return "LEGO set";
   }
+}
+
+export function validateSetNumber(input: string): string | null {
+  return input.trim() === "" ? "Enter a set number." : null;
 }
 
 export function importErrorMessage(error: unknown): string {

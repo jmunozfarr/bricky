@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import Field
+
 from app.schemas import CamelModel
 from app.services.inventory_import import ChangeKind, Strategy, UnknownReason
 from app.services.inventory_import_formats import ImportFormat
@@ -57,6 +59,13 @@ class InventoryImportPreviewResponse(CamelModel):
     rows_truncated: bool
     issues: list[ImportRowIssueResponse]
     issues_truncated: bool
+    # Only present for format == "set": the official set catalog vs. what
+    # this app could actually expand (nested sub-inventories/minifigs are
+    # not resolved, see docs/BULK_INVENTORY.md).
+    set_num: str | None = None
+    set_name: str | None = None
+    official_part_count: int | None = None
+    expanded_quantity: int | None = None
 
 
 class InventoryImportApplyResponse(CamelModel):
@@ -70,3 +79,16 @@ class InventoryImportApplyResponse(CamelModel):
     skipped_unknown_row_count: int
     invalid_row_count: int
     quantity_delta: int
+    set_num: str | None = None
+    set_name: str | None = None
+
+
+class SetImportPreviewRequest(CamelModel):
+    set_num: str = Field(min_length=1, max_length=32)
+    strategy: Strategy
+
+
+class SetImportApplyRequest(CamelModel):
+    set_num: str = Field(min_length=1, max_length=32)
+    strategy: Strategy
+    include_unknown: bool

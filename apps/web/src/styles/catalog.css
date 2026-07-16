@@ -382,6 +382,33 @@
   font-weight: 700;
 }
 
+.inventory-import-set-lookup {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border: 2px dashed var(--border-strong);
+  border-radius: 0.75rem;
+}
+
+.inventory-import-set-lookup label {
+  flex: 1;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.inventory-import-set-lookup input {
+  min-height: 2.4rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5rem;
+  background: var(--surface);
+}
+
 .inventory-import-hint {
   margin: 0;
   color: var(--text-muted);
