@@ -676,6 +676,12 @@ h1 {
   margin-top: 0;
 }
 
+.coverage-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .builder-coverage-filters {
   display: grid;
   gap: 0.6rem;

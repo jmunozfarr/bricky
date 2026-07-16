@@ -9,10 +9,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, func, insert, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import ExternalColorMap, ExternalIdMapState, ExternalPartIdMap
+from app.services.model_coverage import normalize_part_id
 
 DEFAULT_API_BASE = "https://rebrickable.com/api/v3/lego"
 FETCHER_VERSION = "1"
@@ -383,3 +384,70 @@ def load_color_mapping(
         )
     ).tuples()
     return dict(iter(rows))
+
+
+def load_reverse_part_mapping(
+    session: Session, source_system: str, ldraw_part_ids: Iterable[str]
+) -> dict[str, str]:
+    """Bounded reverse lookup, keyed by `normalize_part_id`: for each given
+    LDraw part ID, a source-system ID that maps to it (for export — the
+    inverse of `load_preferred_part_mapping`).
+
+    Multiple source IDs can legitimately point at the same LDraw part (mold
+    variants); prefer a candidate whose own forward `is_preferred` row also
+    targets this LDraw part (a *mutually preferred* pair, so a later import
+    of it maps straight back to the same part), tie-broken by
+    lexicographically smallest source ID; fall back to any candidate if none
+    is preferred.
+    """
+    normalized_ids = sorted({normalize_part_id(part_id) for part_id in ldraw_part_ids})
+    if not normalized_ids:
+        return {}
+    rows = session.execute(
+        select(
+            ExternalPartIdMap.ldraw_part_id,
+            ExternalPartIdMap.source_part_id,
+            ExternalPartIdMap.is_preferred,
+        ).where(
+            ExternalPartIdMap.source_system == source_system,
+            func.lower(ExternalPartIdMap.ldraw_part_id).in_(normalized_ids),
+        )
+    ).tuples()
+
+    preferred_candidates: dict[str, list[str]] = {}
+    all_candidates: dict[str, list[str]] = {}
+    for ldraw_part_id, source_part_id, is_preferred in rows:
+        key = normalize_part_id(ldraw_part_id)
+        all_candidates.setdefault(key, []).append(source_part_id)
+        if is_preferred:
+            preferred_candidates.setdefault(key, []).append(source_part_id)
+
+    return {
+        key: min(preferred_candidates.get(key) or candidates)
+        for key, candidates in all_candidates.items()
+    }
+
+
+def load_reverse_color_mapping(
+    session: Session, source_system: str, ldraw_color_codes: Iterable[int]
+) -> dict[int, int]:
+    """Bounded reverse lookup: for each given LDraw color code, a
+    source-system color ID that maps to it. Colors have no `is_preferred`
+    flag (the forward mapping is already one-to-one), so multiple source
+    color IDs pointing at the same LDraw code are tie-broken by smallest ID.
+    """
+    codes = sorted(set(ldraw_color_codes))
+    if not codes:
+        return {}
+    rows = session.execute(
+        select(ExternalColorMap.ldraw_color_code, ExternalColorMap.source_color_id).where(
+            ExternalColorMap.source_system == source_system,
+            ExternalColorMap.ldraw_color_code.in_(codes),
+        )
+    ).tuples()
+
+    candidates: dict[int, list[int]] = {}
+    for ldraw_color_code, source_color_id in rows:
+        candidates.setdefault(ldraw_color_code, []).append(source_color_id)
+
+    return {code: min(ids) for code, ids in candidates.items()}

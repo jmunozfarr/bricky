@@ -29,6 +29,46 @@ export async function fetchNoContent(url: string, init: RequestInit): Promise<vo
   }
 }
 
+export interface BlobDownload {
+  blob: Blob;
+  filename: string | null;
+  headers: Headers;
+}
+
+/** For endpoints that return a raw file (CSV/XML/…) rather than JSON, where
+ * the caller needs the filename and/or custom headers alongside the body. */
+export async function fetchBlob(url: string, signal?: AbortSignal): Promise<BlobDownload> {
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw await responseError(response);
+  }
+  return {
+    blob: await response.blob(),
+    filename: filenameFromContentDisposition(response.headers.get("content-disposition")),
+    headers: response.headers,
+  };
+}
+
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (header === null) return null;
+  const match = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  const encoded = match?.[1];
+  return encoded !== undefined ? decodeURIComponent(encoded) : null;
+}
+
+/** Trigger a browser "Save As" for an in-memory blob via a throwaway anchor. */
+export function triggerBrowserDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function responseError(response: Response): Promise<ApiError> {
   let body: unknown = null;
   try {

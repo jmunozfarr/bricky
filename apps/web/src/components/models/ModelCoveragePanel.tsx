@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { downloadMissingParts, MissingPartsFormat } from "../../api/models";
 import { CompactInventoryEditor } from "../inventory/CompactInventoryEditor";
 import { PartThumbnail } from "../parts/PartThumbnail";
 import { Alert, SegmentedControl } from "../ui/primitives";
+import { useToast } from "../ui/ToastProvider";
 import {
   coverageEmptyMessage,
   coverageProgressValue,
@@ -24,6 +26,27 @@ export function ModelCoveragePanel({ modelId }: { modelId: string }) {
   const [missingOnly, setMissingOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
+  const [exporting, setExporting] = useState<MissingPartsFormat | null>(null);
+  const showToast = useToast();
+
+  async function exportMissingParts(format: MissingPartsFormat) {
+    setExporting(format);
+    try {
+      const result = await downloadMissingParts(modelId, format);
+      if (format === "bricklink-xml" && result.skippedCount !== null && result.skippedCount > 0) {
+        showToast(
+          `${result.skippedCount} of ${result.totalCount ?? result.skippedCount} missing ` +
+            "parts have no BrickLink match — the CSV export has the complete list.",
+        );
+      } else {
+        showToast("Missing-parts export downloaded.", "success");
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Export failed.", "error");
+    } finally {
+      setExporting(null);
+    }
+  }
 
   const visible = useMemo(
     () =>
@@ -69,6 +92,22 @@ export function ModelCoveragePanel({ modelId }: { modelId: string }) {
         aria-valuenow={progress}
       >
         <span style={{ width: `${progress}%` }} />
+      </div>
+      <div className="coverage-export-actions">
+        <button
+          type="button"
+          disabled={summary.totalMissingQuantity === 0 || exporting !== null}
+          onClick={() => void exportMissingParts("csv")}
+        >
+          {exporting === "csv" ? "Exporting…" : "Export missing parts (CSV)"}
+        </button>
+        <button
+          type="button"
+          disabled={summary.totalMissingQuantity === 0 || exporting !== null}
+          onClick={() => void exportMissingParts("bricklink-xml")}
+        >
+          {exporting === "bricklink-xml" ? "Exporting…" : "Export missing parts (BrickLink XML)"}
+        </button>
       </div>
       <details
         className="builder-parts-overview"

@@ -197,6 +197,37 @@ def _coverage_by_model(
     }
 
 
+def _model_coverage_for(
+    session: Session, workspace_id: int, model: ImportedModel
+) -> tuple[ModelCoverage, dict[tuple[str, int], tuple[Part | None, LDrawColor | None]]]:
+    """One model's coverage plus a (normalized_part_id, color_code) -> (Part,
+    LDrawColor) display-metadata lookup, shared by the coverage endpoint and
+    the missing-parts export endpoint so they compute identical coverage."""
+    bom_rows = session.execute(
+        select(ModelBomItem, Part, LDrawColor)
+        .outerjoin(Part, func.lower(Part.part_id) == func.lower(ModelBomItem.part_id))
+        .outerjoin(LDrawColor, LDrawColor.code == ModelBomItem.color_code)
+        .where(ModelBomItem.model_id == model.id)
+    ).all()
+    requirements = [
+        CoverageRequirement(
+            part_id=item.part_id,
+            color_code=item.color_code,
+            required_quantity=item.quantity,
+        )
+        for item, _part, _color in bom_rows
+    ]
+    coverage = calculate_model_coverage(
+        requirements,
+        _inventory_for_requirements(session, workspace_id, requirements),
+    )
+    metadata = {
+        (normalize_part_id(item.part_id), item.color_code): (part, color)
+        for item, part, color in bom_rows
+    }
+    return coverage, metadata
+
+
 def _bom_response(
     item: ModelBomItem, part: Part | None, color: LDrawColor | None
 ) -> ModelBomItemResponse:
