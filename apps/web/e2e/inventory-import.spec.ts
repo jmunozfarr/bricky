@@ -78,13 +78,13 @@ test("inventory import: preview, apply, coverage refresh", async ({ page, reques
 
     await page.getByRole("button", { name: "Import CSV" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("heading", { name: "Import inventory from CSV" })).toBeVisible();
+    await expect(dialog.getByRole("heading", { name: "Import inventory" })).toBeVisible();
 
     // 1. Selecting a file runs the server-side dry run.
     const previewed = page.waitForResponse(
       (response) => response.url().includes("/api/inventory/import/preview") && response.ok(),
     );
-    await dialog.getByLabel("CSV file").setInputFiles({
+    await dialog.getByLabel("Import file").setInputFiles({
       name: "e2e-inventory.csv",
       mimeType: "text/csv",
       buffer: Buffer.from(IMPORT_CSV),
