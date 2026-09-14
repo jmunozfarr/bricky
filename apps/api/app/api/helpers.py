@@ -46,7 +46,6 @@ from app.services.model_coverage import (
 )
 from app.services.model_import import managed_source_path
 
-
 SCOPE_COMPLEXITY_DETAIL = {
     "code": "scope_complexity_limit",
     "message": "Complete subtree rendering exceeds the configured safety policy",
