@@ -1,6 +1,6 @@
 # Bulk inventory import
 
-Roadmap item 1. Import personal inventory in bulk: dropzone → server-computed
+Import personal inventory in bulk: dropzone → server-computed
 dry-run preview → explicit merge strategy → apply. Nothing is written until
 the user applies; preview and apply share one parse→classify→plan code path
 (`apps/api/app/services/inventory_import.py`), so what the preview shows is
