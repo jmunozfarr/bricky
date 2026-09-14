@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 
 import { InventoryItem } from "../api/inventory";
+import { useDebouncedSearchParam } from "../app/useDebouncedSearchParam";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
 import { InventoryImportDialog } from "../components/inventory/InventoryImportDialog";
 import { PartThumbnail } from "../components/parts/PartThumbnail";
@@ -24,8 +24,9 @@ import {
 } from "../inventory/helpers";
 
 export default function InventoryPage() {
-  const [params, setParams] = useSearchParams();
-  const query = params.get("query") ?? "";
+  const { query, searchInput, setSearchInput, params, setParams } = useDebouncedSearchParam({
+    deleteOnChange: ["part"],
+  });
   const category = params.get("category") ?? "";
   const rawColorCode = params.get("colorCode");
   const parsedColorCode = rawColorCode === null ? null : Number(rawColorCode);
@@ -35,30 +36,12 @@ export default function InventoryPage() {
       : null;
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const selectedPartId = params.get("part");
-  const [searchInput, setSearchInput] = useState(query);
   const [importing, setImporting] = useState(false);
   const summary = toAsyncState(useInventorySummary());
   const results = toAsyncState(useInventorySearch({ query, category, colorCode, page }));
   // Filter options are best-effort decoration; failures fall back to empty.
   const categories = useCategories().data ?? [];
   const colors = useColors().data ?? [];
-
-  useEffect(() => setSearchInput(query), [query]);
-
-  useEffect(() => {
-    if (searchInput === query) return;
-    const timer = window.setTimeout(() => {
-      setParams((current) => {
-        const next = new URLSearchParams(current);
-        if (searchInput.trim()) next.set("query", searchInput.trim());
-        else next.delete("query");
-        next.set("page", "1");
-        next.delete("part");
-        return next;
-      });
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [query, searchInput, setParams]);
 
   function updateFilter(key: "category" | "colorCode", value: string) {
     setParams((current) => {

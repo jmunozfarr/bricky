@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import math
-from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path as FilesystemPath
@@ -27,7 +26,9 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.catalog_api import render_asset_url
+from app.database import SessionDependency
 from app.models import InventoryItem, LDrawColor, Part
+from app.query_helpers import escaped_pattern
 from app.schemas.inventory import (
     ImportBucketSummaryResponse,
     ImportPreviewRowResponse,
@@ -118,14 +119,6 @@ class InventoryQuantityRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     quantity: Quantity
-
-
-SessionDependency = Callable[[], Iterator[Session]]
-
-
-def _escaped_pattern(query: str) -> str:
-    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
 
 
 def _response(
@@ -448,7 +441,7 @@ def create_inventory_router(
         filters = [InventoryItem.workspace_id == workspace.id]
         normalized_query = query.strip()
         if normalized_query:
-            pattern = _escaped_pattern(normalized_query)
+            pattern = escaped_pattern(normalized_query)
             filters.append(
                 or_(
                     InventoryItem.part_id.ilike(pattern, escape="\\"),

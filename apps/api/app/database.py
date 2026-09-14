@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from functools import lru_cache
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
+
+SessionDependency = Callable[[], Iterator[Session]]
 
 
 def sqlalchemy_database_url(database_url: str | None = None) -> str:

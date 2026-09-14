@@ -46,3 +46,15 @@ data/thumbnails/*
 .idea/
 .vscode/
 .DS_Store
+
+# AI tool configuration
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# Personal working notes
+docs/ROADMAP.md
+docs/REFACTORING_PLAN.md
+docs/VIEWER_BUGS.md
+docs/BUILDER_LOGIC_BUGS.md
+docs/MILLENNIUM_FALCON_PHASE_REGRESSION.md

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { SubmitEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
+
+import { useDebouncedSearchParam } from "../app/useDebouncedSearchParam";
 
 import {
   formatFileSize,
@@ -15,11 +17,9 @@ import { toAsyncState } from "../queries/async";
 import { useDeleteModel, useModelsList, useUploadModel } from "../queries/hooks";
 
 export default function ModelsPage() {
-  const [params, setParams] = useSearchParams();
-  const query = params.get("query") ?? "";
+  const { query, searchInput, setSearchInput, params, setParams } = useDebouncedSearchParam();
   const status = params.get("status") ?? "";
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
-  const [searchInput, setSearchInput] = useState(query);
   const results = toAsyncState(useModelsList({ query, status, page }), "Unable to load models.");
   const upload = useUploadModel();
   const showToast = useToast();
@@ -35,23 +35,6 @@ export default function ModelsPage() {
   const uploading = upload.isPending;
   const uploadError =
     validationError ?? (upload.error !== null ? modelUploadError(upload.error) : null);
-
-  useEffect(() => setSearchInput(query), [query]);
-
-  useEffect(() => {
-    if (searchInput === query) return;
-    const timer = window.setTimeout(() => {
-      setParams((current) => {
-        const next = new URLSearchParams(current);
-        const trimmed = searchInput.trim();
-        if (trimmed) next.set("query", trimmed);
-        else next.delete("query");
-        next.set("page", "1");
-        return next;
-      });
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [query, searchInput, setParams]);
 
   function updateParams(key: "query" | "status" | "page", value: string, reset = false) {
     setParams((current) => {

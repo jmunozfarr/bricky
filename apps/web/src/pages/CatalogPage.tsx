@@ -1,6 +1,4 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-
+import { useDebouncedSearchParam } from "../app/useDebouncedSearchParam";
 import { getCatalogAvailability } from "../catalog/catalogState";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
 import { PartThumbnail } from "../components/parts/PartThumbnail";
@@ -12,35 +10,18 @@ const LIBRARY_COMMAND = "docker compose run --rm api python -m app.cli.ldraw_lib
 const REBUILD_COMMAND = "docker compose exec api python -m app.cli.ldraw_catalog rebuild";
 
 export default function CatalogPage() {
-  const [params, setParams] = useSearchParams();
-  const query = params.get("query") ?? "";
+  const { query, searchInput, setSearchInput, params, setParams } = useDebouncedSearchParam({
+    deleteOnChange: ["part"],
+  });
   const category = params.get("category") ?? "";
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const selectedPartId = params.get("part");
-  const [searchInput, setSearchInput] = useState(query);
   const status = toAsyncState(useCatalogStatus());
   const ready = status.kind === "ready" && getCatalogAvailability(status.data) === "ready";
   const categoriesQuery = useCategories(ready);
   const resultsQuery = usePartsSearch({ query, category, page }, ready);
   const categories = toAsyncState(categoriesQuery);
   const results = toAsyncState(resultsQuery);
-
-  useEffect(() => setSearchInput(query), [query]);
-
-  useEffect(() => {
-    if (searchInput === query) return;
-    const timer = window.setTimeout(() => {
-      setParams((current) => {
-        const next = new URLSearchParams(current);
-        if (searchInput.trim()) next.set("query", searchInput.trim());
-        else next.delete("query");
-        next.set("page", "1");
-        next.delete("part");
-        return next;
-      });
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [query, searchInput, setParams]);
 
   function updateParam(key: string, value: string) {
     setParams((current) => {

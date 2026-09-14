@@ -27,12 +27,12 @@ from sqlalchemy.orm import Session
 
 from app.api.helpers import (
     ModelsRouterContext,
-    _bom_response,
-    _coverage_by_model,
-    _coverage_item_response,
-    _coverage_summary,
-    _model_coverage_for,
-    _summary,
+    bom_response,
+    coverage_by_model,
+    coverage_item_response,
+    coverage_summary,
+    model_coverage_for,
+    model_summary,
 )
 from app.models import (
     ImportedModel,
@@ -107,11 +107,11 @@ def _detail_response(session: Session, model: ImportedModel) -> ModelDetailRespo
         .order_by(ModelReferenceResolution.source_reference)
     ).all()
     return ModelDetailResponse(
-        **_summary(model).model_dump(),
+        **model_summary(model).model_dump(),
         source_sha256=model.source_sha256,
         source_url=f"/api/models/{quote(str(model.public_id), safe='')}/source",
         updated_at=model.updated_at,
-        bom=[_bom_response(*row) for row in bom_rows],
+        bom=[bom_response(*row) for row in bom_rows],
         issues=[
             ModelIssueResponse(
                 severity=issue.severity,
@@ -171,7 +171,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
             )
             if model is None:
                 raise HTTPException(status_code=500, detail="Imported model is unavailable")
-            return _summary(model)
+            return model_summary(model)
 
     @router.get("", response_model=ModelsPageResponse)
     def list_models(
@@ -225,9 +225,9 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
                         required_quantity=quantity,
                     )
                 )
-        coverage_by_model = _coverage_by_model(session, workspace.id, requirements_by_model)
+        coverage_map = coverage_by_model(session, workspace.id, requirements_by_model)
         return ModelsPageResponse(
-            items=[_summary(model, coverage_by_model[model.id].summary) for model in models],
+            items=[model_summary(model, coverage_map[model.id].summary) for model in models],
             page=page,
             page_size=page_size,
             total_items=total,
@@ -259,7 +259,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
                 requirements_by_model[model_id].append(
                     CoverageRequirement(part_id, color_code, quantity)
                 )
-        coverages = _coverage_by_model(session, workspace.id, requirements_by_model)
+        coverages = coverage_by_model(session, workspace.id, requirements_by_model)
         summaries = [coverage.summary for coverage in coverages.values()]
         fully_buildable = sum(summary.fully_buildable for summary in summaries)
         return ModelsReadinessResponse(
@@ -282,7 +282,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         workspace = resolve_local_workspace(session)
-        coverage, metadata = _model_coverage_for(session, workspace.id, model)
+        coverage, metadata = model_coverage_for(session, workspace.id, model)
         normalized_query = query.strip().lower()
         response_items: list[ModelCoverageItemResponse] = []
         for item in sorted(
@@ -303,10 +303,10 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
                 and normalized_query not in part_name.lower()
             ):
                 continue
-            response_items.append(_coverage_item_response(item, part, color))
+            response_items.append(coverage_item_response(item, part, color))
         return ModelCoverageResponse(
             model_id=model.public_id,
-            summary=_coverage_summary(coverage.summary),
+            summary=coverage_summary(coverage.summary),
             items=response_items,
         )
 
@@ -320,7 +320,7 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         if model is None:
             raise HTTPException(status_code=404, detail="Model not found")
         workspace = resolve_local_workspace(session)
-        coverage, metadata = _model_coverage_for(session, workspace.id, model)
+        coverage, metadata = model_coverage_for(session, workspace.id, model)
 
         def missing_row(item: CoverageItem) -> MissingPartRow:
             part, color = metadata[(normalize_part_id(item.part_id), item.color_code)]

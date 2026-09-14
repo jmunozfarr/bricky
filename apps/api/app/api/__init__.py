@@ -7,9 +7,10 @@ from pathlib import Path
 from fastapi import APIRouter
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.api.helpers import ModelsRouterContext, SessionDependency
+from app.api.helpers import ModelsRouterContext
 from app.api.instructions import register_instruction_routes
 from app.api.models import register_model_routes
+from app.database import SessionDependency
 from app.services.instruction_graph import InstructionGraphLimits
 from app.services.instruction_playback import RenderComplexityLimits
 

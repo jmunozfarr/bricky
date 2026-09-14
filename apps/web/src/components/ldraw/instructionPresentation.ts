@@ -78,7 +78,7 @@ export class InstructionPresentationController {
     // inherit their indexed ancestor's visibility; their three.js
     // `userData.buildingStep` is a flattened cross-submodel counter that must
     // never be compared against the active task's local step (doing so hid
-    // attached subassembly geometry — see docs/BUILDER_LOGIC_BUGS.md).
+    // attached subassembly geometry).
     const desiredVariants = new Map<Group, VariantKind>();
     const desiredHidden = new Set<Group>();
     if (mode !== "inspect") {

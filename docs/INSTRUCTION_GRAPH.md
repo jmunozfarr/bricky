@@ -206,4 +206,4 @@ Changing to a one-part child scope took 6.6–9.3 ms through the cached API and 
 - Custom physical-part BOM warnings/omission and generated-flex BOM behavior are unchanged. Direct geometry affects rendering only.
 - `ROTSTEP` camera behavior, part animation, LPub directives, callouts, multi-step page layout, substitutions, `.io`, GLB, PDF conversion, and synthesized attachment/disassembly semantics remain outside scope.
 
-The external large-model before/after measurements are recorded in [`MILLENNIUM_FALCON_PHASE_REGRESSION.md`](MILLENNIUM_FALCON_PHASE_REGRESSION.md); no third-party model geometry is committed.
+No third-party model geometry is committed.

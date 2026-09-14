@@ -46,9 +46,8 @@ export default tseslint.config(
           allowRegExp: false,
         },
       ],
-      // The hand-rolled fetch-in-effect state machines trip this compiler
-      // rule everywhere; they are replaced wholesale by TanStack Query in
-      // the frontend data-layer phase of docs/REFACTORING_PLAN.md.
+      // TanStack Query hooks manage most data fetching, but a few remaining
+      // fetch-in-effect patterns trip this compiler rule.
       "react-hooks/set-state-in-effect": "off",
     },
   },

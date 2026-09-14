@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -12,7 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import ColumnElement, SQLColumnExpression, case, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.database import SessionDependency
 from app.models import LDrawColor, Part
+from app.query_helpers import escaped_pattern
 from app.services.ldraw_catalog import get_catalog_status
 
 
@@ -71,9 +72,6 @@ class ColorResponse(BaseModel):
     finish: str | None
 
 
-SessionDependency = Callable[[], Iterator[Session]]
-
-
 def render_asset_url(relative_path: str) -> str:
     path = PurePosixPath(relative_path)
     if (
@@ -99,11 +97,6 @@ def _card(part: Part) -> PartCardResponse:
         author=part.author,
         render_asset_url=asset_url,
     )
-
-
-def _escaped_pattern(query: str) -> str:
-    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
 
 
 def create_catalog_router(library_root: Path, session_dependency: SessionDependency) -> APIRouter:
@@ -132,7 +125,7 @@ def create_catalog_router(library_root: Path, session_dependency: SessionDepende
         filters: list[ColumnElement[bool]] = [Part.is_subpart.is_(False)]
         normalized_query = query.strip()
         if normalized_query:
-            pattern = _escaped_pattern(normalized_query)
+            pattern = escaped_pattern(normalized_query)
             filters.append(
                 or_(
                     Part.part_id.ilike(pattern, escape="\\"),

@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.api.helpers import (
     SCOPE_COMPLEXITY_DETAIL,
     ModelsRouterContext,
-    _inventory_for_requirements,
+    inventory_for_requirements,
 )
 from app.schemas.instructions import (
     BuildManifestResponse,
@@ -112,7 +112,7 @@ def register_instruction_routes(router: APIRouter, context: ModelsRouterContext)
             render_limits=context.render_limits,
             scene_identity=context.scene_identity,
             packed_scene_for=context.packed_scene_for,
-            inventory_for_requirements=_inventory_for_requirements,
+            inventory_for_requirements=inventory_for_requirements,
         )
         return manifest
 

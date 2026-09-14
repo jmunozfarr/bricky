@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -13,6 +12,7 @@ from sqlalchemy import func, select, tuple_
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.catalog_api import render_asset_url
+from app.database import SessionDependency
 from app.models import ImportedModel, InventoryItem, LDrawColor, ModelBomItem, Part
 from app.schemas.models import (
     CoverageSummaryResponse,
@@ -46,7 +46,6 @@ from app.services.model_coverage import (
 )
 from app.services.model_import import managed_source_path
 
-SessionDependency = Callable[[], Iterator[Session]]
 
 SCOPE_COMPLEXITY_DETAIL = {
     "code": "scope_complexity_limit",
@@ -119,7 +118,7 @@ class ModelsRouterContext:
         return cache_key, packed
 
 
-def _coverage_summary(summary: CoverageSummary) -> CoverageSummaryResponse:
+def coverage_summary(summary: CoverageSummary) -> CoverageSummaryResponse:
     return CoverageSummaryResponse(
         total_required_quantity=summary.total_required_quantity,
         total_available_quantity=summary.total_available_quantity,
@@ -133,7 +132,9 @@ def _coverage_summary(summary: CoverageSummary) -> CoverageSummaryResponse:
     )
 
 
-def _summary(model: ImportedModel, coverage: CoverageSummary | None = None) -> ModelSummaryResponse:
+def model_summary(
+    model: ImportedModel, coverage: CoverageSummary | None = None
+) -> ModelSummaryResponse:
     return ModelSummaryResponse(
         model_id=model.public_id,
         name=model.name,
@@ -145,11 +146,11 @@ def _summary(model: ImportedModel, coverage: CoverageSummary | None = None) -> M
         unique_part_color_count=model.unique_part_color_count,
         unresolved_reference_count=model.unresolved_reference_count,
         created_at=model.created_at,
-        coverage=_coverage_summary(coverage) if coverage is not None else None,
+        coverage=coverage_summary(coverage) if coverage is not None else None,
     )
 
 
-def _inventory_for_requirements(
+def inventory_for_requirements(
     session: Session,
     workspace_id: int,
     requirements: list[CoverageRequirement],
@@ -180,7 +181,7 @@ def _inventory_for_requirements(
     ]
 
 
-def _coverage_by_model(
+def coverage_by_model(
     session: Session,
     workspace_id: int,
     requirements_by_model: dict[int, list[CoverageRequirement]],
@@ -190,14 +191,14 @@ def _coverage_by_model(
         for requirements in requirements_by_model.values()
         for requirement in requirements
     ]
-    inventory = _inventory_for_requirements(session, workspace_id, all_requirements)
+    inventory = inventory_for_requirements(session, workspace_id, all_requirements)
     return {
         model_id: calculate_model_coverage(requirements, inventory)
         for model_id, requirements in requirements_by_model.items()
     }
 
 
-def _model_coverage_for(
+def model_coverage_for(
     session: Session, workspace_id: int, model: ImportedModel
 ) -> tuple[ModelCoverage, dict[tuple[str, int], tuple[Part | None, LDrawColor | None]]]:
     """One model's coverage plus a (normalized_part_id, color_code) -> (Part,
@@ -219,7 +220,7 @@ def _model_coverage_for(
     ]
     coverage = calculate_model_coverage(
         requirements,
-        _inventory_for_requirements(session, workspace_id, requirements),
+        inventory_for_requirements(session, workspace_id, requirements),
     )
     metadata = {
         (normalize_part_id(item.part_id), item.color_code): (part, color)
@@ -228,7 +229,7 @@ def _model_coverage_for(
     return coverage, metadata
 
 
-def _bom_response(
+def bom_response(
     item: ModelBomItem, part: Part | None, color: LDrawColor | None
 ) -> ModelBomItemResponse:
     available = part is not None and not part.is_subpart
@@ -251,7 +252,7 @@ def _bom_response(
     )
 
 
-def _coverage_item_response(
+def coverage_item_response(
     item: CoverageItem, part: Part | None, color: LDrawColor | None
 ) -> ModelCoverageItemResponse:
     catalog_available = part is not None and not part.is_subpart

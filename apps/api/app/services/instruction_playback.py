@@ -28,7 +28,7 @@ DERIVED_SOURCE_FORMAT_VERSION = 2
 # 433 occurrences, 1.18 MB derived source) and LDCad-exported Technic
 # flagships (42083: 9 509 nodes; 8386: 239 246 direct geometry commands and
 # a 23.7 MB derived source from baked flex-part quads), all of which must
-# render as complete subtrees; see docs/VIEWER_BUGS.md B6/B7. A direct
+# render as complete subtrees. A direct
 # geometry command is one quad/line — hundreds of times cheaper than a part
 # reference node, which expands into a full part mesh — so its budget is
 # far larger than the node budget.
