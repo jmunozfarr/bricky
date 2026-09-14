@@ -1,6 +1,6 @@
 # Bricky
 
-A local-first LEGO parts workspace that imports LDraw models, derives physical bills of materials, tracks personal inventory, and calculates exact build readiness — all offline, no cloud services, no accounts.
+A local-first LEGO® parts workspace that imports LDraw models, derives physical bills of materials, tracks personal inventory, and calculates exact build readiness — all offline, no cloud services, no accounts.
 
 <p align="center">
   <img src="docs/assets/demo.gif" alt="Bricky demo: catalog browsing, model import, inventory tracking, and visual building" width="720">
@@ -115,7 +115,9 @@ The same gate runs in CI on every push and pull request. Tests use synthetic fix
 
 ## LDraw attribution
 
-This software uses the [LDraw Parts Library](https://www.ldraw.org/). LDraw is a community-run project and is not sponsored, endorsed, or authorized by the LEGO Group. Bricky is not affiliated with LDraw.org or the LEGO Group.
+LEGO® is a registered trademark of the LEGO Group, which does not sponsor, authorize, or endorse this project.
+
+This software uses the [LDraw Parts Library](https://www.ldraw.org/). LDraw is a community-run project and is not affiliated with the LEGO Group. Bricky is not affiliated with LDraw.org or the LEGO Group.
 
 Installed library files retain upstream headers, authors, `CAreadme.txt`, and license notices. Applicable terms include CC BY 2.0, CC BY 4.0, and CC0 content; the installed archive and [LDraw legal information](https://www.ldraw.org/legal-info) are authoritative.
 
