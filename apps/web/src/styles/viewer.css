@@ -360,8 +360,10 @@
   background: var(--warning-bg);
 }
 
+/* Wraps for the same reason as .setup-state pre: no unfocusable scroll region. */
 .library-notice pre {
-  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 0.35rem 0 0;
   padding: 0.7rem;
   border-radius: 0.45rem;

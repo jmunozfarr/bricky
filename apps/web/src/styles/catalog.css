@@ -90,8 +90,12 @@
   font-size: 0.88rem;
 }
 
+/* Wrap rather than scroll: a scrollable region with no focusable content is a
+   keyboard trap for its own hidden text (axe scrollable-region-focusable), and
+   the setup command is longer than a phone viewport is wide. */
 .setup-state pre {
-  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 1.25rem 0 0;
   padding: 0.9rem;
   border-radius: 0.55rem;
