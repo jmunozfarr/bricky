@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 interface UseDebouncedSearchParamOptions {
@@ -16,25 +16,23 @@ export function useDebouncedSearchParam(options?: UseDebouncedSearchParamOptions
   const query = params.get("query") ?? "";
   const [searchInput, setSearchInput] = useState(query);
 
-  // Keep a ref so the effect closure always sees the latest list without
-  // needing it in the dependency array (avoids re-runs from new array refs).
-  const deleteOnChangeRef = useRef(options?.deleteOnChange);
-  deleteOnChangeRef.current = options?.deleteOnChange;
+  // Effect Events see the latest committed props at call time, so the debounce
+  // timer reads the current keys without making the caller's array reactive.
+  const currentDeleteOnChange = useEffectEvent(() => options?.deleteOnChange ?? []);
 
   useEffect(() => setSearchInput(query), [query]);
 
   useEffect(() => {
     if (searchInput === query) return;
     const timer = window.setTimeout(() => {
+      const deleteKeys = currentDeleteOnChange();
       setParams((current: URLSearchParams) => {
         const next = new URLSearchParams(current);
         const trimmed = searchInput.trim();
         if (trimmed) next.set("query", trimmed);
         else next.delete("query");
         next.set("page", "1");
-        if (deleteOnChangeRef.current) {
-          for (const key of deleteOnChangeRef.current) next.delete(key);
-        }
+        for (const key of deleteKeys) next.delete(key);
         return next;
       });
     }, 300);
