@@ -69,6 +69,8 @@ docker compose run --rm api python -m app.cli.ldraw_library install \
 
 The installer verifies SHA-256, rejects unsafe archives, preserves upstream attribution, and atomically installs under `data/ldraw/official`. Normal application startup never downloads or updates the library.
 
+Both steps stay manual, and the quality gate does not run either one. `scripts/e2e.sh` seeds its own small synthetic catalog instead, so the browser checks can assert coverage without a network fetch; it refuses when a catalog from a real library is already indexed, leaves inventory alone, and does not install anything under `data/ldraw`. The consequence is that the end-to-end checks needing real part geometry skip until `ldraw_library install` has been run by hand — a known gap. Their assertions have therefore effectively never executed, so expect them to surface failures the first time you run the gate with a library present.
+
 ## Production-like local operation
 
 Production uses [`compose.prod.yaml`](../compose.prod.yaml):

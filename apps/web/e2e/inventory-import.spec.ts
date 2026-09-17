@@ -57,13 +57,33 @@ async function totalPieces(page: Page): Promise<number> {
 
 // Bulk CSV import end to end: dropzone -> server dry run -> strategy switch
 // -> apply -> refreshed summary, orphan inventory row, and model coverage.
-// Works with or without the LDraw library/catalog: without a catalog every
-// row lands in the unknown bucket and still applies (include-unknown is on
-// by default), and coverage stays pure BOM-vs-inventory arithmetic.
+//
+// The CSV half is catalog-independent — include-unknown is on by default, so
+// rows apply whether or not the parts are indexed. Coverage is not: the 60%
+// asserted at the end is 3 owned pieces over the 5 this fixture requires, and
+// those 5 exist only once `3005`, `3004`, and `3622` resolve against the
+// `parts` table. Without an indexed catalog the BOM is empty and the card reads
+// `Coverage unavailable`. `scripts/e2e.sh` seeds a synthetic catalog before
+// Playwright starts, so that is asserted once as a precondition below rather
+// than branched on at every coverage assertion.
 test("inventory import: preview, apply, coverage refresh", async ({ page, request }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "The import flow runs once in Chromium.");
 
   const modelId = await importSyntheticModel(request, MODEL_NAME, INVENTORY_MPD);
+
+  // Precondition, not a branch: the coverage assertions at the end need this
+  // fixture's five pieces to have resolved. Checked here so a run without the
+  // seed fails with the reason instead of a percentage mismatch 80 lines down.
+  const imported = await request.get(`/api/models/${modelId}/coverage`);
+  expect(imported.ok()).toBe(true);
+  const { summary: requirements } = (await imported.json()) as {
+    summary: { totalRequiredQuantity: number; requirementsComplete: boolean };
+  };
+  const unseeded =
+    "the fixture's part references did not resolve, so this model has no requirement set: " +
+    "run the gate through ./scripts/e2e.sh, which indexes the catalog the assertions need";
+  expect(requirements.requirementsComplete, unseeded).toBe(true);
+  expect(requirements.totalRequiredQuantity, unseeded).toBe(5);
 
   // Snapshot the rows this test writes, start them from a clean slate, and
   // restore them afterwards.
@@ -146,7 +166,8 @@ test("inventory import: preview, apply, coverage refresh", async ({ page, reques
     await expect(orphan).toContainText("Catalog metadata unavailable");
 
     // 7. Model coverage reflects the import without any manual refresh:
-    // 3 of the 5 required pieces are now owned.
+    // 3 of the 5 required pieces are now owned, over a requirement set the
+    // precondition above proved complete.
     await page.goto(`/models?query=${MODEL_NAME}`);
     const modelCard = page.locator(".model-card", { hasText: MODEL_NAME });
     await expect(modelCard).toHaveCount(1);

@@ -91,7 +91,9 @@ Full operational details (production-like mode, backups, thumbnails, import beha
 ./scripts/check.sh    # full gate: lint, types, unit, build, bundle, e2e
 ```
 
-The same gate runs in CI on every push and pull request. Tests use synthetic fixtures and never touch the installed LDraw library or personal data.
+The same gate runs in CI on every push and pull request. Tests use synthetic fixtures and never touch the installed LDraw library.
+
+Resolving official part references into a bill of materials needs an indexed catalog, so the browser checks cannot assert coverage without one. `scripts/e2e.sh` therefore indexes a small synthetic catalog (`apps/api/tests/seed_e2e_catalog.py`) before Playwright starts, rather than downloading the official archive into an otherwise hermetic gate. Because the gate shares the database it is pointed at, the seed refuses to run when a catalog from a real library is already indexed, and never touches inventory. Installing the official library stays the manual step above, so the checks that need real geometry skip until you have run it.
 
 ## Documentation
 

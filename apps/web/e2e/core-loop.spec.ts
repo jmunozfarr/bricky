@@ -7,10 +7,19 @@ test.describe.configure({ mode: "default" });
 const MODEL_NAME = "e2e-core-loop";
 
 // The full user journey on the synthetic fixture: import -> models list ->
-// build readiness -> workspace coverage -> guided steps -> delete. The
-// import/coverage/delete flow is pure BOM arithmetic and must work without
-// the LDraw library or catalog (CI); scene and inventory assertions switch
-// on progressively with the installed capabilities.
+// build readiness -> workspace coverage -> guided steps -> delete.
+//
+// Coverage is not "pure BOM arithmetic that works without the catalog", which
+// is what this comment used to say. The BOM is what the catalog produces:
+// `official_part_ids` comes from the `parts` table, so with none indexed every
+// reference is unresolved, the BOM is empty, and the verdict is withheld rather
+// than computed. `scripts/e2e.sh` seeds a synthetic catalog before Playwright
+// starts, so the gate takes the indexed branch below; the unindexed branch
+// documents (and pins) what a run that bypasses the seed actually shows.
+//
+// Only the 3D scene is separable: it needs the installed LDraw library, which
+// stays a manual step, so `manifestOk` and `libraryAvailable` still gate the
+// scene assertions.
 test("core loop: import, readiness, workspace coverage, delete", async ({
   page,
   request,
@@ -52,8 +61,12 @@ test("core loop: import, readiness, workspace coverage, delete", async ({
       await expect(card).toContainText("40% covered");
       await expect(card).toContainText("3 pieces missing");
     } else {
-      await expect(card).toContainText("0% covered");
-      await expect(card).toContainText("5 pieces missing");
+      // Nothing resolved, so there are no required pieces — not zero of five.
+      // The card withholds the verdict instead of reporting 100% of an empty
+      // requirement set, which is what it used to claim here.
+      await expect(card).toContainText("Coverage unavailable");
+      await expect(card).toContainText("Requirements unknown");
+      await expect(card).not.toContainText("Fully buildable");
     }
 
     // 2. Instrument scene traffic before entering the workspace.
@@ -84,15 +97,16 @@ test("core loop: import, readiness, workspace coverage, delete", async ({
       // 3. The workspace inspect panel owns build readiness now.
       await expect(page.getByText(/assembled model is shown in full colour/i)).toBeVisible();
       const readiness = page.locator(".builder-coverage-heading h4");
-      await expect(readiness).toHaveText(catalogAvailable ? "40% covered" : "0% covered");
+      await expect(readiness).toHaveText(catalogAvailable ? "40% covered" : "Coverage unavailable");
       await page.locator(".builder-parts-overview summary").click();
-      const wingRow = page.locator(".builder-coverage-row", { hasText: "3020" });
       if (catalogAvailable) {
+        const wingRow = page.locator(".builder-coverage-row", { hasText: "3020" });
         await expect(wingRow.getByLabel("Coverage status: Complete")).toBeVisible();
         await expect(wingRow).toContainText("2 owned · 0 missing");
       } else {
-        await expect(wingRow.getByLabel("Coverage status: Missing")).toBeVisible();
-        await expect(wingRow).toContainText("0 owned · 2 missing");
+        // An unresolved reference produces no coverage row at all, so there is
+        // no "0 owned · 2 missing" row to find: the panel knows of no parts.
+        await expect(page.locator(".builder-coverage-row")).toHaveCount(0);
       }
 
       // 4. Guided steps come from the manifest alone.
