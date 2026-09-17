@@ -1,3 +1,8 @@
+# Normalize all text files to LF in the index and in the working tree, so the
+# local checks (prettier, generated API type diff) match the Linux CI runner.
+* text=auto eol=lf
+
 # Real-world import samples: preserve original bytes (incl. CRLF) exactly.
+# These must stay AFTER the rule above — later rules win in .gitattributes.
 docs/rebrickable_parts_*.csv -text
 docs/rb16b-bricklink.xml -text
