@@ -2,25 +2,30 @@ import { useState } from "react";
 import type { SubmitEvent } from "react";
 import { Link } from "react-router-dom";
 
+import type { CoverageSummary } from "../api/models";
+
 import { useDebouncedSearchParam } from "../app/useDebouncedSearchParam";
 
+import { getCatalogAvailability } from "../catalog/catalogState";
 import {
+  coverageVerdict,
   formatFileSize,
-  formatCoveragePercentage,
   modelUploadError,
   validateModelUpload,
 } from "../models/helpers";
+import { CatalogReadinessAlert } from "../components/catalog/CatalogReadinessAlert";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { useToast } from "../components/ui/ToastProvider";
 import { Alert, EmptyState, ModelStatusPill, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
-import { useDeleteModel, useModelsList, useUploadModel } from "../queries/hooks";
+import { useCatalogStatus, useDeleteModel, useModelsList, useUploadModel } from "../queries/hooks";
 
 export default function ModelsPage() {
   const { query, searchInput, setSearchInput, params, setParams } = useDebouncedSearchParam();
   const status = params.get("status") ?? "";
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const results = toAsyncState(useModelsList({ query, status, page }), "Unable to load models.");
+  const catalog = toAsyncState(useCatalogStatus());
   const upload = useUploadModel();
   const showToast = useToast();
   const [file, setFile] = useState<File | null>(null);
@@ -168,6 +173,10 @@ export default function ModelsPage() {
         </label>
       </div>
 
+      {catalog.kind === "ready" && (
+        <CatalogReadinessAlert availability={getCatalogAvailability(catalog.data)} />
+      )}
+
       {results.kind === "loading" && <div className="page-message">Loading models…</div>}
       {results.kind === "error" && <Alert title={results.message} />}
       {results.kind === "ready" && (
@@ -205,18 +214,7 @@ export default function ModelsPage() {
                       <dd>{model.unresolvedReferenceCount}</dd>
                     </div>
                   </dl>
-                  {model.coverage && (
-                    <div className="model-card-readiness">
-                      <strong>
-                        {formatCoveragePercentage(model.coverage.pieceCoveragePercentage)} covered
-                      </strong>
-                      <span>
-                        {model.coverage.fullyBuildable
-                          ? "Fully buildable"
-                          : `${model.coverage.totalMissingQuantity.toLocaleString()} pieces missing`}
-                      </span>
-                    </div>
-                  )}
+                  {model.coverage && <ModelCardReadiness coverage={model.coverage} />}
                   <small>{new Date(model.createdAt).toLocaleString()}</small>
                   <div className="model-card-actions">
                     <Link
@@ -274,5 +272,21 @@ export default function ModelsPage() {
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Three states, not two: a model whose references did not resolve has nothing
+ * to be buildable against, so the card reports the absence of a verdict rather
+ * than 100% of an empty requirement set.
+ */
+function ModelCardReadiness({ coverage }: { coverage: CoverageSummary }) {
+  const verdict = coverageVerdict(coverage);
+  return (
+    <div className="model-card-readiness">
+      <strong>{verdict.headline}</strong>
+      <span>{verdict.label}</span>
+      {verdict.explanation !== null && <span>{verdict.explanation}</span>}
+    </div>
   );
 }

@@ -131,6 +131,7 @@ def test_exact_coverage_aggregation_order_and_filters(
         "missingItemCount": 1,
         "pieceCoveragePercentage": 55.56,
         "fullyBuildable": False,
+        "requirementsComplete": True,
     }
     assert [item["status"] for item in payload["items"]] == [
         "missing",

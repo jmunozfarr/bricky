@@ -32,6 +32,7 @@ from app.api.helpers import (
     coverage_item_response,
     coverage_summary,
     model_coverage_for,
+    model_requirements_complete,
     model_summary,
 )
 from app.models import (
@@ -239,11 +240,19 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
         session: Session = Depends(context.session_dependency),
     ) -> ModelsReadinessResponse:
         workspace = resolve_local_workspace(session)
-        model_ids = list(
-            session.scalars(
-                select(ImportedModel.id).where(ImportedModel.workspace_id == workspace.id)
+        # The unresolved reference count travels with the id so each summary can
+        # be joined back to the completeness of the requirements it was derived
+        # from, the same conjunction `coverage_summary` publishes per model.
+        requirements_complete_by_model = {
+            model_id: unresolved_reference_count == 0
+            for model_id, unresolved_reference_count in session.execute(
+                select(
+                    ImportedModel.id,
+                    ImportedModel.unresolved_reference_count,
+                ).where(ImportedModel.workspace_id == workspace.id)
             )
-        )
+        }
+        model_ids = list(requirements_complete_by_model)
         requirements_by_model: dict[int, list[CoverageRequirement]] = {
             model_id: [] for model_id in model_ids
         }
@@ -260,13 +269,22 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
                     CoverageRequirement(part_id, color_code, quantity)
                 )
         coverages = coverage_by_model(session, workspace.id, requirements_by_model)
-        summaries = [coverage.summary for coverage in coverages.values()]
-        fully_buildable = sum(summary.fully_buildable for summary in summaries)
+        fully_buildable = sum(
+            coverage.summary.fully_buildable and requirements_complete_by_model[model_id]
+            for model_id, coverage in coverages.items()
+        )
         return ModelsReadinessResponse(
             total_models=len(model_ids),
             fully_buildable_models=fully_buildable,
+            # `incomplete_models` is the complement, so a model whose
+            # requirements are unknown moves into it automatically. The missing
+            # quantity stays the sum over known requirements: how many pieces an
+            # unresolvable model is short of is precisely what is not known, and
+            # no integer would be honest there.
             incomplete_models=len(model_ids) - fully_buildable,
-            total_missing_quantity=sum(summary.total_missing_quantity for summary in summaries),
+            total_missing_quantity=sum(
+                coverage.summary.total_missing_quantity for coverage in coverages.values()
+            ),
         )
 
     @router.get("/{model_id}/coverage", response_model=ModelCoverageResponse)
@@ -306,7 +324,10 @@ def register_model_routes(router: APIRouter, context: ModelsRouterContext) -> No
             response_items.append(coverage_item_response(item, part, color))
         return ModelCoverageResponse(
             model_id=model.public_id,
-            summary=coverage_summary(coverage.summary),
+            summary=coverage_summary(
+                coverage.summary,
+                requirements_complete=model_requirements_complete(model),
+            ),
             items=response_items,
         )
 

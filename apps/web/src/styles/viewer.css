@@ -63,6 +63,11 @@
   font-size: 0.82rem;
 }
 
+/* Setup commands are long enough to overflow a phone viewport unbroken. */
+.error code {
+  overflow-wrap: anywhere;
+}
+
 .viewer-section {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -636,6 +641,7 @@
   background: var(--danger-bg);
 }
 
+.build-state--unknown,
 .coverage-status--partial {
   color: var(--warning);
   background: var(--warning-bg);

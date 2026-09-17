@@ -117,7 +117,29 @@ class ModelsRouterContext:
         return cache_key, packed
 
 
-def coverage_summary(summary: CoverageSummary) -> CoverageSummaryResponse:
+def model_requirements_complete(model: ImportedModel) -> bool:
+    """Whether a model's BOM can be trusted to enumerate everything it needs.
+
+    An unresolved reference is a part of the source the parser could not turn
+    into a requirement, so the requirement set is unknown rather than merely
+    small. The empty BOM produced on an unindexed catalog is the extreme
+    instance of that; a partially resolved model is the milder one, and both are
+    treated the same way.
+    """
+    return model.unresolved_reference_count == 0
+
+
+def coverage_summary(
+    summary: CoverageSummary, *, requirements_complete: bool
+) -> CoverageSummaryResponse:
+    """Publish a coverage verdict qualified by whether the requirements are known.
+
+    `CoverageSummary.fully_buildable` is `total_missing_quantity == 0`, which is
+    correct arithmetic over the requirements it was given and trivially true for
+    an empty requirement set. It only becomes a claim about the model once the
+    requirements are known to be complete, so the published flag is the
+    conjunction of the two.
+    """
     return CoverageSummaryResponse(
         total_required_quantity=summary.total_required_quantity,
         total_available_quantity=summary.total_available_quantity,
@@ -127,7 +149,8 @@ def coverage_summary(summary: CoverageSummary) -> CoverageSummaryResponse:
         partial_item_count=summary.partial_item_count,
         missing_item_count=summary.missing_item_count,
         piece_coverage_percentage=summary.piece_coverage_percentage,
-        fully_buildable=summary.fully_buildable,
+        fully_buildable=summary.fully_buildable and requirements_complete,
+        requirements_complete=requirements_complete,
     )
 
 
@@ -145,7 +168,11 @@ def model_summary(
         unique_part_color_count=model.unique_part_color_count,
         unresolved_reference_count=model.unresolved_reference_count,
         created_at=model.created_at,
-        coverage=coverage_summary(coverage) if coverage is not None else None,
+        coverage=(
+            coverage_summary(coverage, requirements_complete=model_requirements_complete(model))
+            if coverage is not None
+            else None
+        ),
     )
 
 

@@ -13,6 +13,13 @@ export interface CoverageSummary {
   missingItemCount: number;
   pieceCoveragePercentage: number;
   fullyBuildable: boolean;
+  /**
+   * Whether the requirements this summary was computed over enumerate
+   * everything the model needs. False when the model carries unresolved
+   * references: the quantities and the percentage then describe only the part
+   * of the model that resolved, and `fullyBuildable` is withheld.
+   */
+  requirementsComplete: boolean;
 }
 
 export interface ModelSummary {

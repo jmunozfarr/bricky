@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../api/client";
+import type { CoverageSummary } from "../api/models";
 import {
   formatFileSize,
   coverageEmptyMessage,
   coverageProgressValue,
   coverageStatusLabel,
+  coverageVerdict,
   filterModelBom,
   filterCoverageItems,
   formatCoveragePercentage,
@@ -124,6 +126,102 @@ describe("model coverage presentation", () => {
       "You have all the pieces required for this model.",
     );
     expect(coverageEmptyMessage(true, true)).toBe("No model parts match these filters.");
+  });
+
+  it("withholds the complete-wishlist claim when the requirements are unknown", () => {
+    expect(coverageEmptyMessage(true, false, true)).toBe(
+      "Nothing is known to be missing: this model's part references did not resolve.",
+    );
+  });
+});
+
+describe("coverage verdict", () => {
+  const summary = (overrides: Partial<CoverageSummary>): CoverageSummary => ({
+    totalRequiredQuantity: 5,
+    totalAvailableQuantity: 2,
+    totalMissingQuantity: 3,
+    uniqueItemCount: 2,
+    completeItemCount: 0,
+    partialItemCount: 1,
+    missingItemCount: 1,
+    pieceCoveragePercentage: 40,
+    fullyBuildable: false,
+    requirementsComplete: true,
+    ...overrides,
+  });
+
+  it("claims buildability only against a known requirement set", () => {
+    expect(
+      coverageVerdict(
+        summary({
+          totalMissingQuantity: 0,
+          pieceCoveragePercentage: 100,
+          fullyBuildable: true,
+        }),
+      ),
+    ).toEqual({
+      tone: "complete",
+      headline: "100% covered",
+      label: "Fully buildable",
+      explanation: null,
+    });
+  });
+
+  it("counts missing pieces against a known requirement set", () => {
+    expect(coverageVerdict(summary({}))).toEqual({
+      tone: "incomplete",
+      headline: "40% covered",
+      label: "3 pieces missing",
+      explanation: null,
+    });
+  });
+
+  it("withholds the percentage when nothing resolved", () => {
+    // 100% of an empty requirement set: the arithmetic the API reports when an
+    // unindexed catalog left every reference unresolved.
+    const verdict = coverageVerdict(
+      summary({
+        totalRequiredQuantity: 0,
+        totalAvailableQuantity: 0,
+        totalMissingQuantity: 0,
+        uniqueItemCount: 0,
+        partialItemCount: 0,
+        missingItemCount: 0,
+        pieceCoveragePercentage: 100,
+        requirementsComplete: false,
+      }),
+    );
+    expect(verdict.tone).toBe("unknown");
+    expect(verdict.headline).toBe("Coverage unavailable");
+    expect(verdict.label).toBe("Requirements unknown");
+    expect(verdict.explanation).toMatch("No part references resolved");
+  });
+
+  it("qualifies the percentage when the model resolved only partly", () => {
+    const verdict = coverageVerdict(summary({ requirementsComplete: false }));
+    expect(verdict.tone).toBe("unknown");
+    expect(verdict.headline).toBe("40% of resolved parts covered");
+    expect(verdict.label).toBe("Requirements unknown");
+    expect(verdict.explanation).toMatch("only partly known");
+  });
+
+  it("keeps today's verdict for a legitimately part-free model", () => {
+    // An empty BOM with every reference resolved (all ignored) is genuinely
+    // part-free, not unresolvable, so the verdict must not change.
+    expect(
+      coverageVerdict(
+        summary({
+          totalRequiredQuantity: 0,
+          totalAvailableQuantity: 0,
+          totalMissingQuantity: 0,
+          uniqueItemCount: 0,
+          partialItemCount: 0,
+          missingItemCount: 0,
+          pieceCoveragePercentage: 100,
+          fullyBuildable: true,
+        }),
+      ).label,
+    ).toBe("Fully buildable");
   });
 });
 

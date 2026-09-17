@@ -61,6 +61,7 @@ const coverage = {
   summary: {
     pieceCoveragePercentage: 0,
     fullyBuildable: false,
+    requirementsComplete: true,
     totalRequiredQuantity: 2,
     totalAvailableQuantity: 0,
     totalMissingQuantity: 2,

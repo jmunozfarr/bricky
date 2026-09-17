@@ -1,6 +1,7 @@
 import { ApiError } from "../api/client";
 import type {
   CoverageStatus,
+  CoverageSummary,
   ModelBomItem,
   ModelCoverageItem,
   ModelImportIssue,
@@ -69,6 +70,54 @@ export function coverageStatusLabel(status: CoverageStatus): string {
   return "Missing";
 }
 
+/**
+ * "complete" and "incomplete" are verdicts; "unknown" is the absence of one.
+ * The API withholds `fullyBuildable` when a model carries unresolved
+ * references, so the third state must be rendered as a third state rather than
+ * collapsed into "not buildable" or, worse, into "nothing is missing".
+ */
+export type CoverageVerdictTone = "complete" | "incomplete" | "unknown";
+
+export interface CoverageVerdict {
+  tone: CoverageVerdictTone;
+  /** Stands in for a bare percentage, which claims more than an incomplete
+   *  requirement set can support. */
+  headline: string;
+  /** Short verdict text. Only claims buildability once requirements are known. */
+  label: string;
+  /** Why the verdict is withheld. Null once requirements are known. */
+  explanation: string | null;
+}
+
+export function coverageVerdict(summary: CoverageSummary): CoverageVerdict {
+  const percentage = formatCoveragePercentage(summary.pieceCoveragePercentage);
+  if (!summary.requirementsComplete) {
+    // Nothing resolved is the unindexed-catalog case: there is no denominator,
+    // so the percentage is arithmetic over an empty set rather than coverage.
+    const nothingResolved = summary.totalRequiredQuantity === 0;
+    return {
+      tone: "unknown",
+      headline: nothingResolved
+        ? "Coverage unavailable"
+        : `${percentage} of resolved parts covered`,
+      label: "Requirements unknown",
+      explanation: nothingResolved
+        ? "No part references resolved, so this model's required pieces are unknown."
+        : "Some part references did not resolve, so the pieces this model needs are only partly known.",
+    };
+  }
+  const headline = `${percentage} covered`;
+  if (summary.fullyBuildable) {
+    return { tone: "complete", headline, label: "Fully buildable", explanation: null };
+  }
+  return {
+    tone: "incomplete",
+    headline,
+    label: `${summary.totalMissingQuantity.toLocaleString()} pieces missing`,
+    explanation: null,
+  };
+}
+
 export function filterCoverageItems(
   items: ModelCoverageItem[],
   query: string,
@@ -87,9 +136,17 @@ export function filterCoverageItems(
   });
 }
 
-export function coverageEmptyMessage(missingOnly: boolean, hasFilters: boolean): string {
+export function coverageEmptyMessage(
+  missingOnly: boolean,
+  hasFilters: boolean,
+  requirementsUnknown = false,
+): string {
   if (missingOnly && !hasFilters) {
-    return "You have all the pieces required for this model.";
+    // An empty missing-parts list means "you own everything" only when the
+    // requirements are known. Otherwise it means nothing is known to be needed.
+    return requirementsUnknown
+      ? "Nothing is known to be missing: this model's part references did not resolve."
+      : "You have all the pieces required for this model.";
   }
   return "No model parts match these filters.";
 }

@@ -665,6 +665,8 @@ export interface components {
             pieceCoveragePercentage: number;
             /** Fullybuildable */
             fullyBuildable: boolean;
+            /** Requirementscomplete */
+            requirementsComplete: boolean;
         };
         /** ExpandedInstructionNodeResponse */
         ExpandedInstructionNodeResponse: {

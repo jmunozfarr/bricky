@@ -20,6 +20,12 @@ class CoverageSummaryResponse(CamelModel):
     missing_item_count: int
     piece_coverage_percentage: float
     fully_buildable: bool
+    # Whether the requirements this summary was computed over enumerate
+    # everything the model needs. False when the model carries unresolved
+    # references, in which case the quantities and the percentage describe only
+    # the part of the model that could be resolved, and `fully_buildable` is
+    # withheld rather than asserted.
+    requirements_complete: bool
 
 
 class ModelSummaryResponse(CamelModel):

@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 
+import { getCatalogAvailability } from "../catalog/catalogState";
+import { CatalogReadinessAlert } from "../components/catalog/CatalogReadinessAlert";
 import { useLibraryStatus } from "../components/ldraw/useLibraryStatus";
 import { Alert } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
@@ -50,6 +52,12 @@ export default function OverviewPage() {
             : "Open models →"}
         </span>
       </Link>
+      {/* Without an indexed catalog the readiness tile reads "0 of N models
+          fully buildable" with zero missing pieces, which is the truth and
+          looks like a fault. The cause belongs next to the number. */}
+      {catalog.kind === "ready" && (
+        <CatalogReadinessAlert availability={getCatalogAvailability(catalog.data)} />
+      )}
       <div className="overview-grid">
         <StatusCard label="Frontend" value="Online" tone="ok" />
         <StatusCard

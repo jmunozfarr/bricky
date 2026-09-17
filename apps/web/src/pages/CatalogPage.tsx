@@ -1,13 +1,10 @@
 import { useDebouncedSearchParam } from "../app/useDebouncedSearchParam";
-import { getCatalogAvailability } from "../catalog/catalogState";
+import { getCatalogAvailability, LIBRARY_COMMAND, REBUILD_COMMAND } from "../catalog/catalogState";
 import { CatalogPartDetail } from "../components/catalog/CatalogPartDetail";
 import { PartThumbnail } from "../components/parts/PartThumbnail";
 import { Alert, EmptyState, Pagination } from "../components/ui/primitives";
 import { toAsyncState } from "../queries/async";
 import { useCatalogStatus, useCategories, usePartsSearch } from "../queries/hooks";
-
-const LIBRARY_COMMAND = "docker compose run --rm api python -m app.cli.ldraw_library install";
-const REBUILD_COMMAND = "docker compose exec api python -m app.cli.ldraw_catalog rebuild";
 
 export default function CatalogPage() {
   const { query, searchInput, setSearchInput, params, setParams } = useDebouncedSearchParam({
