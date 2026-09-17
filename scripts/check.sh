@@ -9,6 +9,9 @@ compose config --quiet
 echo "Starting development services required by checks"
 compose up --build -d db api web
 
+echo "Applying database migrations"
+compose exec -T api alembic upgrade head
+
 echo "Linting Python sources"
 compose exec -T api ruff check .
 compose exec -T api ruff format --check .
